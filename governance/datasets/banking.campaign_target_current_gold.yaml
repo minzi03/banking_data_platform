@@ -1,0 +1,62 @@
+# Dataset Contract: campaign_target_current (Gold Current Serving)
+# Current campaign target list, exactly 1 row/customer
+
+dataset_id: banking.campaign_target_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving campaign target list. Grain is exactly one row per
+  customer, derived from the latest available cob_dt in campaign_target.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: campaign_target_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.campaign_target_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - rfm_segment
+    - rfm_score
+    - recency_days
+    - frequency
+    - monetary
+    - churn_risk
+    - is_churn_candidate
+    - days_since_last_txn
+    - customer_segment
+    - aum_total
+    - aum_bucket
+    - primary_branch_code
+    - primary_opportunity
+    - no_credit_card
+    - campaign_type
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - campaign_type
+    - cob_dt
+  min_row_count: 500
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - current_marketing_campaigns
+    - customer_outreach_serving
+  prohibited_uses:
+    - automated_decision_making

@@ -1,0 +1,53 @@
+# Dataset Contract: fact_card_txn (Silver)
+# Card transaction fact table
+
+dataset_id: banking.fact_card_txn_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed fact table capturing all card-based transactions (credit and
+  debit). Includes merchant details, MCC codes, and transaction status.
+  Used for card spending analytics, merchant category analysis, and
+  fraud detection on card transactions.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: fact_card_txn
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - txn_id
+    - card_id
+    - customer_id
+    - txn_date
+    - txn_amount
+    - merchant
+    - mcc_code
+    - status
+  non_null_columns:
+    - txn_id
+    - card_id
+    - customer_id
+    - txn_date
+    - txn_amount
+  min_row_count: 10000
+  unique_check:
+    - txn_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

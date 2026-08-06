@@ -1,0 +1,49 @@
+# Dataset Contract: dim_product (Silver)
+# Banking product dimension
+
+dataset_id: banking.dim_product_silver
+owner: Data Engineering Team
+business_purpose: >
+  Reference dimension for banking products. Provides a standardized catalog
+  of all products offered by the bank including savings, loans, and credit
+  cards with their associated attributes such as interest rates and
+  minimum balance requirements.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_product
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - product_code
+    - product_name
+    - product_type
+    - category
+    - interest_rate
+    - min_balance
+  non_null_columns:
+    - product_code
+    - product_name
+    - product_type
+  min_row_count: 10
+  unique_check:
+    - product_code
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

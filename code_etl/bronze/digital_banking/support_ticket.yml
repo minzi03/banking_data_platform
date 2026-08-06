@@ -1,0 +1,27 @@
+# Bronze Ingestion: support_ticket (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: digital_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_support_ticket
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    ticket_id,
+    customer_id,
+    issue_type,
+    priority,
+    status,
+    date_opened,
+    date_resolved,
+    resolution_time_hrs,
+    satisfaction_score,
+    last_updated
+  FROM digital_banking.support_ticket

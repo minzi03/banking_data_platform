@@ -1,0 +1,50 @@
+# Dataset Contract: dim_location (Silver)
+# Merchant and location dimension
+
+dataset_id: banking.dim_location_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed location and merchant dimension. Provides geographic and
+  category information for merchants and point-of-sale locations.
+  Used for geographic analytics, merchant spending analysis, and
+  fraud detection based on transaction locations.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_location
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - location_id
+    - merchant_name
+    - category
+    - city
+    - district
+    - address
+  non_null_columns:
+    - location_id
+    - merchant_name
+    - category
+    - city
+  min_row_count: 200
+  unique_check:
+    - location_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

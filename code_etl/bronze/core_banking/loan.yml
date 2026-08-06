@@ -1,0 +1,29 @@
+# Bronze Ingestion: loan (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_loan
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    loan_id,
+    customer_id,
+    product_code,
+    branch_code,
+    loan_amount,
+    outstanding_balance,
+    interest_rate,
+    term_months,
+    disbursement_date,
+    maturity_date,
+    loan_status,
+    last_updated
+  FROM core_banking.loan

@@ -1,0 +1,46 @@
+# CDC Configuration — online_transaction
+# Source: PostgreSQL digital_banking.online_transaction via Debezium
+# Target: Iceberg bronze.online_transaction_cdc
+
+kafka:
+  topic: postgresql.banking.digital_banking.online_transaction
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/online_transaction_v1
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: online_transaction_cdc
+  columns:
+    - name: transaction_id
+      type: long
+    - name: account_id
+      type: long
+    - name: device_id
+      type: long
+    - name: location_id
+      type: long
+    - name: customer_id
+      type: long
+    - name: transaction_type
+      type: string
+    - name: channel
+      type: string
+    - name: amount
+      type: decimal
+    - name: currency
+      type: string
+    - name: is_fraud
+      type: string
+    - name: fraud_reason
+      type: string
+    - name: status
+      type: string
+    - name: transaction_date
+      type: long
+    - name: created_ts
+      type: long
+    - name: last_updated
+      type: long

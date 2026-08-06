@@ -1,0 +1,28 @@
+# Silver: dim_employee (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_employee
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_employee
+
+business_key:
+  - employee_id
+
+sql: |
+  SELECT
+      employee_id,
+      full_name,
+      branch_code,
+      role,
+      hire_date,
+      salary,
+      status,
+      last_updated
+  FROM lakehouse.bronze.core_employee
+  WHERE cob_dt = DATE '{{ cob_dt }}'

@@ -1,0 +1,51 @@
+# Gold: campaign_target — Campaign targeting with churn + cross-sell signals
+# Note:
+#   - This table is a daily snapshot partitioned by cob_dt.
+#   - Joins must align on both customer_id and cob_dt to avoid cross-date multiplication.
+#   - Use lakehouse.gold.campaign_target_current for current-only serving (1 row/customer).
+job:
+  type: segment
+
+source:
+  tables:
+    - gold.rfm_segment
+    - gold.churn_prediction
+    - gold.cross_sell_segment
+    - gold.mart_customer_360
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: campaign_target
+
+upstream_flags:
+  - gold.rfm_segment
+  - gold.churn_prediction
+  - gold.cross_sell_segment
+  - gold.mart_customer_360
+
+sql: |
+  SELECT
+      r.customer_id, r.customer_sk,
+      r.rfm_segment, r.rfm_score, r.recency_days, r.frequency, r.monetary,
+      ch.churn_risk, ch.is_churn_candidate, ch.days_since_last_txn,
+      m.customer_segment, m.aum_total, m.aum_bucket, m.primary_branch_code,
+      cs.primary_opportunity, cs.no_credit_card,
+      CASE
+          WHEN ch.is_churn_candidate = 1 AND r.rfm_segment IN ('At Risk', 'Hibernating') THEN 'Retention'
+          WHEN cs.no_credit_card = 1 AND m.aum_bucket IN ('AFFLUENT','PRIORITY','VIP') THEN 'Cross_Sell_CC'
+          WHEN cs.primary_opportunity != 'None' THEN 'Cross_Sell'
+          WHEN r.rfm_segment IN ('Champions', 'Loyal Customers') THEN 'Upsell'
+          ELSE 'Awareness'
+      END AS campaign_type,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM lakehouse.gold.rfm_segment r
+  LEFT JOIN lakehouse.gold.churn_prediction ch
+      ON r.customer_id = ch.customer_id
+      AND r.cob_dt = ch.cob_dt
+  LEFT JOIN lakehouse.gold.cross_sell_segment cs
+      ON r.customer_id = cs.customer_id
+      AND r.cob_dt = cs.cob_dt
+  LEFT JOIN lakehouse.gold.mart_customer_360 m
+      ON r.customer_id = m.customer_id
+      AND r.cob_dt = m.cob_dt

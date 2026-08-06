@@ -1,0 +1,57 @@
+# Dataset Contract: dim_account (Silver)
+# Account dimension with SCD2 history tracking
+
+dataset_id: banking.dim_account_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed account dimension with slowly changing dimension type 2 (SCD2)
+  history tracking. Links customers to their banking products and provides
+  a full audit trail of account status and balance changes over time.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_account
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - account_id
+    - account_no
+    - customer_id
+    - product_code
+    - branch_code
+    - balance
+    - status
+    - open_date
+    - close_date
+    - effective_from
+    - effective_to
+    - is_current
+  non_null_columns:
+    - account_id
+    - account_no
+    - customer_id
+    - effective_from
+    - effective_to
+    - is_current
+  min_row_count: 5000
+  unique_check:
+    - account_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

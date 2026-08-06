@@ -1,0 +1,28 @@
+# =============================================================================
+# Custom Airflow Image — Banking Data Platform
+# Based on apache/airflow:2.10.0 with Spark submit support
+# =============================================================================
+FROM apache/airflow:2.10.0-python3.11
+
+USER root
+
+# Install Java 17 for spark-submit from Airflow containers
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        openjdk-17-jre-headless \
+        procps \
+        curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+USER airflow
+
+# Install Apache Spark provider for Airflow
+# Pin PySpark to 3.5.3 to match the Spark cluster version
+RUN pip install --no-cache-dir \
+    apache-airflow-providers-apache-spark==4.11.2 \
+    pyspark==3.5.3 \
+    requests

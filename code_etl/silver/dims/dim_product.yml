@@ -1,0 +1,28 @@
+# Silver: dim_product (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_product
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_product
+
+business_key:
+  - product_code
+
+sql: |
+  SELECT
+      product_code,
+      product_name,
+      product_group,
+      product_type,
+      currency,
+      is_active,
+      launch_date,
+      last_updated
+  FROM lakehouse.bronze.core_product
+  WHERE cob_dt = DATE '{{ cob_dt }}'

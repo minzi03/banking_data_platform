@@ -1,0 +1,32 @@
+# Silver: dim_card (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_card
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_card
+
+business_key:
+  - card_id
+
+sql: |
+  SELECT
+      card_id,
+      card_no_masked,
+      customer_id,
+      account_id,
+      product_code,
+      card_type,
+      card_brand,
+      credit_limit,
+      issue_date,
+      expiry_date,
+      status,
+      last_updated
+  FROM lakehouse.bronze.core_card
+  WHERE cob_dt = DATE '{{ cob_dt }}'

@@ -1,0 +1,48 @@
+# CDC Configuration — core_customer
+# Source: PostgreSQL core_banking.customer via Debezium
+# Target: Iceberg bronze.core_customer_cdc
+
+kafka:
+  topic: postgresql.banking.core_banking.customer
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/core_customer_v1
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_customer_cdc
+  columns:
+    - name: customer_id
+      type: long
+    - name: cccd
+      type: string
+    - name: full_name
+      type: string
+    - name: gender
+      type: string
+    - name: date_of_birth
+      type: long
+    - name: phone
+      type: string
+    - name: email
+      type: string
+    - name: address
+      type: string
+    - name: city
+      type: string
+    - name: district
+      type: string
+    - name: branch_code
+      type: string
+    - name: customer_segment
+      type: string
+    - name: kyc_status
+      type: string
+    - name: register_date
+      type: long
+    - name: is_active
+      type: string
+    - name: last_updated
+      type: long

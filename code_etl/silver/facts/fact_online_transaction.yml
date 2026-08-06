@@ -1,0 +1,43 @@
+# Silver: fact_online_transaction (overwritePartitions by cob_dt)
+# Joins: dim_customer (customer_sk) + dim_device (device_id) + dim_location (location_id)
+job:
+  type: fact_txn
+
+source:
+  tables:
+    - bronze.core_online_transaction
+    - silver.dim_customer
+    - silver.dim_device
+    - silver.dim_location
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: fact_online_transaction
+
+business_key:
+  - transaction_id
+
+sql: |
+  SELECT
+      t.transaction_id,
+      t.account_id,
+      t.device_id,
+      t.location_id,
+      t.customer_id,
+      c.customer_sk,
+      t.transaction_type,
+      t.channel,
+      t.amount,
+      t.currency,
+      t.is_fraud,
+      t.fraud_reason,
+      t.status,
+      t.transaction_date,
+      t.created_ts,
+      t.cob_dt
+  FROM lakehouse.bronze.core_online_transaction t
+  LEFT JOIN lakehouse.silver.dim_customer c
+      ON t.customer_id = c.customer_id
+      AND c.is_current = 1
+  WHERE t.cob_dt = DATE '{{ cob_dt }}'

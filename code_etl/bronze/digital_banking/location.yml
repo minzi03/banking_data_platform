@@ -1,0 +1,26 @@
+# Bronze Ingestion: location (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: digital_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_location
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    location_id,
+    merchant_name,
+    merchant_category,
+    city,
+    state,
+    latitude,
+    longitude,
+    is_high_risk_area,
+    last_updated
+  FROM digital_banking.location

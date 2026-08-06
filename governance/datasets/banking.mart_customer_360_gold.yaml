@@ -1,0 +1,85 @@
+# Dataset Contract: mart_customer_360 (Gold History Snapshot)
+# 360-degree customer view combining all dimensions and facts by business date snapshot
+
+dataset_id: banking.mart_customer_360_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of the 360-degree customer view joining all dimensions
+  and facts. Grain is one row per customer per cob_dt. Used for historical
+  analytics, trend analysis, and backtesting.
+refresh_sla: daily
+quality_class: critical
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: mart_customer_360
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.dim_customer_silver
+  - banking.dim_account_silver
+  - banking.dim_card_silver
+  - banking.fact_txn_account_silver
+  - banking.fact_card_txn_silver
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - full_name_masked
+    - age
+    - gender
+    - primary_branch_code
+    - customer_segment
+    - kyc_status
+    - register_date
+    - total_accounts
+    - total_cards
+    - total_loans
+    - has_credit_card
+    - has_savings
+    - has_loan
+    - total_deposit_balance
+    - total_loan_outstanding
+    - aum_total
+    - aum_bucket
+    - txn_count_30d
+    - txn_amount_30d
+    - last_txn_date
+    - days_since_last_txn
+    - primary_channel
+    - interaction_count_90d
+    - last_interaction_date
+    - rfm_recency_score
+    - rfm_frequency_score
+    - rfm_monetary_score
+    - rfm_segment
+    - churn_flag
+    - cross_sell_credit_card_flag
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - cob_dt
+  min_row_count: 5000
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: high_risk
+  intended_uses:
+    - customer_analytics
+    - segmentation_history
+    - campaign_backtesting
+    - churn_history
+  prohibited_uses:
+    - automated_credit_decision
+    - external_sharing
+  human_oversight_required: true

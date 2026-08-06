@@ -1,0 +1,118 @@
+# Source Table Registry — Maps PostgreSQL source tables to Iceberg Bronze targets
+# Used by Airflow DAGs for dynamic task generation
+
+tables:
+  # === core_banking (8 tables) ===
+  - source_schema: core_banking
+    source_table: branch
+    target_schema: bronze
+    target_table: core_branch
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: product
+    target_schema: bronze
+    target_table: core_product
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: customer
+    target_schema: bronze
+    target_table: core_customer
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: account
+    target_schema: bronze
+    target_table: core_account
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: deposit
+    target_schema: bronze
+    target_table: core_deposit
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: loan
+    target_schema: bronze
+    target_table: core_loan
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: txn_account
+    target_schema: bronze
+    target_table: core_txn_account
+    load_strategy: incremental
+    partitioned: true
+
+  - source_schema: core_banking
+    source_table: employee
+    target_schema: bronze
+    target_table: core_employee
+    load_strategy: full_snapshot
+    partitioned: false
+
+  # === card_crm (3 tables) ===
+  - source_schema: card_crm
+    source_table: card
+    target_schema: bronze
+    target_table: core_card
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: card_crm
+    source_table: card_txn
+    target_schema: bronze
+    target_table: core_card_txn
+    load_strategy: incremental
+    partitioned: true
+
+  - source_schema: card_crm
+    source_table: crm_interaction
+    target_schema: bronze
+    target_table: core_crm_interaction
+    load_strategy: full_snapshot
+    partitioned: false
+
+  # === digital_banking (5 tables) ===
+  - source_schema: digital_banking
+    source_table: device
+    target_schema: bronze
+    target_table: core_device
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: digital_banking
+    source_table: location
+    target_schema: bronze
+    target_table: core_location
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: digital_banking
+    source_table: online_transaction
+    target_schema: bronze
+    target_table: core_online_transaction
+    load_strategy: incremental
+    partitioned: true
+
+  - source_schema: digital_banking
+    source_table: support_ticket
+    target_schema: bronze
+    target_table: core_support_ticket
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: digital_banking
+    source_table: mcc_code
+    target_schema: bronze
+    target_table: core_mcc_code
+    load_strategy: full_snapshot
+    partitioned: false

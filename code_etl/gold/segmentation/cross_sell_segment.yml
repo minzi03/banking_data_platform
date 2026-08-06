@@ -1,0 +1,40 @@
+# Gold: cross_sell_segment — Cross-sell opportunity detection
+# Note:
+#   - This table is a daily snapshot partitioned by cob_dt.
+#   - Use lakehouse.gold.cross_sell_segment_current for current-only serving (1 row/customer).
+job:
+  type: segment
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.dim_card
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: cross_sell_segment
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.dim_card
+
+sql: |
+  SELECT
+      c.customer_id, c.customer_sk, c.customer_segment,
+      CASE WHEN COUNT(DISTINCT CASE WHEN cd.card_type = 'CREDIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) = 0
+           THEN 1 ELSE 0 END AS no_credit_card,
+      CASE WHEN COUNT(DISTINCT CASE WHEN cd.card_type = 'DEBIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) = 0
+           THEN 1 ELSE 0 END AS no_debit_card,
+      CASE
+          WHEN COUNT(DISTINCT CASE WHEN cd.card_type = 'CREDIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) = 0
+               THEN 'Credit Card'
+          WHEN COUNT(DISTINCT CASE WHEN cd.card_type = 'DEBIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) = 0
+               THEN 'Debit Card'
+          ELSE 'None'
+      END AS primary_opportunity,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM lakehouse.silver.dim_customer c
+  LEFT JOIN lakehouse.silver.dim_card cd ON c.customer_id = cd.customer_id
+  WHERE c.is_current = 1
+  GROUP BY c.customer_id, c.customer_sk, c.customer_segment

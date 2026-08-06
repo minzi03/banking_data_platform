@@ -1,0 +1,46 @@
+# Dataset Contract: branch_monthly_summary (Gold)
+# Monthly branch performance summary
+
+dataset_id: banking.branch_monthly_summary_gold
+owner: Data Engineering Team
+business_purpose: >
+  Monthly aggregated branch performance metrics including transaction volume,
+  customer count, and revenue by branch.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: branch_monthly_summary
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.dim_branch_silver
+  - banking.fact_txn_account_silver
+
+quality_rules:
+  required_columns:
+    - branch_code
+    - branch_name
+    - month
+    - total_transactions
+    - total_amount
+    - customer_count
+    - avg_transaction_amount
+  non_null_columns:
+    - branch_code
+    - month
+  min_row_count: 100
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: minimal_risk
+  intended_uses:
+    - branch_performance_analysis
+    - regional_reporting
+  prohibited_uses:
+    - automated_decision_making

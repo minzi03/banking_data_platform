@@ -1,0 +1,51 @@
+# Dataset Contract: cross_sell_segment_current (Gold Current Serving)
+# Current cross-sell segment, exactly 1 row/customer
+
+dataset_id: banking.cross_sell_segment_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving cross-sell opportunity view. Grain is exactly one row
+  per customer, derived from the latest available cob_dt in cross_sell_segment.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: cross_sell_segment_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.cross_sell_segment_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - customer_segment
+    - no_credit_card
+    - no_debit_card
+    - primary_opportunity
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - primary_opportunity
+    - cob_dt
+  min_row_count: 1000
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - current_product_recommendation
+    - campaign_targeting
+  prohibited_uses:
+    - automated_decision_making

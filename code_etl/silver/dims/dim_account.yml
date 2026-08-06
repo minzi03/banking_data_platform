@@ -1,0 +1,45 @@
+# Silver: dim_account (SCD Type 2 — full history)
+# Track changes: balance, status, close_date
+job:
+  type: scd_type2
+
+source:
+  tables:
+    - bronze.core_account
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_account
+
+business_key:
+  - account_id
+
+scd:
+  type: 2
+  effective_from_column: effective_from
+  effective_to_column: effective_to
+  current_flag_column: is_current
+  sk_column: account_sk
+
+tracked_columns:
+  - balance
+  - status
+  - close_date
+
+sql: |
+  SELECT
+      account_id,
+      account_no,
+      customer_id,
+      product_code,
+      branch_code,
+      account_type,
+      currency,
+      balance,
+      open_date,
+      close_date,
+      status,
+      last_updated
+  FROM lakehouse.bronze.core_account
+  WHERE cob_dt = DATE '{{ cob_dt }}'

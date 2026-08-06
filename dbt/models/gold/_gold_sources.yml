@@ -1,0 +1,348 @@
+# =============================================================================
+# Gold Layer Sources — Trỏ vào Spark-created Iceberg tables
+# Catalog: lakehouse | Schema: gold
+# Schema based on actual Spark ETL output (verified via Trino 2026-08-06)
+# =============================================================================
+
+version: 2
+
+sources:
+  - name: gold
+    description: "Gold layer — Spark transforms (Bronze→Silver→Gold)"
+    database: lakehouse
+    schema: gold
+    loader: "spark_etl"
+    tables:
+      # ── Mart360 ──
+      - name: mart_customer_360
+        description: "Customer 360° view — 32 columns including RFM, churn, cross-sell flags (history by cob_dt)"
+        columns:
+          - name: customer_id
+            description: "Customer identifier (PK)"
+            data_tests: [not_null]
+          - name: customer_sk
+            description: "Surrogate key (SHA-256)"
+          - name: full_name_masked
+            description: "Masked full name for privacy"
+          - name: age
+          - name: gender
+          - name: primary_branch_code
+          - name: customer_segment
+            description: "RETAIL / VIP / CORPORATE"
+          - name: kyc_status
+          - name: register_date
+          - name: total_accounts
+          - name: total_cards
+          - name: total_loans
+          - name: has_credit_card
+          - name: has_savings
+          - name: has_loan
+          - name: total_deposit_balance
+          - name: total_loan_outstanding
+          - name: aum_total
+            description: "Assets Under Management total"
+          - name: aum_bucket
+            description: "AUM tier bucket"
+          - name: txn_count_30d
+          - name: txn_amount_30d
+          - name: last_txn_date
+          - name: days_since_last_txn
+          - name: primary_channel
+          - name: interaction_count_90d
+          - name: last_interaction_date
+          - name: rfm_recency_score
+          - name: rfm_frequency_score
+          - name: rfm_monetary_score
+          - name: rfm_segment
+          - name: churn_flag
+          - name: cross_sell_credit_card_flag
+          - name: cob_dt
+            description: "Business date (partition key)"
+            data_tests: [not_null]
+
+      # ── Balance ──
+      - name: customer_balance_summary
+        description: "Customer balance aggregations — deposit, AUM (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: total_account_balance
+          - name: avg_account_balance
+          - name: aum_total
+          - name: aum_bucket
+          - name: cob_dt
+
+      - name: customer_balance_summary_current
+        description: "Current-serving customer balance — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: total_account_balance
+          - name: avg_account_balance
+          - name: aum_total
+          - name: aum_bucket
+          - name: cob_dt
+
+      # ── Transaction ──
+      - name: customer_transaction_summary
+        description: "Customer transaction aggregations — account + card txn (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: acct_txn_count_30d
+          - name: acct_txn_amount_30d
+          - name: acct_credit_count_30d
+          - name: acct_debit_count_30d
+          - name: card_txn_count_30d
+          - name: card_txn_amount_30d
+          - name: total_txn_count_30d
+          - name: total_txn_amount_30d
+          - name: last_txn_date
+          - name: cob_dt
+
+      - name: customer_transaction_summary_current
+        description: "Current-serving transaction summary — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: acct_txn_count_30d
+          - name: acct_txn_amount_30d
+          - name: acct_credit_count_30d
+          - name: acct_debit_count_30d
+          - name: card_txn_count_30d
+          - name: card_txn_amount_30d
+          - name: total_txn_count_30d
+          - name: total_txn_amount_30d
+          - name: last_txn_date
+          - name: cob_dt
+
+      # ── Product ──
+      - name: customer_product_summary
+        description: "Customer product portfolio — accounts, cards, loans (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: total_accounts
+          - name: cnt_casa_active
+          - name: cnt_td_active
+          - name: total_cards
+          - name: cnt_credit_cards
+          - name: cnt_debit_cards
+          - name: has_credit_card
+          - name: has_savings
+          - name: has_loan
+          - name: cob_dt
+
+      - name: customer_product_summary_current
+        description: "Current-serving product portfolio — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: total_accounts
+          - name: cnt_casa_active
+          - name: cnt_td_active
+          - name: total_cards
+          - name: cnt_credit_cards
+          - name: cnt_debit_cards
+          - name: has_credit_card
+          - name: has_savings
+          - name: has_loan
+          - name: cob_dt
+
+      # ── Card ──
+      - name: customer_card_summary
+        description: "Customer card portfolio — card counts, transaction volume (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: total_cards
+          - name: cnt_credit_active
+          - name: cnt_debit_active
+          - name: max_credit_limit
+          - name: total_card_txn_count_30d
+          - name: total_card_txn_amount_30d
+          - name: avg_card_txn_amount_30d
+          - name: distinct_merchant_categories
+          - name: last_card_txn_date
+          - name: cob_dt
+
+      - name: customer_card_summary_current
+        description: "Current-serving card portfolio — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: total_cards
+          - name: cnt_credit_active
+          - name: cnt_debit_active
+          - name: max_credit_limit
+          - name: total_card_txn_count_30d
+          - name: total_card_txn_amount_30d
+          - name: avg_card_txn_amount_30d
+          - name: distinct_merchant_categories
+          - name: last_card_txn_date
+          - name: cob_dt
+
+      # ── RFM ──
+      - name: rfm_segment
+        description: "RFM segmentation — Recency, Frequency, Monetary scoring (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: recency_days
+          - name: frequency
+          - name: monetary
+          - name: r_score
+          - name: f_score
+          - name: m_score
+          - name: rfm_score
+          - name: rfm_segment
+          - name: cob_dt
+
+      - name: rfm_segment_current
+        description: "Current-serving RFM segment — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: recency_days
+          - name: frequency
+          - name: monetary
+          - name: r_score
+          - name: f_score
+          - name: m_score
+          - name: rfm_score
+          - name: rfm_segment
+          - name: cob_dt
+
+      # ── Churn ──
+      - name: churn_prediction
+        description: "Churn risk scoring — transaction patterns (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: txn_cnt_30d
+          - name: txn_cnt_90d
+          - name: txn_amt_30d
+          - name: txn_amt_90d
+          - name: days_since_last_txn
+          - name: churn_risk
+          - name: is_churn_candidate
+          - name: cob_dt
+
+      - name: churn_prediction_current
+        description: "Current-serving churn prediction — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: txn_cnt_30d
+          - name: txn_cnt_90d
+          - name: txn_amt_30d
+          - name: txn_amt_90d
+          - name: days_since_last_txn
+          - name: churn_risk
+          - name: is_churn_candidate
+          - name: cob_dt
+
+      # ── Cross-Sell ──
+      - name: cross_sell_segment
+        description: "Cross-sell opportunity scoring — product gap analysis (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: customer_segment
+          - name: no_credit_card
+          - name: no_debit_card
+          - name: primary_opportunity
+          - name: cob_dt
+
+      - name: cross_sell_segment_current
+        description: "Current-serving cross-sell segment — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: customer_segment
+          - name: no_credit_card
+          - name: no_debit_card
+          - name: primary_opportunity
+          - name: cob_dt
+
+      # ── Campaign ──
+      - name: campaign_target
+        description: "Campaign targeting — combined RFM + churn + cross-sell (history by cob_dt)"
+        columns:
+          - name: customer_id
+            data_tests: [not_null]
+          - name: customer_sk
+          - name: rfm_segment
+          - name: rfm_score
+          - name: recency_days
+          - name: frequency
+          - name: monetary
+          - name: churn_risk
+          - name: is_churn_candidate
+          - name: days_since_last_txn
+          - name: customer_segment
+          - name: aum_total
+          - name: aum_bucket
+          - name: primary_branch_code
+          - name: primary_opportunity
+          - name: no_credit_card
+          - name: campaign_type
+          - name: cob_dt
+
+      - name: campaign_target_current
+        description: "Current-serving campaign target list — 1 row/customer"
+        columns:
+          - name: customer_id
+            data_tests: [unique, not_null]
+          - name: customer_sk
+          - name: rfm_segment
+          - name: rfm_score
+          - name: recency_days
+          - name: frequency
+          - name: monetary
+          - name: churn_risk
+          - name: is_churn_candidate
+          - name: days_since_last_txn
+          - name: customer_segment
+          - name: aum_total
+          - name: aum_bucket
+          - name: primary_branch_code
+          - name: primary_opportunity
+          - name: no_credit_card
+          - name: campaign_type
+          - name: cob_dt
+
+      # ── Branch Monthly ──
+      - name: mart_branch_monthly_summary
+        description: "Branch monthly performance — transaction volume, customer metrics"
+        columns:
+          - name: branch_code
+            data_tests: [not_null]
+          - name: branch_name
+          - name: region
+          - name: city
+          - name: txn_year
+          - name: txn_month
+          - name: txn_quarter
+          - name: active_customers
+          - name: txn_count
+          - name: total_txn_amount
+          - name: avg_txn_amount
+          - name: total_credit_amount
+          - name: total_debit_amount
+          - name: top_channel
+          - name: cob_dt

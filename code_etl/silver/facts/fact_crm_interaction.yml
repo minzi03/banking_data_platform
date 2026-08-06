@@ -1,0 +1,38 @@
+# Silver: fact_crm_interaction (overwritePartitions by cob_dt)
+# Joins: dim_customer (customer_sk)
+job:
+  type: fact_txn
+
+source:
+  tables:
+    - bronze.core_crm_interaction
+    - silver.dim_customer
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: fact_crm_interaction
+
+business_key:
+  - interaction_id
+
+sql: |
+  SELECT
+      i.interaction_id,
+      i.customer_id,
+      c.customer_sk,
+      i.interaction_date,
+      i.channel,
+      i.direction,
+      i.subject,
+      i.category,
+      i.status,
+      i.assigned_to,
+      i.satisfaction_score,
+      i.created_ts,
+      i.cob_dt
+  FROM lakehouse.bronze.core_crm_interaction i
+  LEFT JOIN lakehouse.silver.dim_customer c
+      ON i.customer_id = c.customer_id
+      AND c.is_current = 1
+  WHERE i.cob_dt = DATE '{{ cob_dt }}'

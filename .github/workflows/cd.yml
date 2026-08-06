@@ -1,0 +1,103 @@
+# =============================================================================
+# CD Pipeline — Banking Data Platform
+# =============================================================================
+# Trigger: Push to main (after CI passes)
+# Steps: Build Docker images → Push to GHCR
+# =============================================================================
+
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Build & Push Docker Images
+  # ===========================================================================
+  build:
+    name: 🐳 Build Docker Images
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    strategy:
+      matrix:
+        include:
+          - name: spark-worker
+            dockerfile: docker/Dockerfile.spark
+            context: docker
+            image: banking-spark-worker
+          - name: airflow
+            dockerfile: docker/Dockerfile.airflow
+            context: docker
+            image: banking-airflow
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Job 2: Validate Deployment
+  # ===========================================================================
+  validate:
+    name: ✅ Validate Deployment
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose
+        run: |
+          echo "=== Validating Docker Compose ==="
+          cd docker
+          docker compose config --quiet
+          echo "✅ Docker Compose config is valid"
+
+      - name: Check image availability
+        run: |
+          echo "=== Checking image availability ==="
+          echo "Images pushed to: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}"
+          echo "✅ Build and push completed successfully"

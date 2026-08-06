@@ -1,0 +1,42 @@
+# =============================================================================
+# Custom Spark Worker Image — Banking Data Platform
+# Based on apache/spark:3.5.3 with JDBC drivers, S3A, Iceberg, and Python deps
+# =============================================================================
+FROM apache/spark:3.5.3
+
+USER root
+
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install PostgreSQL JDBC driver for Spark JDBC reads
+RUN mkdir -p /opt/spark/jars && \
+    curl -fSL \
+    "https://jdbc.postgresql.org/download/postgresql-42.7.1.jar" \
+    -o /opt/spark/jars/postgresql-42.7.1.jar
+
+# Install hadoop-aws and aws-java-sdk-bundle for S3A filesystem support
+RUN curl -fSL \
+    "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar" \
+    -o /opt/spark/jars/hadoop-aws-3.3.4.jar && \
+    curl -fSL \
+    "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar" \
+    -o /opt/spark/jars/aws-java-sdk-bundle-1.12.262.jar
+
+# Install Iceberg Spark runtime + AWS bundle for Spark 3.5
+# iceberg-aws-bundle contains AWS SDK v2 required by S3FileIO
+# Version 1.6.0 matches iceberg-rest catalog image
+RUN curl -fSL \
+    "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/1.6.0/iceberg-spark-runtime-3.5_2.12-1.6.0.jar" \
+    -o /opt/spark/jars/iceberg-spark-runtime-3.5_2.12-1.6.0.jar && \
+    curl -fSL \
+    "https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/1.6.0/iceberg-aws-bundle-1.6.0.jar" \
+    -o /opt/spark/jars/iceberg-aws-bundle-1.6.0.jar
+
+# Install Python dependencies for ETL jobs
+COPY requirements-spark.txt /tmp/requirements-spark.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-spark.txt && \
+    rm /tmp/requirements-spark.txt
+
+USER 1001

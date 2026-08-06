@@ -1,0 +1,36 @@
+# Silver: fact_support_ticket (overwritePartitions by cob_dt)
+# Joins: dim_customer (customer_sk)
+job:
+  type: fact_txn
+
+source:
+  tables:
+    - bronze.core_support_ticket
+    - silver.dim_customer
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: fact_support_ticket
+
+business_key:
+  - ticket_id
+
+sql: |
+  SELECT
+      t.ticket_id,
+      t.customer_id,
+      c.customer_sk,
+      t.issue_type,
+      t.priority,
+      t.status,
+      t.date_opened,
+      t.date_resolved,
+      t.resolution_time_hrs,
+      t.satisfaction_score,
+      t.cob_dt
+  FROM lakehouse.bronze.core_support_ticket t
+  LEFT JOIN lakehouse.silver.dim_customer c
+      ON t.customer_id = c.customer_id
+      AND c.is_current = 1
+  WHERE t.cob_dt = DATE '{{ cob_dt }}'

@@ -1,0 +1,132 @@
+# =============================================================================
+# Quarantine Rules — Business Rule Violations
+# =============================================================================
+# Records that fail these rules will be quarantined for review.
+# =============================================================================
+
+quarantine_rules:
+
+  # =========================================================================
+  # Customer Violations
+  # =========================================================================
+  invalid_customer:
+    source_table: lakehouse.silver.dim_customer
+    target_table: lakehouse.quarantine.invalid_customer
+    violations:
+      - name: null_required_fields
+        description: "Customer missing required fields (customer_id, cccd, full_name)"
+        severity: FAIL
+        condition: "customer_id IS NULL OR cccd IS NULL OR full_name IS NULL"
+
+      - name: invalid_phone_format
+        description: "Phone number doesn't match expected format (10 digits)"
+        severity: WARN
+        condition: "phone IS NOT NULL AND phone NOT LIKE '0%' AND LENGTH(phone) != 10"
+
+      - name: invalid_email_format
+        description: "Email doesn't contain @ symbol"
+        severity: WARN
+        condition: "email IS NOT NULL AND email NOT LIKE '%@%'"
+
+      - name: invalid_cccd_format
+        description: "CCCD doesn't match expected format (12 digits)"
+        severity: FAIL
+        condition: "cccd IS NOT NULL AND LENGTH(cccd) != 12"
+
+      - name: future_register_date
+        description: "Register date is in the future"
+        severity: FAIL
+        condition: "register_date > CURRENT_DATE"
+
+  # =========================================================================
+  # Account Violations
+  # =========================================================================
+  invalid_account:
+    source_table: lakehouse.silver.dim_account
+    target_table: lakehouse.quarantine.invalid_account
+    violations:
+      - name: negative_balance
+        description: "Account has negative balance (not allowed for CASA)"
+        severity: WARN
+        condition: "balance < 0 AND account_type = 'CASA'"
+
+      - name: zero_balance_active
+        description: "Active account with zero balance"
+        severity: WARN
+        condition: "balance = 0 AND status = 'ACTIVE'"
+
+      - name: closed_with_balance
+        description: "Closed account still has balance"
+        severity: FAIL
+        condition: "balance > 0 AND status = 'CLOSED'"
+
+      - name: future_open_date
+        description: "Account open date is in the future"
+        severity: FAIL
+        condition: "open_date > CURRENT_DATE"
+
+  # =========================================================================
+  # Transaction Violations
+  # =========================================================================
+  suspicious_transaction:
+    source_table: lakehouse.silver.fact_txn_account
+    target_table: lakehouse.quarantine.suspicious_transaction
+    violations:
+      - name: large_transaction
+        description: "Transaction amount exceeds 1 billion VND"
+        severity: WARN
+        condition: "ABS(txn_amount) > 1000000000"
+
+      - name: negative_amount
+        description: "Transaction has negative amount (except refunds)"
+        severity: WARN
+        condition: "txn_amount < 0 AND txn_type NOT IN ('REFUND', 'REVERSAL')"
+
+      - name: zero_amount
+        description: "Transaction has zero amount"
+        severity: WARN
+        condition: "txn_amount = 0"
+
+      - name: future_transaction_date
+        description: "Transaction date is in the future"
+        severity: FAIL
+        condition: "txn_date > CURRENT_TIMESTAMP"
+
+      - name: missing_channel
+        description: "Transaction missing channel information"
+        severity: WARN
+        condition: "channel IS NULL OR channel = ''"
+
+  # =========================================================================
+  # Account Violations (Extended)
+  # =========================================================================
+  overdue_account:
+    source_table: lakehouse.silver.dim_account
+    target_table: lakehouse.quarantine.overdue_loan
+    violations:
+      - name: inactive_account
+        description: "Account with inactive status"
+        severity: WARN
+        condition: "status = 'INACTIVE'"
+
+      - name: closed_account
+        description: "Account with closed status"
+        severity: INFO
+        condition: "status = 'CLOSED'"
+
+  # =========================================================================
+  # Branch Violations
+  # =========================================================================
+  invalid_branch:
+    source_table: lakehouse.silver.dim_branch
+    target_table: lakehouse.quarantine.invalid_branch
+    violations:
+      - name: inactive_branch
+        description: "Branch with inactive status"
+        severity: INFO
+        condition: "status = 'INACTIVE' OR status = 'CLOSED'"
+
+      - name: missing_manager
+        description: "Branch missing manager name"
+        severity: WARN
+        condition: "manager_name IS NULL OR manager_name = ''"

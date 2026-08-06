@@ -1,0 +1,59 @@
+# Dataset Contract: churn_prediction (Gold History Snapshot)
+# Customer churn risk prediction history
+
+dataset_id: banking.churn_prediction_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of churn risk prediction. Grain is one row per customer
+  per cob_dt. Used for retention analytics and backtesting.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: churn_prediction
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.dim_customer_silver
+  - banking.fact_txn_account_silver
+  - banking.fact_card_txn_silver
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - txn_cnt_30d
+    - txn_cnt_90d
+    - txn_amt_30d
+    - txn_amt_90d
+    - days_since_last_txn
+    - churn_risk
+    - is_churn_candidate
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - churn_risk
+    - cob_dt
+  min_row_count: 1000
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: high_risk
+  intended_uses:
+    - retention_campaigns
+    - customer_analytics
+    - churn_backtesting
+  prohibited_uses:
+    - automated_account_closure
+    - external_sharing
+  human_oversight_required: true

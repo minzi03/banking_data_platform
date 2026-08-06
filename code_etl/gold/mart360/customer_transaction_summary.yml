@@ -1,0 +1,65 @@
+# Gold: customer_transaction_summary — Transaction behavior 30d
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.fact_txn_account
+    - silver.fact_card_txn
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: customer_transaction_summary
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.fact_txn_account
+  - silver.fact_card_txn
+
+sql: |
+  WITH acct_txn AS (
+      SELECT
+          customer_id,
+          COUNT(txn_id) AS acct_txn_count_30d,
+          COALESCE(SUM(ABS(txn_amount)), 0) AS acct_txn_amount_30d,
+          COUNT(CASE WHEN debit_credit = 'C' THEN txn_id END) AS acct_credit_count_30d,
+          COUNT(CASE WHEN debit_credit = 'D' THEN txn_id END) AS acct_debit_count_30d,
+          MAX(txn_date) AS last_acct_txn_date
+      FROM lakehouse.silver.fact_txn_account
+      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  card_txn AS (
+      SELECT
+          customer_id,
+          COUNT(txn_id) AS card_txn_count_30d,
+          COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS card_txn_amount_30d,
+          MAX(txn_date) AS last_card_txn_date
+      FROM lakehouse.silver.fact_card_txn
+      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+        AND status = 'SUCCESS'
+      GROUP BY customer_id
+  )
+  SELECT
+      c.customer_id, c.customer_sk,
+      COALESCE(at.acct_txn_count_30d, 0) AS acct_txn_count_30d,
+      COALESCE(at.acct_txn_amount_30d, 0) AS acct_txn_amount_30d,
+      COALESCE(at.acct_credit_count_30d, 0) AS acct_credit_count_30d,
+      COALESCE(at.acct_debit_count_30d, 0) AS acct_debit_count_30d,
+      COALESCE(ct.card_txn_count_30d, 0) AS card_txn_count_30d,
+      COALESCE(ct.card_txn_amount_30d, 0) AS card_txn_amount_30d,
+      COALESCE(at.acct_txn_count_30d, 0) + COALESCE(ct.card_txn_count_30d, 0) AS total_txn_count_30d,
+      COALESCE(at.acct_txn_amount_30d, 0) + COALESCE(ct.card_txn_amount_30d, 0) AS total_txn_amount_30d,
+      GREATEST(
+          COALESCE(at.last_acct_txn_date, TIMESTAMP '1900-01-01 00:00:00'),
+          COALESCE(ct.last_card_txn_date, TIMESTAMP '1900-01-01 00:00:00')
+      ) AS last_txn_date,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM lakehouse.silver.dim_customer c
+  LEFT JOIN acct_txn at ON c.customer_id = at.customer_id
+  LEFT JOIN card_txn ct ON c.customer_id = ct.customer_id
+  WHERE c.is_current = 1

@@ -1,0 +1,56 @@
+# Dataset Contract: core_customer (Bronze)
+# Raw customer data ingested from PostgreSQL via JDBC
+
+dataset_id: banking.core_customer_bronze
+owner: Data Engineering Team
+business_purpose: >
+  Raw customer records ingested from core_banking.customer via batch JDBC.
+  Append-only, immutable, day-partitioned.
+refresh_sla: daily
+quality_class: important
+layer: bronze
+
+physical_location:
+  catalog: lakehouse
+  namespace: bronze
+  table: core_customer
+
+dag_id: bronze_core_banking_dag
+
+upstream_dataset_ids: []
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - cccd
+    - full_name
+    - gender
+    - date_of_birth
+    - phone
+    - email
+    - address
+    - city
+    - district
+    - branch_code
+    - customer_segment
+    - kyc_status
+    - register_date
+    - is_active
+    - last_updated
+  non_null_columns:
+    - customer_id
+    - cccd
+    - full_name
+  min_row_count: 5000
+  unique_check:
+    - customer_id
+  freshness_sla_hours: 48
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - data_processing
+    - analytics
+  prohibited_uses:
+    - automated_decision_making

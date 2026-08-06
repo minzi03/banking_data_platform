@@ -1,0 +1,47 @@
+# =============================================================================
+# dbt Profile Configuration — Banking Data Platform
+# =============================================================================
+# Architecture: Lakehouse 2.0
+# Connection: Trino → Iceberg
+# =============================================================================
+
+banking:
+  target: docker
+
+  outputs:
+    dev:
+      type: trino
+      method: none
+      host: localhost
+      port: 8085
+      catalog: lakehouse
+      schema: semantic
+      user: admin
+      password: ""
+      threads: 1
+      timeout_seconds: 300
+
+    # Docker target (when running inside Docker network)
+    docker:
+      type: trino
+      method: none
+      host: trino
+      port: 8080
+      catalog: lakehouse
+      schema: semantic
+      user: admin
+      password: ""
+      threads: 4
+      timeout_seconds: 300
+
+    prod:
+      type: trino
+      method: none
+      host: trino
+      port: 8080
+      catalog: lakehouse
+      schema: semantic
+      user: admin
+      password: ""
+      threads: 8
+      timeout_seconds: 600

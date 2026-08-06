@@ -1,0 +1,40 @@
+# CDC Configuration — card_account
+# Source: PostgreSQL card_crm.card via Debezium
+# Target: Iceberg bronze.card_account_cdc
+
+kafka:
+  topic: postgresql.banking.card_crm.card
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/card_account_v1
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: card_account_cdc
+  columns:
+    - name: card_id
+      type: long
+    - name: card_no_masked
+      type: string
+    - name: customer_id
+      type: long
+    - name: account_id
+      type: long
+    - name: product_code
+      type: string
+    - name: card_type
+      type: string
+    - name: card_brand
+      type: string
+    - name: credit_limit
+      type: decimal
+    - name: issue_date
+      type: long
+    - name: expiry_date
+      type: long
+    - name: status
+      type: string
+    - name: last_updated
+      type: long

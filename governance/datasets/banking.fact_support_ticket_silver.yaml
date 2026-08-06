@@ -1,0 +1,54 @@
+# Dataset Contract: fact_support_ticket (Silver)
+# Customer support ticket fact table
+
+dataset_id: banking.fact_support_ticket_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed fact table capturing all customer support tickets. Tracks
+  issue type, priority, status, and resolution timeline. Used for
+  customer service performance analytics, SLA compliance monitoring,
+  and issue trend analysis.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: fact_support_ticket
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - ticket_id
+    - customer_id
+    - issue_type
+    - priority
+    - status
+    - created_date
+    - resolved_date
+    - channel
+  non_null_columns:
+    - ticket_id
+    - customer_id
+    - issue_type
+    - priority
+    - status
+    - created_date
+  min_row_count: 2000
+  unique_check:
+    - ticket_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

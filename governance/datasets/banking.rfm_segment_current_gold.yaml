@@ -1,0 +1,55 @@
+# Dataset Contract: rfm_segment_current (Gold Current Serving)
+# Current RFM segment, exactly 1 row/customer
+
+dataset_id: banking.rfm_segment_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving RFM segment. Grain is exactly one row per customer,
+  derived from the latest available cob_dt in rfm_segment.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: rfm_segment_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.rfm_segment_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - recency_days
+    - frequency
+    - monetary
+    - r_score
+    - f_score
+    - m_score
+    - rfm_score
+    - rfm_segment
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - rfm_segment
+    - cob_dt
+  min_row_count: 1000
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - current_customer_segmentation
+    - campaign_targeting
+  prohibited_uses:
+    - automated_decision_making

@@ -1,0 +1,54 @@
+# Dataset Contract: fact_online_transaction (Silver)
+# Online and digital channel transaction fact table
+
+dataset_id: banking.fact_online_transaction_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed fact table capturing all transactions performed through online
+  and digital banking channels. Links transactions to customer devices
+  and merchants. Used for digital channel analytics, device-based fraud
+  detection, and online payment pattern analysis.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: fact_online_transaction
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - transaction_id
+    - customer_id
+    - device_id
+    - transaction_date
+    - amount
+    - merchant_id
+    - status
+    - channel
+  non_null_columns:
+    - transaction_id
+    - customer_id
+    - device_id
+    - transaction_date
+    - amount
+    - status
+  min_row_count: 5000
+  unique_check:
+    - transaction_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

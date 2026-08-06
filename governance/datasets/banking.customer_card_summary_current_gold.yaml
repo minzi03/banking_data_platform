@@ -1,0 +1,51 @@
+# Dataset Contract: customer_card_summary_current (Gold Current Serving)
+# Current customer card summary, exactly 1 row/customer
+
+dataset_id: banking.customer_card_summary_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving customer card portfolio summary. Grain is exactly one
+  row per customer, derived from the latest available cob_dt in customer_card_summary.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: customer_card_summary_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.customer_card_summary_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - total_cards
+    - cnt_credit_active
+    - cnt_debit_active
+    - max_credit_limit
+    - last_card_txn_date
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - cob_dt
+  min_row_count: 5000
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - card_portfolio_serving
+    - current_card_usage
+  prohibited_uses:
+    - external_sharing

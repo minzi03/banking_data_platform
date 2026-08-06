@@ -1,0 +1,30 @@
+# Silver: dim_branch (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_branch
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_branch
+
+business_key:
+  - branch_code
+
+sql: |
+  SELECT
+      branch_code,
+      branch_name,
+      region,
+      city,
+      district,
+      address,
+      manager_name,
+      open_date,
+      status,
+      last_updated
+  FROM lakehouse.bronze.core_branch
+  WHERE cob_dt = DATE '{{ cob_dt }}'

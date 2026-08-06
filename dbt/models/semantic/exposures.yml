@@ -1,0 +1,48 @@
+version: 2
+
+exposures:
+  - name: superset_customer_360
+    type: dashboard
+    description: Superset dashboard serving current Customer 360 data
+    owner:
+      name: BI Team
+    depends_on:
+      - ref('sm_customer_current')
+      - ref('sm_balance_current')
+      - ref('sm_transaction_current')
+      - ref('sm_rfm_current')
+      - ref('sm_churn_current')
+      - ref('sm_campaign_current')
+
+  - name: powerbi_customer_360
+    type: dashboard
+    description: Power BI dataset serving current Customer 360 data
+    owner:
+      name: BI Team
+    depends_on:
+      - ref('sm_customer_current')
+      - ref('sm_rfm_current')
+      - ref('sm_campaign_current')
+
+  - name: notebook_customer_analytics
+    type: notebook
+    description: Notebook serving current customer analytics and segmentation
+    owner:
+      name: Analytics Team
+    depends_on:
+      - ref('sm_customer_current')
+      - ref('sm_transaction_current')
+      - ref('sm_rfm_current')
+      - ref('sm_churn_current')
+
+  - name: ai_serving_customer
+    type: ml
+    description: AI serving using current customer 360 and behavioral features
+    owner:
+      name: Data Science Team
+    depends_on:
+      - ref('sm_customer_current')
+      - ref('sm_transaction_current')
+      - ref('sm_balance_current')
+      - ref('sm_rfm_current')
+      - ref('sm_churn_current')

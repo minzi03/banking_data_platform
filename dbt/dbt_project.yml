@@ -1,0 +1,40 @@
+# =============================================================================
+# dbt Project Configuration — Banking Data Platform
+# =============================================================================
+# Architecture: Lakehouse 2.0
+# Spark handles Bronze → Silver → Gold transforms
+# dbt handles Semantic Layer on Gold (metrics, docs, lineage)
+# =============================================================================
+
+name: 'banking'
+version: '1.0.0'
+config-version: 2
+
+profile: 'banking'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ==========================================================================
+# MODEL CONFIGURATIONS
+# ==========================================================================
+models:
+  banking:
+    # ─── SEMANTIC LAYER ──────────────────────────────────────────────────
+    # Semantic models + Gold sources
+    semantic:
+      +materialized: ephemeral
+      +schema: semantic
+      +tags: ["semantic"]
+
+# ==========================================================================
+# VARIABLES (Global)
+# ==========================================================================
+vars:
+  churn_inactive_days: 90
+  rfm_lookback_days: 365

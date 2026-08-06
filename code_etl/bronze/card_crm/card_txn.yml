@@ -1,0 +1,30 @@
+# Bronze Ingestion: card_txn (fact — full load for bootstrap)
+source:
+  type: postgresql
+  schema: card_crm
+  fetchsize: 50000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_card_txn
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    txn_id,
+    card_id,
+    customer_id,
+    txn_date,
+    txn_amount,
+    txn_type,
+    currency,
+    merchant_name,
+    merchant_category,
+    channel,
+    status,
+    created_ts,
+    last_updated
+  FROM card_crm.card_txn

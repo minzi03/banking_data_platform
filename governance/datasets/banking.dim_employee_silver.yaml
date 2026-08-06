@@ -1,0 +1,49 @@
+# Dataset Contract: dim_employee (Silver)
+# Employee dimension
+
+dataset_id: banking.dim_employee_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed employee dimension containing bank staff information. Links
+  employees to branches and roles. Used for operational reporting,
+  CRM interaction attribution, and workforce analytics.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_employee
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - employee_id
+    - full_name
+    - branch_code
+    - role
+    - hire_date
+    - is_active
+  non_null_columns:
+    - employee_id
+    - full_name
+    - branch_code
+    - role
+  min_row_count: 100
+  unique_check:
+    - employee_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

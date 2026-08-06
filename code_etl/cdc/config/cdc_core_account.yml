@@ -1,0 +1,42 @@
+# =============================================================================
+# CDC Configuration — core_account
+# =============================================================================
+# Source: PostgreSQL core_banking.account via Debezium
+# Target: Iceberg bronze.core_account_cdc
+
+kafka:
+  topic: postgresql.banking.core_banking.account
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/core_account_v3
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_account_cdc
+  columns:
+    - name: account_id
+      type: long
+    - name: account_no
+      type: string
+    - name: customer_id
+      type: long
+    - name: product_code
+      type: string
+    - name: branch_code
+      type: string
+    - name: account_type
+      type: string
+    - name: currency
+      type: string
+    - name: balance
+      type: decimal
+    - name: open_date
+      type: long
+    - name: close_date
+      type: long
+    - name: status
+      type: string
+    - name: last_updated
+      type: long

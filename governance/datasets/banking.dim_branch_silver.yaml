@@ -1,0 +1,49 @@
+# Dataset Contract: dim_branch (Silver)
+# Bank branch dimension
+
+dataset_id: banking.dim_branch_silver
+owner: Data Engineering Team
+business_purpose: >
+  Reference dimension for bank branches. Contains branch metadata including
+  region, city, and branch manager information. Used for geographic
+  analytics and performance reporting across the branch network.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_branch
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - branch_code
+    - branch_name
+    - region
+    - city
+    - manager_id
+    - is_active
+  non_null_columns:
+    - branch_code
+    - branch_name
+    - region
+    - city
+  min_row_count: 5
+  unique_check:
+    - branch_code
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

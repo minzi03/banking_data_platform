@@ -1,0 +1,29 @@
+# Silver: dim_location (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_location
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_location
+
+business_key:
+  - location_id
+
+sql: |
+  SELECT
+      location_id,
+      merchant_name,
+      merchant_category,
+      city,
+      state,
+      latitude,
+      longitude,
+      is_high_risk_area,
+      last_updated
+  FROM lakehouse.bronze.core_location
+  WHERE cob_dt = DATE '{{ cob_dt }}'

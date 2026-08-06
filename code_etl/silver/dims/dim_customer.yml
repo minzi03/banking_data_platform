@@ -1,0 +1,54 @@
+# Silver: dim_customer (SCD Type 2 — full history)
+# Track changes: phone, email, address, city, district, customer_segment, kyc_status, branch_code
+job:
+  type: scd_type2
+
+source:
+  tables:
+    - bronze.core_customer
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_customer
+
+business_key:
+  - customer_id
+
+scd:
+  type: 2
+  effective_from_column: effective_from
+  effective_to_column: effective_to
+  current_flag_column: is_current
+  sk_column: customer_sk
+
+tracked_columns:
+  - phone
+  - email
+  - address
+  - city
+  - district
+  - customer_segment
+  - kyc_status
+  - branch_code
+
+sql: |
+  SELECT
+      customer_id,
+      cccd,
+      full_name,
+      gender,
+      date_of_birth,
+      phone,
+      email,
+      address,
+      city,
+      district,
+      branch_code,
+      customer_segment,
+      kyc_status,
+      register_date,
+      is_active,
+      last_updated
+  FROM lakehouse.bronze.core_customer
+  WHERE cob_dt = DATE '{{ cob_dt }}'

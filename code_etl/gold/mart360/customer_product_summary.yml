@@ -1,0 +1,39 @@
+# Gold: customer_product_summary — Product holding per customer
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.dim_account
+    - silver.dim_card
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: customer_product_summary
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.dim_account
+  - silver.dim_card
+
+sql: |
+  SELECT
+      c.customer_id, c.customer_sk,
+      COUNT(DISTINCT a.account_id) AS total_accounts,
+      COUNT(DISTINCT CASE WHEN a.account_type = 'CASA' AND a.status = 'ACTIVE' THEN a.account_id END) AS cnt_casa_active,
+      COUNT(DISTINCT CASE WHEN a.account_type = 'TIME_DEPOSIT' AND a.status = 'ACTIVE' THEN a.account_id END) AS cnt_td_active,
+      COUNT(DISTINCT cd.card_id) AS total_cards,
+      COUNT(DISTINCT CASE WHEN cd.card_type = 'CREDIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) AS cnt_credit_cards,
+      COUNT(DISTINCT CASE WHEN cd.card_type = 'DEBIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) AS cnt_debit_cards,
+      CASE WHEN COUNT(DISTINCT CASE WHEN cd.card_type = 'CREDIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) > 0
+           THEN 1 ELSE 0 END AS has_credit_card,
+      1 AS has_savings,
+      0 AS has_loan,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM lakehouse.silver.dim_customer c
+  LEFT JOIN lakehouse.silver.dim_account a ON c.customer_id = a.customer_id AND a.is_current = 1
+  LEFT JOIN lakehouse.silver.dim_card cd ON c.customer_id = cd.customer_id
+  WHERE c.is_current = 1
+  GROUP BY c.customer_id, c.customer_sk

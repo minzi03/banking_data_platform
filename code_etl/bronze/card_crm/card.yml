@@ -1,0 +1,29 @@
+# Bronze Ingestion: card (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: card_crm
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_card
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    card_id,
+    card_no_masked,
+    customer_id,
+    account_id,
+    product_code,
+    card_type,
+    card_brand,
+    credit_limit,
+    issue_date,
+    expiry_date,
+    status,
+    last_updated
+  FROM card_crm.card

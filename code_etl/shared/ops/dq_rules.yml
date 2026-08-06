@@ -1,0 +1,428 @@
+# =============================================================================
+# Data Quality Rules — Banking Data Platform
+# =============================================================================
+# Check types:
+#   row_count         - min/max row count threshold
+#   null_check        - columns must not be NULL
+#   unique_check      - columns must be unique
+#   range_check       - numeric column within min/max bounds
+#   referential_integrity - FK exists in referenced table
+#   freshness         - data within N days of current date
+#
+# Severity: FAIL = blocks pipeline, WARN = logs but passes
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# SILVER DIMENSIONS
+# ---------------------------------------------------------------------------
+tables:
+
+  # --- dim_customer (SCD2) ---
+  lakehouse.silver.dim_customer:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id, cccd, full_name]
+      - name: unique_check
+        severity: FAIL
+        columns: [customer_id]
+      - name: null_check
+        severity: WARN
+        columns: [phone, email, address, city, district, branch_code]
+      - name: referential_integrity
+        severity: WARN
+        column: branch_code
+        ref_table: lakehouse.silver.dim_branch
+        ref_column: branch_code
+
+  # --- dim_account (SCD2) ---
+  lakehouse.silver.dim_account:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [account_id, account_no, customer_id, product_code, branch_code]
+      - name: unique_check
+        severity: FAIL
+        columns: [account_id]
+      - name: range_check
+        severity: WARN
+        column: balance
+        min_value: 0
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+      - name: referential_integrity
+        severity: FAIL
+        column: product_code
+        ref_table: lakehouse.silver.dim_product
+        ref_column: product_code
+      - name: referential_integrity
+        severity: FAIL
+        column: branch_code
+        ref_table: lakehouse.silver.dim_branch
+        ref_column: branch_code
+
+  # --- dim_product ---
+  lakehouse.silver.dim_product:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [product_code, product_name]
+      - name: unique_check
+        severity: FAIL
+        columns: [product_code]
+
+  # --- dim_branch ---
+  lakehouse.silver.dim_branch:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [branch_code, branch_name]
+      - name: unique_check
+        severity: FAIL
+        columns: [branch_code]
+
+  # --- dim_card ---
+  lakehouse.silver.dim_card:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [card_id, customer_id, card_type]
+      - name: unique_check
+        severity: FAIL
+        columns: [card_id]
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+      - name: referential_integrity
+        severity: FAIL
+        column: account_id
+        ref_table: lakehouse.silver.dim_account
+        ref_column: account_id
+      - name: referential_integrity
+        severity: FAIL
+        column: product_code
+        ref_table: lakehouse.silver.dim_product
+        ref_column: product_code
+
+  # --- dim_employee ---
+  lakehouse.silver.dim_employee:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [employee_id, full_name, branch_code]
+      - name: unique_check
+        severity: FAIL
+        columns: [employee_id]
+      - name: referential_integrity
+        severity: FAIL
+        column: branch_code
+        ref_table: lakehouse.silver.dim_branch
+        ref_column: branch_code
+
+  # --- dim_device ---
+  lakehouse.silver.dim_device:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [device_id, customer_id, device_type]
+      - name: unique_check
+        severity: FAIL
+        columns: [device_id]
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # --- dim_location ---
+  lakehouse.silver.dim_location:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [location_id, merchant_name]
+      - name: unique_check
+        severity: FAIL
+        columns: [location_id]
+
+  # ---------------------------------------------------------------------------
+  # SILVER FACTS
+  # ---------------------------------------------------------------------------
+
+  # --- fact_txn_account ---
+  lakehouse.silver.fact_txn_account:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [txn_id, account_id, customer_id, txn_date, txn_amount]
+      - name: unique_check
+        severity: FAIL
+        columns: [txn_id]
+      - name: range_check
+        severity: WARN
+        column: txn_amount
+        min_value: 0
+      - name: referential_integrity
+        severity: FAIL
+        column: account_id
+        ref_table: lakehouse.silver.dim_account
+        ref_column: account_id
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # --- fact_card_txn ---
+  lakehouse.silver.fact_card_txn:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [txn_id, card_id, customer_id, txn_date, txn_amount]
+      - name: unique_check
+        severity: FAIL
+        columns: [txn_id]
+      - name: range_check
+        severity: WARN
+        column: txn_amount
+        min_value: 0
+      - name: referential_integrity
+        severity: FAIL
+        column: card_id
+        ref_table: lakehouse.silver.dim_card
+        ref_column: card_id
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # --- fact_crm_interaction ---
+  lakehouse.silver.fact_crm_interaction:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [interaction_id, customer_id, interaction_date]
+      - name: unique_check
+        severity: FAIL
+        columns: [interaction_id]
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # --- fact_online_transaction ---
+  lakehouse.silver.fact_online_transaction:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [transaction_id, customer_id, transaction_date, amount]
+      - name: unique_check
+        severity: FAIL
+        columns: [transaction_id]
+      - name: range_check
+        severity: WARN
+        column: amount
+        min_value: 0
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # --- fact_support_ticket ---
+  lakehouse.silver.fact_support_ticket:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [ticket_id, customer_id, issue_type, priority, status]
+      - name: unique_check
+        severity: FAIL
+        columns: [ticket_id]
+      - name: referential_integrity
+        severity: FAIL
+        column: customer_id
+        ref_table: lakehouse.silver.dim_customer
+        ref_column: customer_id
+
+  # ---------------------------------------------------------------------------
+  # GOLD MART360
+  # ---------------------------------------------------------------------------
+
+  lakehouse.gold.mart_customer_360:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.customer_balance_summary:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.customer_card_summary:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.customer_product_summary:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.customer_transaction_summary:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.branch_monthly_summary:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [branch_code]
+
+  # ---------------------------------------------------------------------------
+  # GOLD SEGMENTATION
+  # ---------------------------------------------------------------------------
+
+  lakehouse.gold.rfm_segment:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.churn_prediction:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.cross_sell_segment:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  lakehouse.gold.campaign_target:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+      - name: null_check
+        severity: FAIL
+        columns: [customer_id]
+
+  # ---------------------------------------------------------------------------
+  # BRONZE CDC (freshness only)
+  # ---------------------------------------------------------------------------
+
+  lakehouse.bronze.core_account_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+
+  lakehouse.bronze.core_customer_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+
+  lakehouse.bronze.core_transaction_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+
+  lakehouse.bronze.card_account_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+
+  lakehouse.bronze.card_transaction_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1
+
+  lakehouse.bronze.online_transaction_cdc:
+    checks:
+      - name: row_count
+        severity: FAIL
+        min_rows: 1

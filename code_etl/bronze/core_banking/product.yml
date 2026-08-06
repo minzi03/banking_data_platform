@@ -1,0 +1,25 @@
+# Bronze Ingestion: product (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_product
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    product_code,
+    product_name,
+    product_group,
+    product_type,
+    currency,
+    is_active,
+    launch_date,
+    last_updated
+  FROM core_banking.product

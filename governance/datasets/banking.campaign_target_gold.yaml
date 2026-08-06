@@ -1,0 +1,66 @@
+# Dataset Contract: campaign_target (Gold History Snapshot)
+# Campaign targeting history
+
+dataset_id: banking.campaign_target_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of campaign targeting outputs. Grain is one row per
+  customer per cob_dt. Used for campaign auditability, replay, and historical analysis.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: campaign_target
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.rfm_segment_gold
+  - banking.churn_prediction_gold
+  - banking.cross_sell_segment_gold
+  - banking.mart_customer_360_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - rfm_segment
+    - rfm_score
+    - recency_days
+    - frequency
+    - monetary
+    - churn_risk
+    - is_churn_candidate
+    - days_since_last_txn
+    - customer_segment
+    - aum_total
+    - aum_bucket
+    - primary_branch_code
+    - primary_opportunity
+    - no_credit_card
+    - campaign_type
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - campaign_type
+    - cob_dt
+  min_row_count: 500
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - marketing_campaigns
+    - customer_outreach
+    - campaign_history_analysis
+  prohibited_uses:
+    - automated_decision_making

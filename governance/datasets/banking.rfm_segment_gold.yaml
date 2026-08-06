@@ -1,0 +1,58 @@
+# Dataset Contract: rfm_segment (Gold History Snapshot)
+# RFM segmentation history
+
+dataset_id: banking.rfm_segment_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of RFM segmentation. Grain is one row per customer per
+  cob_dt. Used for historical customer value classification and backtesting.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: rfm_segment
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.dim_customer_silver
+  - banking.fact_txn_account_silver
+  - banking.fact_card_txn_silver
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - recency_days
+    - frequency
+    - monetary
+    - r_score
+    - f_score
+    - m_score
+    - rfm_score
+    - rfm_segment
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - rfm_segment
+    - cob_dt
+  min_row_count: 1000
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_segmentation
+    - campaign_targeting
+    - historical_segment_analysis
+  prohibited_uses:
+    - automated_decision_making

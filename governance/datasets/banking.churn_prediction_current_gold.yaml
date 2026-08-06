@@ -1,0 +1,56 @@
+# Dataset Contract: churn_prediction_current (Gold Current Serving)
+# Current churn prediction, exactly 1 row/customer
+
+dataset_id: banking.churn_prediction_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving churn prediction. Grain is exactly one row per customer,
+  derived from the latest available cob_dt in churn_prediction.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: churn_prediction_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.churn_prediction_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - txn_cnt_30d
+    - txn_cnt_90d
+    - txn_amt_30d
+    - txn_amt_90d
+    - days_since_last_txn
+    - churn_risk
+    - is_churn_candidate
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - churn_risk
+    - cob_dt
+  min_row_count: 1000
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: high_risk
+  intended_uses:
+    - current_retention_scoring
+    - churn_serving
+  prohibited_uses:
+    - automated_account_closure
+    - external_sharing
+  human_oversight_required: true

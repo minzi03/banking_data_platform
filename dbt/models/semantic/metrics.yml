@@ -1,0 +1,119 @@
+version: 2
+
+models:
+  - name: sm_customer_current
+    description: Current-serving Customer 360 view, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        description: Unique customer identifier
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_segment
+        description: Current customer segment
+        data_tests:
+          - not_null
+      - name: aum_total
+        description: Total assets under management
+      - name: rfm_segment
+        description: Current RFM segment
+      - name: churn_flag
+        description: Current churn flag
+      - name: cob_dt
+        description: Business snapshot date
+
+  - name: sm_balance_current
+    description: Current-serving customer balance summary, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: aum_total
+      - name: aum_bucket
+
+  - name: sm_transaction_current
+    description: Current-serving customer transaction summary, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: total_txn_count_30d
+
+  - name: sm_product_current
+    description: Current-serving customer product portfolio summary, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: sm_card_current
+    description: Current-serving customer card portfolio summary, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: sm_rfm_current
+    description: Current-serving RFM segment, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: rfm_segment
+        data_tests:
+          - accepted_values:
+              values:
+                - 'Champions'
+                - 'Loyal Customers'
+                - 'Potential Loyalists'
+                - 'New Customers'
+                - 'At Risk'
+                - 'Hibernating'
+                - 'Lost'
+
+  - name: sm_churn_current
+    description: Current-serving churn prediction, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: churn_risk
+        data_tests:
+          - accepted_values:
+              values:
+                - 'High'
+                - 'Medium'
+                - 'Low'
+                - 'Active'
+
+  - name: sm_cross_sell_current
+    description: Current-serving cross-sell segment, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: primary_opportunity
+
+  - name: sm_campaign_current
+    description: Current-serving campaign target list, exactly 1 row per customer.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: campaign_type
+        data_tests:
+          - accepted_values:
+              values:
+                - 'Retention'
+                - 'Cross_Sell_CC'
+                - 'Cross_Sell'
+                - 'Upsell'
+                - 'Awareness'

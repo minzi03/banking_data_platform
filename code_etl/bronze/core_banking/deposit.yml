@@ -1,0 +1,28 @@
+# Bronze Ingestion: deposit (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_deposit
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    deposit_id,
+    account_id,
+    customer_id,
+    product_code,
+    principal_amount,
+    interest_rate,
+    term_months,
+    open_date,
+    maturity_date,
+    status,
+    last_updated
+  FROM core_banking.deposit

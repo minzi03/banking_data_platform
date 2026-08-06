@@ -1,0 +1,121 @@
+# =============================================================================
+# Docker Compose — dbt Service
+# =============================================================================
+# Architecture: Lakehouse 2.0
+# Usage: docker-compose -f docker-compose.dbt.yml up
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ─── DBT Service ──────────────────────────────────────────────────────────
+  dbt:
+    build:
+      context: ..
+      dockerfile: docker/dbt/Dockerfile
+    container_name: banking_dbt
+    environment:
+      - DBT_TRINO_HOST=trino
+      - DBT_TRINO_PORT=8080
+      - DBT_TRINO_CATALOG=lakehouse
+      - DBT_TRINO_SCHEMA=staging
+      - DBT_TRINO_USER=admin
+      - DBT_TRINO_PASSWORD=
+    volumes:
+      - ../dbt:/opt/dbt
+      - ../dbt/target:/opt/dbt/target
+      - ../dbt/dbt_packages:/opt/dbt/dbt_packages
+    depends_on:
+      - trino
+    networks:
+      - banking-network
+    command: >
+      bash -c "
+        echo 'Installing dbt dependencies...' &&
+        dbt deps &&
+        echo 'Running dbt models...' &&
+        dbt run &&
+        echo 'Running dbt tests...' &&
+        dbt test &&
+        echo 'Generating documentation...' &&
+        dbt docs generate &&
+        echo 'dbt completed successfully!'
+      "
+
+  # ─── DBT Docs Server ─────────────────────────────────────────────────────
+  dbt-docs:
+    build:
+      context: ..
+      dockerfile: docker/dbt/Dockerfile
+    container_name: banking_dbt_docs
+    environment:
+      - DBT_TRINO_HOST=trino
+      - DBT_TRINO_PORT=8080
+      - DBT_TRINO_CATALOG=lakehouse
+      - DBT_TRINO_SCHEMA=staging
+      - DBT_TRINO_USER=admin
+      - DBT_TRINO_PASSWORD=
+    volumes:
+      - ../dbt:/opt/dbt
+      - ../dbt/target:/opt/dbt/target
+      - ../dbt/dbt_packages:/opt/dbt/dbt_packages
+    depends_on:
+      - trino
+    ports:
+      - "8082:8080"
+    networks:
+      - banking-network
+    command: >
+      bash -c "
+        echo 'Installing dbt dependencies...' &&
+        dbt deps &&
+        echo 'Generating documentation...' &&
+        dbt docs generate &&
+        echo 'Serving documentation on port 8080...' &&
+        dbt docs serve --host 0.0.0.0 --port 8080
+      "
+
+  # ─── DBT Test Service ────────────────────────────────────────────────────
+  dbt-test:
+    build:
+      context: ..
+      dockerfile: docker/dbt/Dockerfile
+    container_name: banking_dbt_test
+    environment:
+      - DBT_TRINO_HOST=trino
+      - DBT_TRINO_PORT=8080
+      - DBT_TRINO_CATALOG=lakehouse
+      - DBT_TRINO_SCHEMA=staging
+      - DBT_TRINO_USER=admin
+      - DBT_TRINO_PASSWORD=
+    volumes:
+      - ../dbt:/opt/dbt
+      - ../dbt/target:/opt/dbt/target
+      - ../dbt/dbt_packages:/opt/dbt/dbt_packages
+    depends_on:
+      - trino
+    networks:
+      - banking-network
+    command: >
+      bash -c "
+        echo 'Installing dbt dependencies...' &&
+        dbt deps &&
+        echo 'Running dbt tests...' &&
+        dbt test &&
+        echo 'dbt tests completed!'
+      "
+
+  # ─── Trino (dependency) ──────────────────────────────────────────────────
+  trino:
+    image: trinodb/trino:latest
+    container_name: banking_trino
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../trino/catalog:/etc/trino/catalog
+    networks:
+      - banking-network
+
+networks:
+  banking-network:
+    driver: bridge

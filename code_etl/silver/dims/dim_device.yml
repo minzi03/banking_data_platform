@@ -1,0 +1,30 @@
+# Silver: dim_device (SCD Type 1 — UPSERT, no history)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_device
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_device
+
+business_key:
+  - device_id
+
+sql: |
+  SELECT
+      device_id,
+      customer_id,
+      device_type,
+      device_fingerprint,
+      operating_system,
+      ip_address,
+      is_trusted,
+      first_seen,
+      last_seen,
+      last_updated
+  FROM lakehouse.bronze.core_device
+  WHERE cob_dt = DATE '{{ cob_dt }}'

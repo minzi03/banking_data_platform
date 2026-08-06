@@ -1,0 +1,27 @@
+# Bronze Ingestion: branch (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_branch
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    branch_code,
+    branch_name,
+    region,
+    city,
+    district,
+    address,
+    manager_name,
+    open_date,
+    status,
+    last_updated
+  FROM core_banking.branch

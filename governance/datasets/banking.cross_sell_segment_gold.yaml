@@ -1,0 +1,53 @@
+# Dataset Contract: cross_sell_segment (Gold History Snapshot)
+# Cross-sell opportunity history
+
+dataset_id: banking.cross_sell_segment_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of cross-sell opportunity analysis. Grain is one row
+  per customer per cob_dt. Used for product recommendation analytics over time.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: cross_sell_segment
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.dim_customer_silver
+  - banking.dim_card_silver
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - customer_segment
+    - no_credit_card
+    - no_debit_card
+    - primary_opportunity
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - primary_opportunity
+    - cob_dt
+  min_row_count: 1000
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - product_recommendation
+    - campaign_targeting
+    - historical_opportunity_analysis
+  prohibited_uses:
+    - automated_decision_making

@@ -1,0 +1,33 @@
+# Bronze Ingestion: customer (dimension — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_customer
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    customer_id,
+    cccd,
+    full_name,
+    gender,
+    date_of_birth,
+    phone,
+    email,
+    address,
+    city,
+    district,
+    branch_code,
+    customer_segment,
+    kyc_status,
+    register_date,
+    is_active,
+    last_updated
+  FROM core_banking.customer

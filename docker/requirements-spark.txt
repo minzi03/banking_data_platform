@@ -1,0 +1,3 @@
+# Python dependencies for Spark ETL jobs
+pyyaml>=6.0
+jinja2>=3.1

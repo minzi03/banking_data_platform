@@ -1,0 +1,53 @@
+# Dataset Contract: dim_card (Silver)
+# Card dimension with masked card numbers
+
+dataset_id: banking.dim_card_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed card dimension linking customers and accounts to their payment
+  cards. Card numbers are masked for security compliance. Provides card
+  type, expiry, and status information for downstream transaction analytics.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: dim_card
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - card_id
+    - customer_id
+    - account_id
+    - card_type
+    - card_number_masked
+    - expiry_date
+    - status
+    - issue_date
+  non_null_columns:
+    - card_id
+    - customer_id
+    - card_type
+    - card_number_masked
+    - expiry_date
+    - status
+  min_row_count: 1000
+  unique_check:
+    - card_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

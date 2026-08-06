@@ -1,0 +1,55 @@
+# Dataset Contract: mart_customer_360_current (Gold Current Serving)
+# Current 360-degree customer view, exactly 1 row/customer
+
+dataset_id: banking.mart_customer_360_current_gold
+owner: Data Engineering Team
+business_purpose: >
+  Latest current-serving 360-degree customer view. Grain is exactly one row per
+  customer, derived from the latest available cob_dt in mart_customer_360.
+refresh_sla: daily
+quality_class: critical
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: mart_customer_360_current
+
+dag_id: gold_all_dag
+
+upstream_dataset_ids:
+  - banking.mart_customer_360_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - full_name_masked
+    - customer_segment
+    - total_accounts
+    - total_cards
+    - aum_total
+    - rfm_segment
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - cob_dt
+  min_row_count: 5000
+  unique_check:
+    - customer_id
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: high_risk
+  intended_uses:
+    - customer_analytics
+    - serving_current_profile
+    - marketing_activation
+  prohibited_uses:
+    - automated_credit_decision
+    - external_sharing
+  human_oversight_required: true

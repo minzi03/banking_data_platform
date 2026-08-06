@@ -1,0 +1,65 @@
+# =============================================================================
+# Banking Data Platform — .gitignore
+# =============================================================================
+
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+*.env.local
+*.env.production
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+.venv/
+env/
+
+# ── Spark / Jupyter ───────────────────────────────────────────────────────────
+*.log
+derby.log
+metastore_db/
+spark-warehouse/
+notebooks/.ipynb_checkpoints/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker/volumes/
+docker/*.log
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Data (local dev only — never commit actual data) ──────────────────────────
+data/raw/
+data/processed/
+data/generator/output/
+*.csv
+*.parquet
+*.avro
+
+# ── Airflow ───────────────────────────────────────────────────────────────────
+airflow/logs/
+airflow/plugins/__pycache__/
+
+# ── dbt ───────────────────────────────────────────────────────────────────────
+dbt/logs/
+dbt/target/
+dbt/dbt_packages/
+dbt/dbt_modules/
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/

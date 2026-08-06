@@ -1,0 +1,39 @@
+# Silver: fact_card_txn (overwritePartitions by cob_dt)
+# Joins: dim_customer (customer_sk)
+job:
+  type: fact_txn
+
+source:
+  tables:
+    - bronze.core_card_txn
+    - silver.dim_customer
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: fact_card_txn
+
+business_key:
+  - txn_id
+
+sql: |
+  SELECT
+      t.txn_id,
+      t.card_id,
+      t.customer_id,
+      c.customer_sk,
+      t.txn_date,
+      t.txn_amount,
+      t.txn_type,
+      t.currency,
+      t.merchant_name,
+      t.merchant_category,
+      t.channel,
+      t.status,
+      t.created_ts,
+      t.cob_dt
+  FROM lakehouse.bronze.core_card_txn t
+  LEFT JOIN lakehouse.silver.dim_customer c
+      ON t.customer_id = c.customer_id
+      AND c.is_current = 1
+  WHERE t.cob_dt = DATE '{{ cob_dt }}'

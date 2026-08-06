@@ -1,0 +1,51 @@
+# Dataset Contract: customer_balance_summary (Gold History Snapshot)
+# Customer balance summary across snapshots
+
+dataset_id: banking.customer_balance_summary_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot history of customer balance summary. Grain is one row per
+  customer per cob_dt. Used for balance trend analysis and historical AUM tracking.
+refresh_sla: daily
+quality_class: important
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: customer_balance_summary
+
+dag_id: gold_mart360_dag
+
+upstream_dataset_ids:
+  - banking.mart_customer_360_gold
+
+quality_rules:
+  required_columns:
+    - customer_id
+    - customer_sk
+    - total_account_balance
+    - avg_account_balance
+    - aum_total
+    - aum_bucket
+    - cob_dt
+  non_null_columns:
+    - customer_id
+    - customer_sk
+    - cob_dt
+  min_row_count: 5000
+  unique_column_sets:
+    - [customer_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - balance_reporting
+    - historical_aum_tracking
+  prohibited_uses:
+    - external_sharing

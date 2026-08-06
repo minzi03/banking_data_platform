@@ -1,0 +1,37 @@
+# Gold: customer_balance_summary — Balance & AUM per customer
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.dim_account
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: customer_balance_summary
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.dim_account
+
+sql: |
+  SELECT
+      c.customer_id,
+      c.customer_sk,
+      COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) AS total_account_balance,
+      COALESCE(AVG(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) AS avg_account_balance,
+      COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) AS aum_total,
+      CASE
+          WHEN COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) >= 5000000000 THEN 'VIP'
+          WHEN COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) >= 1000000000 THEN 'PRIORITY'
+          WHEN COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.balance END), 0) >= 100000000 THEN 'AFFLUENT'
+          ELSE 'MASS'
+      END AS aum_bucket,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM lakehouse.silver.dim_customer c
+  LEFT JOIN lakehouse.silver.dim_account a
+      ON c.customer_id = a.customer_id AND a.is_current = 1
+  WHERE c.is_current = 1
+  GROUP BY c.customer_id, c.customer_sk

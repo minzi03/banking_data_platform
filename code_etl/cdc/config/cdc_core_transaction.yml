@@ -1,0 +1,42 @@
+# CDC Configuration — core_transaction
+# Source: PostgreSQL core_banking.txn_account via Debezium
+# Target: Iceberg bronze.core_transaction_cdc
+
+kafka:
+  topic: postgresql.banking.core_banking.txn_account
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/core_transaction_v1
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_transaction_cdc
+  columns:
+    - name: txn_id
+      type: long
+    - name: account_id
+      type: long
+    - name: customer_id
+      type: long
+    - name: txn_date
+      type: long
+    - name: txn_amount
+      type: decimal
+    - name: txn_type
+      type: string
+    - name: debit_credit
+      type: string
+    - name: balance_after
+      type: decimal
+    - name: channel
+      type: string
+    - name: description
+      type: string
+    - name: counter_account
+      type: string
+    - name: created_ts
+      type: long
+    - name: last_updated
+      type: long

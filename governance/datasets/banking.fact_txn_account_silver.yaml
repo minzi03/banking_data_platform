@@ -1,0 +1,55 @@
+# Dataset Contract: fact_txn_account (Silver)
+# Account transaction fact table
+
+dataset_id: banking.fact_txn_account_silver
+owner: Data Engineering Team
+business_purpose: >
+  Cleansed fact table capturing all account-level financial transactions
+  including deposits, withdrawals, and transfers. Provides transaction
+  details with balance-after snapshots for account activity analytics,
+  cash flow analysis, and regulatory reporting.
+refresh_sla: daily
+quality_class: critical
+layer: silver
+
+physical_location:
+  catalog: lakehouse
+  namespace: silver
+  table: fact_txn_account
+
+dag_id: silver_all_dag
+
+upstream_dataset_ids:
+  - banking.core_customer_bronze
+
+quality_rules:
+  required_columns:
+    - txn_id
+    - account_id
+    - customer_id
+    - txn_date
+    - txn_type
+    - txn_amount
+    - balance_after
+    - channel
+    - description
+  non_null_columns:
+    - txn_id
+    - account_id
+    - customer_id
+    - txn_date
+    - txn_type
+    - txn_amount
+  min_row_count: 10000
+  unique_check:
+    - txn_id
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: limited_risk
+  intended_uses:
+    - customer_analytics
+    - fraud_detection
+  prohibited_uses:
+    - automated_decision_making

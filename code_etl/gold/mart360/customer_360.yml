@@ -1,0 +1,204 @@
+# Gold: mart_customer_360 — Customer 360° daily snapshot (28+ KPIs)
+# Tổng hợp: profile, product holding, balance, transaction behavior, CRM, RFM, risk
+# Note:
+#   - This table is a daily snapshot partitioned by cob_dt, so it can contain
+#     multiple rows per customer across multiple dates.
+#   - Business-serving current-only queries should use the view
+#     lakehouse.gold.mart_customer_360_current to enforce 1 row/customer.
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.dim_account
+    - silver.dim_card
+    - silver.fact_txn_account
+    - silver.fact_card_txn
+    - silver.fact_crm_interaction
+    - silver.fact_online_transaction
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: mart_customer_360
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.dim_account
+  - silver.dim_card
+  - silver.fact_txn_account
+  - silver.fact_card_txn
+  - silver.fact_crm_interaction
+  - silver.fact_online_transaction
+
+sql: |
+  WITH
+  -- Customer base (current only)
+  cust AS (
+      SELECT
+          customer_id, customer_sk, full_name, gender, date_of_birth,
+          branch_code AS primary_branch_code,
+          customer_segment, kyc_status, register_date
+      FROM lakehouse.silver.dim_customer
+      WHERE is_current = 1
+  ),
+  -- Account holding
+  acct AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT account_id) AS total_accounts,
+          COUNT(DISTINCT CASE WHEN account_type = 'CASA' AND status = 'ACTIVE' THEN account_id END) AS cnt_casa_active,
+          COUNT(DISTINCT CASE WHEN account_type = 'TIME_DEPOSIT' AND status = 'ACTIVE' THEN account_id END) AS cnt_td_active,
+          COALESCE(SUM(CASE WHEN status = 'ACTIVE' THEN balance END), 0) AS total_account_balance
+      FROM lakehouse.silver.dim_account
+      WHERE is_current = 1
+      GROUP BY customer_id
+  ),
+  -- Card holding
+  crd AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT card_id) AS total_cards,
+          COUNT(DISTINCT CASE WHEN card_type = 'CREDIT' AND status = 'ACTIVE' THEN card_id END) AS cnt_credit_cards,
+          COUNT(DISTINCT CASE WHEN card_type = 'DEBIT' AND status = 'ACTIVE' THEN card_id END) AS cnt_debit_cards
+      FROM lakehouse.silver.dim_card
+      GROUP BY customer_id
+  ),
+  -- Account txn 30d
+  txn_acct AS (
+      SELECT
+          customer_id,
+          COUNT(txn_id) AS txn_count_30d,
+          COALESCE(SUM(ABS(txn_amount)), 0) AS txn_amount_30d,
+          MAX(txn_date) AS last_txn_date_acct
+      FROM lakehouse.silver.fact_txn_account
+      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  -- Card txn 30d
+  txn_card AS (
+      SELECT
+          customer_id,
+          COUNT(txn_id) AS card_txn_count_30d,
+          COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS card_txn_amount_30d,
+          MAX(txn_date) AS last_card_txn_date
+      FROM lakehouse.silver.fact_card_txn
+      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+        AND status = 'SUCCESS'
+      GROUP BY customer_id
+  ),
+  -- Primary channel (30d)
+  channel_rank AS (
+      SELECT customer_id, channel, COUNT(txn_id) AS cnt,
+             ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY COUNT(txn_id) DESC) AS rn
+      FROM lakehouse.silver.fact_txn_account
+      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id, channel
+  ),
+  primary_channel AS (
+      SELECT customer_id, channel AS primary_channel
+      FROM channel_rank WHERE rn = 1
+  ),
+  -- CRM 90d
+  crm_agg AS (
+      SELECT
+          customer_id,
+          COUNT(interaction_id) AS interaction_count_90d,
+          MAX(interaction_date) AS last_interaction_date
+      FROM lakehouse.silver.fact_crm_interaction
+      WHERE CAST(interaction_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
+        AND CAST(interaction_date AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  combined AS (
+      SELECT
+          c.customer_id, c.customer_sk,
+          CONCAT(SPLIT(c.full_name, ' ')[0], ' **') AS full_name_masked,
+          DATEDIFF(DATE '{{ cob_dt }}', c.date_of_birth) / 365 AS age,
+          c.gender, c.primary_branch_code, c.customer_segment,
+          c.kyc_status, c.register_date,
+          COALESCE(a.total_accounts, 0) AS total_accounts,
+          COALESCE(crd.total_cards, 0) AS total_cards,
+          0 AS total_loans,
+          CASE WHEN COALESCE(crd.cnt_credit_cards, 0) > 0 THEN 1 ELSE 0 END AS has_credit_card,
+          1 AS has_savings,
+          0 AS has_loan,
+          COALESCE(a.total_account_balance, 0) AS total_deposit_balance,
+          0 AS total_loan_outstanding,
+          COALESCE(a.total_account_balance, 0) AS aum_total,
+          COALESCE(ta.txn_count_30d, 0) + COALESCE(tc.card_txn_count_30d, 0) AS txn_count_30d,
+          COALESCE(ta.txn_amount_30d, 0) + COALESCE(tc.card_txn_amount_30d, 0) AS txn_amount_30d,
+          GREATEST(
+              COALESCE(ta.last_txn_date_acct, TIMESTAMP '1900-01-01 00:00:00'),
+              COALESCE(tc.last_card_txn_date, TIMESTAMP '1900-01-01 00:00:00')
+          ) AS last_txn_date,
+          COALESCE(pc.primary_channel, 'UNKNOWN') AS primary_channel,
+          COALESCE(crm.interaction_count_90d, 0) AS interaction_count_90d,
+          crm.last_interaction_date
+      FROM cust c
+      LEFT JOIN acct a ON c.customer_id = a.customer_id
+      LEFT JOIN crd crd ON c.customer_id = crd.customer_id
+      LEFT JOIN txn_acct ta ON c.customer_id = ta.customer_id
+      LEFT JOIN txn_card tc ON c.customer_id = tc.customer_id
+      LEFT JOIN primary_channel pc ON c.customer_id = pc.customer_id
+      LEFT JOIN crm_agg crm ON c.customer_id = crm.customer_id
+  )
+  SELECT
+      customer_id, customer_sk, full_name_masked,
+      CAST(age AS INT) AS age, gender, primary_branch_code,
+      customer_segment, kyc_status, register_date,
+      total_accounts, total_cards, total_loans,
+      CAST(has_credit_card AS INT) AS has_credit_card,
+      CAST(has_savings AS INT) AS has_savings,
+      CAST(has_loan AS INT) AS has_loan,
+      ROUND(total_deposit_balance, 2) AS total_deposit_balance,
+      ROUND(total_loan_outstanding, 2) AS total_loan_outstanding,
+      ROUND(aum_total, 2) AS aum_total,
+      CASE
+          WHEN aum_total >= 5000000000 THEN 'VIP'
+          WHEN aum_total >= 1000000000 THEN 'PRIORITY'
+          WHEN aum_total >= 100000000 THEN 'AFFLUENT'
+          ELSE 'MASS'
+      END AS aum_bucket,
+      txn_count_30d, ROUND(txn_amount_30d, 2) AS txn_amount_30d,
+      last_txn_date,
+      DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) AS days_since_last_txn,
+      primary_channel,
+      interaction_count_90d, last_interaction_date,
+      NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC) AS rfm_recency_score,
+      NTILE(5) OVER (ORDER BY txn_count_30d DESC) AS rfm_frequency_score,
+      NTILE(5) OVER (ORDER BY txn_amount_30d DESC) AS rfm_monetary_score,
+      CASE
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 13 THEN 'Champions'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 10 THEN 'Loyal Customers'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 7 THEN 'Potential Loyalists'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 5 THEN 'New Customers'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 3 THEN 'At Risk'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
+               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 2 THEN 'Hibernating'
+          ELSE 'Lost'
+      END AS rfm_segment,
+      CASE
+          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) > 90
+           OR last_txn_date IS NULL THEN 1 ELSE 0
+      END AS churn_flag,
+      CASE
+          WHEN aum_total >= 100000000 AND has_credit_card = 0 THEN 1 ELSE 0
+      END AS cross_sell_credit_card_flag,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM combined

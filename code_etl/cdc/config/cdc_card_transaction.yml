@@ -1,0 +1,42 @@
+# CDC Configuration — card_transaction
+# Source: PostgreSQL card_crm.card_txn via Debezium
+# Target: Iceberg bronze.card_transaction_cdc
+
+kafka:
+  topic: postgresql.banking.card_crm.card_txn
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/card_transaction_v1
+  trigger_interval: 30 seconds
+  max_offsets_per_trigger: 100000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: card_transaction_cdc
+  columns:
+    - name: txn_id
+      type: long
+    - name: card_id
+      type: long
+    - name: customer_id
+      type: long
+    - name: txn_date
+      type: long
+    - name: txn_amount
+      type: decimal
+    - name: txn_type
+      type: string
+    - name: currency
+      type: string
+    - name: merchant_name
+      type: string
+    - name: merchant_category
+      type: string
+    - name: channel
+      type: string
+    - name: status
+      type: string
+    - name: created_ts
+      type: long
+    - name: last_updated
+      type: long
