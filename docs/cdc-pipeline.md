@@ -33,12 +33,12 @@ PostgreSQL → Debezium → Kafka → Spark Streaming → Iceberg Bronze CDC Tab
 ### 4. Bronze CDC Tables
 | Table | Source | Rows |
 |-------|--------|------|
-| core_customer_cdc | PostgreSQL core_banking.customer | 10,002 |
+| core_customer_cdc | PostgreSQL core_banking.customer | 10,004 |
 | core_account_cdc | PostgreSQL core_banking.account | 30,000 |
-| core_transaction_cdc | PostgreSQL core_banking.txn_account | 500,000 |
+| core_transaction_cdc | PostgreSQL core_banking.txn_account | 1,200,000 |
 | card_account_cdc | PostgreSQL card_crm.card | 6,000 |
-| card_transaction_cdc | PostgreSQL card_crm.card_txn | 400,000 |
-| online_transaction_cdc | PostgreSQL digital_banking.online_transaction | 400,000 |
+| card_transaction_cdc | PostgreSQL card_crm.card_txn | 600,000 |
+| online_transaction_cdc | PostgreSQL digital_banking.online_transaction | 500,000 |
 
 ## CDC Operations
 
