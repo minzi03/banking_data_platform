@@ -32,10 +32,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Weekly Iceberg maintenance — compact, expire, orphan cleanup",
-    schedule_interval="0 2 * * 0",   # Chủ nhật 02:00 UTC
+    schedule_interval="0 3 * * 0",   # Weekly on Sunday at 3:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
-    tags=["ops", "maintenance", "iceberg"],
+    tags=["ops", "maintenance", "iceberg", "production"],
 )
 
 start = make_start_flag_task("start", DAG_ID, "ops", dag)

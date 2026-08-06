@@ -30,10 +30,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Quarantine checks — Business rule violations",
-    schedule_interval=None,
+    schedule_interval="0 9 * * *",  # Daily at 9:00 AM (Production - after DQ)
     catchup=False,
     max_active_tasks=4,
-    tags=["ops", "quarantine", "governance"],
+    tags=["ops", "quarantine", "governance", "production"],
 )
 
 # ---------------------------------------------------------------------------

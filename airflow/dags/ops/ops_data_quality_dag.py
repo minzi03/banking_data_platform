@@ -34,10 +34,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Data Quality validation — Silver + Gold + Bronze CDC",
-    schedule_interval=None,
+    schedule_interval="0 8 * * *",  # Daily at 8:00 AM (Production - after Gold)
     catchup=False,
     max_active_tasks=4,
-    tags=["ops", "data-quality", "validation"],
+    tags=["ops", "data-quality", "validation", "production"],
 )
 
 # ---------------------------------------------------------------------------

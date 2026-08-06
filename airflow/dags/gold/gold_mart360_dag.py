@@ -79,10 +79,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Gold layer — 5 mart360 + 4 segments + 1 time_analytics",
-    schedule_interval=None,
+    schedule_interval="0 6 * * *",  # Daily at 6:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
-    tags=["gold", "all"],
+    tags=["gold", "all", "production"],
 )
 
 # ── 1. Cờ start ──────────────────────────────────────────────────────────────
