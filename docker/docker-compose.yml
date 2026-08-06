@@ -379,7 +379,7 @@ services:
       OFFSET_STORAGE_TOPIC: connect-offsets
       STATUS_STORAGE_TOPIC: connect-status
       BOOTSTRAP_SERVERS: kafka:9092
-    mem_limit: 500m
+    mem_limit: 2048m
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
       interval: 15s
@@ -404,7 +404,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    mem_limit: 256m
+    mem_limit: 512m
     networks:
       - lakehouse_net
 
