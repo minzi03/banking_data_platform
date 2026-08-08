@@ -1,0 +1,161 @@
+# =============================================================================
+# Integration Tests Pipeline — Banking Data Platform
+# =============================================================================
+# Trigger: Push to main, Pull Request (after CI passes)
+# Steps: Start Docker stack → Seed data → Run ETL → Validate results
+# =============================================================================
+
+name: Integration Tests
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+env:
+  POSTGRES_USER: banking_admin
+  POSTGRES_PASSWORD: BankingAdmin123
+  POSTGRES_DB: banking_db
+
+jobs:
+  # ===========================================================================
+  # Job 1: Integration Tests
+  # ===========================================================================
+  integration:
+    name: 🔗 Integration Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'pull_request' }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-timeout pyyaml
+
+      - name: Start Docker stack
+        working-directory: docker
+        run: |
+          echo "=== Starting Docker stack ==="
+          docker compose -f docker-compose.ci.yml up -d
+          echo "Waiting for services to be healthy..."
+
+          # Wait for PostgreSQL
+          timeout 60 bash -c 'until docker exec ci-postgres pg_isready -U banking_admin; do sleep 2; done'
+          echo "✅ PostgreSQL ready"
+
+          # Wait for MinIO
+          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done'
+          echo "✅ MinIO ready"
+
+          # Wait for Iceberg REST
+          timeout 60 bash -c 'until curl -sf http://localhost:8181/; do sleep 2; done'
+          echo "✅ Iceberg REST ready"
+
+          # Wait for Spark Master
+          timeout 60 bash -c 'until curl -sf http://localhost:9090; do sleep 2; done'
+          echo "✅ Spark Master ready"
+
+          # Wait for Trino
+          timeout 120 bash -c 'until docker exec ci-trino trino --execute "SELECT 1"; do sleep 5; done'
+          echo "✅ Trino ready"
+
+          echo ""
+          echo "=== All services are healthy ==="
+          docker compose -f docker-compose.ci.yml ps
+
+      - name: Create Iceberg schemas
+        run: |
+          echo "=== Creating Iceberg schemas ==="
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze'
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver'
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold'
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc'
+          echo "✅ Schemas created"
+
+      - name: Run Bronze ETL
+        run: |
+          echo "=== Running Bronze ETL ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 \
+            --deploy-mode client \
+            --executor-memory 2g \
+            --executor-cores 2 \
+            --num-executors 2 \
+            /opt/project/code_etl/bronze/ingest.py \
+            --config /opt/project/code_etl/bronze/configs/core_customer.yml \
+            --cob_dt 2026-01-01
+          echo "✅ Bronze ETL complete"
+
+      - name: Validate Bronze data
+        run: |
+          echo "=== Validating Bronze data ==="
+          docker exec ci-trino trino --catalog iceberg --schema bronze --execute 'SELECT COUNT(*) FROM core_customer'
+          echo "✅ Bronze validation complete"
+
+      - name: Run Silver ETL (SCD Type 1)
+        run: |
+          echo "=== Running Silver SCD Type 1 ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 \
+            --deploy-mode client \
+            --executor-memory 2g \
+            --executor-cores 2 \
+            --num-executors 2 \
+            /opt/project/code_etl/silver/base_job/scd_type1.py \
+            --config /opt/project/code_etl/silver/configs/dim_branch.yml \
+            --cob_dt 2026-01-01
+          echo "✅ Silver SCD Type 1 complete"
+
+      - name: Validate Silver data
+        run: |
+          echo "=== Validating Silver data ==="
+          docker exec ci-trino trino --catalog iceberg --schema silver --execute 'SELECT COUNT(*) FROM dim_branch'
+          echo "✅ Silver validation complete"
+
+      - name: Run integration tests
+        run: |
+          echo "=== Running integration tests ==="
+          python -m pytest tests/integration/ \
+            -v \
+            --tb=short \
+            --timeout=300 \
+            -m "not slow"
+
+      - name: Collect Docker logs
+        if: failure()
+        run: |
+          echo "=== Collecting Docker logs ==="
+          mkdir -p docker-logs
+          docker compose -f docker/docker-compose.ci.yml logs > docker-logs/services.log 2>&1
+          docker logs ci-spark-master > docker-logs/spark-master.log 2>&1 || true
+          docker logs ci-spark-worker-1 > docker-logs/spark-worker.log 2>&1 || true
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: integration-test-logs
+          path: docker-logs/
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "=== Cleaning up Docker stack ==="
+          cd docker
+          docker compose -f docker-compose.ci.yml down -v --remove-orphans
+          echo "✅ Cleanup complete"

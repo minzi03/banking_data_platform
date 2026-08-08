@@ -1,0 +1,230 @@
+# =============================================================================
+# CI Docker Compose — Banking Data Platform
+# =============================================================================
+# Subset of services for CI/CD testing (faster startup, lower resources)
+# Usage: docker compose -f docker-compose.ci.yml up -d
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL (Source Database)
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: ci-postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: banking_admin
+      POSTGRES_PASSWORD: BankingAdmin123
+      POSTGRES_DB: banking_db
+      PGTZ: Asia/Ho_Chi_Minh
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init_postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banking_admin -d banking_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # MinIO (S3 Storage)
+  # ===========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: ci-minio
+    hostname: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: Minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ci_net
+
+  # MinIO Client — create bucket
+  mc:
+    image: minio/mc:latest
+    container_name: ci-mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin Minioadmin123;
+        mc mb --ignore-existing local/lakehouse;
+        echo 'MinIO bucket created';
+      "
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # Iceberg REST Catalog
+  # ===========================================================================
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: ci-iceberg-rest
+    hostname: iceberg-rest
+    environment:
+      CATALOG_WAREHOUSE: s3a://lakehouse/lakehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: Minioadmin123
+      AWS_REGION: us-east-1
+      CATALOG_CATALOG__IMPL: org.apache.iceberg.jdbc.JdbcCatalog
+      CATALOG_URI: jdbc:postgresql://postgres:5432/iceberg_catalog
+      CATALOG_JDBC_USER: banking_admin
+      CATALOG_JDBC_PASSWORD: BankingAdmin123
+      CATALOG_JDBC_INITIALIZE__TABLES: "true"
+    ports:
+      - "8181:8181"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # Spark Master (for ETL jobs)
+  # ===========================================================================
+  spark-master:
+    image: apache/spark:3.5.3
+    container_name: ci-spark-master
+    hostname: spark-master
+    user: root
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 9090
+    environment:
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ..:/opt/project
+      - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    ports:
+      - "7077:7077"
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9090 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # Spark Worker (for ETL jobs)
+  # ===========================================================================
+  spark-worker-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: ci-spark-worker-1
+    hostname: spark-worker-1
+    user: root
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+      --webui-port 9091
+    environment:
+      SPARK_WORKER_MEMORY: 4g
+      SPARK_WORKER_CORES: 4
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "9091:9091"
+    volumes:
+      - ..:/opt/project
+      - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9091 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # Trino (Query Engine)
+  # ===========================================================================
+  trino:
+    image: trinodb/trino:443
+    container_name: ci-trino
+    hostname: trino
+    ports:
+      - "8085:8080"
+    volumes:
+      - ./init_trino/catalog:/etc/trino/catalog
+    environment:
+      TRINO_CATALOG_ICEBERG: |
+        connector.name=iceberg
+        iceberg.catalog.type=rest
+        iceberg.rest.uri=http://iceberg-rest:8181
+        iceberg.s3.endpoint=http://minio:9000
+        iceberg.s3.path-style-access=true
+        iceberg.s3.access-key=minioadmin
+        iceberg.s3.secret-key=Minioadmin123
+        iceberg.aws-region=us-east-1
+    depends_on:
+      iceberg-rest:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "trino --execute 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ci_net
+
+  # ===========================================================================
+  # Trino Init (create schemas)
+  # ===========================================================================
+  trino-init:
+    image: trinodb/trino:443
+    container_name: ci-trino-init
+    depends_on:
+      trino:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Creating schemas...';
+        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
+        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
+        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
+        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        echo 'Schemas created successfully';
+      "
+    networks:
+      - ci_net
+
+networks:
+  ci_net:
+    driver: bridge

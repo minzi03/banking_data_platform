@@ -270,3 +270,54 @@ jobs:
               fi
           done
           echo "✅ Dockerfile check complete"
+
+  # ===========================================================================
+  # Job 6: Security Scan
+  # ===========================================================================
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (Dockerfiles)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'docker/'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Bandit Python security scan
+        run: |
+          echo "=== Running Bandit security scan ==="
+          pip install bandit
+          bandit -r code_etl/ governance/ -f json -o bandit-report.json --severity-level medium || true
+          bandit -r code_etl/ governance/ -f screen --severity-level medium
+          echo "✅ Bandit scan complete"
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "=== Checking for hardcoded secrets ==="
+          # Check for common secret patterns
+          if grep -r "password\s*=\s*['\"]" code_etl/ governance/ --include="*.py" | grep -v "getenv\|environ\|\.env\|example\|test\|mock" | head -5; then
+            echo "⚠️  Potential hardcoded passwords found"
+          else
+            echo "✅ No hardcoded passwords found"
+          fi
+
+          if grep -r "api_key\s*=\s*['\"]" code_etl/ governance/ --include="*.py" | grep -v "getenv\|environ\|\.env\|example\|test\|mock" | head -5; then
+            echo "⚠️  Potential hardcoded API keys found"
+          else
+            echo "✅ No hardcoded API keys found"
+          fi
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: bandit-report.json
