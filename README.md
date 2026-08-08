@@ -77,7 +77,7 @@ graph TB
     end
 
     subgraph CrossCutting["Cross-Cutting Concerns"]
-        Airflow["Airflow 2.10<br/>(17 DAGs)"]
+        Airflow["Airflow 2.10<br/>(16 DAGs)"]
         Contracts["33 Data Contracts"]
         DQ["8 DQ Checks"]
         OpenMeta["OpenMetadata 1.5.6<br/>(53 tables, 22 lineage)"]
@@ -369,7 +369,7 @@ Combines customer profile, KYC status, account portfolio, card portfolio, deposi
 
 ## Orchestration & CI/CD
 
-### Airflow (17 DAGs)
+### Airflow (16 DAGs)
 
 | Time | Workflow | Description |
 |------|----------|-------------|
@@ -384,7 +384,7 @@ Combines customer profile, KYC status, account portfolio, card portfolio, deposi
 
 - Ruff linting
 - YAML validation
-- 262 tests (pytest)
+- 312 tests (pytest)
 - Coverage reporting
 - Docker image build and push to GHCR
 
