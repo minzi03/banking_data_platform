@@ -19,6 +19,7 @@ from functools import reduce
 from pathlib import Path
 
 from pyspark.sql import functions as F
+from pyspark.sql.functions import broadcast
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
@@ -138,6 +139,13 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
 
     # Bước 3: Phát hiện record thay đổi
     target_current = spark.table(target).filter(F.col(current_flag) == 1)
+
+    # Use broadcast hint if target_current is small (< 10M rows)
+    # This avoids expensive shuffle joins for dimension tables
+    target_count = target_current.count()
+    if target_count < 10_000_000:
+        logger.info(f"Using broadcast join for target ({target_count} rows)")
+        target_current = broadcast(target_current)
 
     join_expr = [source_df[k] == target_current[k] for k in business_keys]
     joined = source_df.alias("s").join(target_current.alias("t"), join_expr, "left")
