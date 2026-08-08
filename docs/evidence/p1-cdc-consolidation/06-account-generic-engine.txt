@@ -1,0 +1,54 @@
+# Evidence: P1 — Generic/Config-Driven Engine
+
+## Proof: Same engine + different YAML = different table
+
+### Engine: cdc_consolidation.py
+- Single Python script: `code_etl/cdc/consolidation/cdc_consolidation.py`
+- Reads YAML config for source table, target table, business key, column mappings
+- No hard-coded table names in engine logic
+
+### Config 1: Customer
+```yaml
+# cdc_consolidation_customer.yml
+source_table: lakehouse.bronze.core_customer_cdc
+target_table: lakehouse.silver.dim_customer_current
+business_key: customer_id
+```
+
+### Config 2: Account
+```yaml
+# cdc_consolidation_account.yml
+source_table: lakehouse.bronze.core_account_cdc
+target_table: lakehouse.silver.dim_account_current
+business_key: account_id
+```
+
+### Result: Two independent tables from same engine
+
+```sql
+-- Customer table
+SELECT COUNT(*) AS rows, COUNT(DISTINCT customer_id) AS distinct_customers
+FROM lakehouse.silver.dim_customer_current;
+-- rows = 10,000, distinct = 10,000 ✅
+
+-- Account table
+SELECT COUNT(*) AS rows, COUNT(DISTINCT account_id) AS distinct_accounts
+FROM lakehouse.silver.dim_account_current;
+-- rows = 30,000, distinct = 30,000 ✅
+```
+
+### Watermarks tracked independently
+```sql
+SELECT * FROM lakehouse.meta.cdc_watermark;
+
+-- Result:
+-- table_name            | last_cdc_timestamp_ms | last_spark_batch_id | last_processed_at
+-- dim_customer_current  | 1786194540661         | 11                  | 2026-08-08 13:09:48.825440 UTC
+-- dim_account_current   | 1785997836403         | 0                   | 2026-08-08 12:52:28.303124 UTC
+```
+
+## Verification
+- Same engine processes both tables ✅
+- Each table has independent config ✅
+- Watermarks tracked per table ✅
+- Adding new tables = new YAML only (no code change) ✅

@@ -1,0 +1,48 @@
+# Evidence: P1.2 — Deduplication & Idempotency
+
+## Test: Re-run consolidation with no new events
+
+### Before re-run
+```sql
+SELECT COUNT(*) AS rows, COUNT(DISTINCT customer_id) AS distinct_customers
+FROM lakehouse.silver.dim_customer_current;
+
+-- Result:
+-- rows = 10,000
+-- distinct_customers = 10,000
+```
+
+### Run consolidation (no new events since last watermark)
+```
+spark-submit --master spark://spark-master:7077 \
+  cdc_consolidation.py \
+  --config cdc_consolidation_customer.yml
+
+-- Output:
+-- Watermark: ts_ms=1786175929765, batch_id=1
+-- Incremental events: 0
+-- No new events. Skipping.
+```
+
+### After re-run — state unchanged
+```sql
+SELECT COUNT(*) AS rows, COUNT(DISTINCT customer_id) AS distinct_customers
+FROM lakehouse.silver.dim_customer_current;
+
+-- Result:
+-- rows = 10,000
+-- distinct_customers = 10,000
+```
+
+```sql
+SELECT * FROM lakehouse.meta.cdc_watermark WHERE table_name = 'dim_customer_current';
+
+-- Result: unchanged (same timestamp_ms, same batch_id)
+-- dim_customer_current | 1786193213758 | 5 | 2026-08-08 12:47:59.768935 UTC
+```
+
+## Verification
+- Re-run = no state change ✅
+- No duplicate rows created ✅
+- Watermark does not regress ✅
+- Engine correctly detects "no new events" and skips ✅

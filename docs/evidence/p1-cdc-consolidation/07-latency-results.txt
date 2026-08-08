@@ -1,0 +1,41 @@
+# Evidence: P1.4 — CDC Latency Measurement
+
+## Test Design
+- 5 UPDATE trials on customer_id=1001
+- T0 = PostgreSQL commit timestamp (source)
+- T1 = Bronze CDC event timestamp_ms
+- T2 = Wall clock at consolidation completion
+- No manual intervention between source update and Silver update
+- Automated polling + consolidation script
+
+## Raw Results
+
+| Trial | T0 (ms)       | T1 (ms)       | T2 (ms)       | CDC (s) | Consolidation (s) | E2E (s) |
+|-------|---------------|---------------|---------------|---------|-------------------|---------|
+| 1     | 1786194354909 | 1786194354009 | 1786194383131 | ~0*     | 29.1              | 28.2    |
+| 2     | 1786194390067 | 1786194390432 | 1786194444073 | 0.4     | 53.6              | 54.0    |
+| 3     | 1786194451014 | 1786194451133 | 1786194502105 | 0.1     | 51.0              | 51.1    |
+| 4     | 1786194510699 | 1786194509809 | 1786194533140 | ~0*     | 23.3              | 22.4    |
+| 5     | 1786194540167 | 1786194540661 | 1786194590008 | 0.5     | 49.3              | 49.8    |
+
+*Note: T0 and T1 come from different clock sources (PostgreSQL vs Spark/Iceberg).
+Negative or near-zero CDC values indicate clock skew, not actual CDC latency.
+CDC latency is not independently measured in this test.*
+
+## Statistics
+
+| Metric | Median | Average | Min  | Max  |
+|--------|--------|---------|------|------|
+| **E2E (T0→T2)** | **49.8s** | **41.1s** | **22.4s** | **54.0s** |
+| Consolidation (T1→T2) | 49.3s | 41.3s | 23.3s | 53.6s |
+
+## Claim
+
+> Measured source-to-Silver freshness: 22.4–54.0s, median 49.8s,
+> all trials < 1 minute in the local test environment.
+
+## Notes
+- Consolidation latency dominates E2E (includes Spark session startup)
+- In production with scheduled consolidation (e.g., every 5 minutes),
+  E2E would include schedule wait time
+- Gold analytics remain batch-produced (not part of this measurement)
