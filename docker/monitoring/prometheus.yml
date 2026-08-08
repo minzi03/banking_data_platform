@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  # CDC freshness + row counts (custom Python exporter → Trino)
+  - job_name: 'cdc-freshness'
+    static_configs:
+      - targets: ['freshness-exporter:9119']
+    scrape_interval: 15s

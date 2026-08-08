@@ -55,120 +55,46 @@ def get_cdc_schema(table_name: str) -> StructType:
     return None  # Let Spark infer schema from JSON
 
 
-def process_cdc_batch(batch_df, batch_id: int, target_table: str, config: Dict):
+def process_cdc_batch(batch_df, batch_id: int, target_table: str, config: Dict, spark: SparkSession):
     """
     Process each micro-batch of CDC events and write to Iceberg.
+
+    DLQ-enabled: valid events → Bronze, invalid events → cdc_dead_letter.
+    The micro-batch never fails due to individual bad events.
 
     Args:
         batch_df: DataFrame containing CDC events from Kafka
         batch_id: Micro-batch ID
         target_table: Full Iceberg table name (e.g., bronze.core_account_cdc)
         config: YAML configuration
+        spark: SparkSession for DDL operations
     """
     if batch_df.isEmpty():
         return
 
-    # Debezium message structure: {"schema":{...},"payload":{...}}
-    # Extract the payload JSON string first using get_json_object
-    extracted_df = batch_df.select(
-        F.col("key").cast("string").alias("_cdc_key"),
-        F.get_json_object(F.col("value").cast("string"), "$.payload").alias("payload_json"),
-        F.col("topic").alias("_kafka_topic"),
-        F.col("partition").alias("_kafka_partition"),
-        F.col("offset").alias("_kafka_offset"),
-        F.col("timestamp").alias("_kafka_timestamp"),
+    # Import DLQ module
+    from cdc_dlq import (
+        ensure_dlq_table, validate_and_split,
+        write_valid_to_bronze, write_invalid_to_dlq
     )
 
-    # Now parse the payload JSON as MAP<STRING, STRING>
-    parsed_df = extracted_df.select(
-        F.col("_cdc_key"),
-        F.from_json(F.col("payload_json"), "MAP<STRING, STRING>").alias("payload"),
-        F.col("_kafka_topic"),
-        F.col("_kafka_partition"),
-        F.col("_kafka_offset"),
-        F.col("_kafka_timestamp"),
-    )
+    # Ensure DLQ table exists
+    ensure_dlq_table(spark)
 
-    # Get all data columns from config
-    data_columns = config["target"].get("columns", [])
+    # Validate and split into valid / invalid
+    valid_df, dlq_df = validate_and_split(batch_df, config, batch_id)
 
-    # Build select list: extract data columns + CDC metadata
-    # All values from MAP<STRING, STRING> are strings, so we need to cast them
-    select_expressions = [
-        F.col("_cdc_key"),
-        F.col("payload").getItem("__op").alias("_raw_op"),
-        F.col("payload").getItem("__ts_ms").alias("_raw_ts_ms"),
-        F.col("payload").getItem("__deleted").alias("_raw_deleted"),
-        F.col("_kafka_topic"),
-        F.col("_kafka_partition"),
-        F.col("_kafka_offset"),
-        F.col("_kafka_timestamp"),
-        F.lit(batch_id).alias("__spark_batch_id"),
-        F.current_timestamp().alias("__ingestion_time"),
-    ]
+    # Write valid events to Bronze
+    valid_count = write_valid_to_bronze(valid_df, target_table, batch_id)
 
-    # Add data columns from JSON payload with proper type casting
-    for col_def in data_columns:
-        col_name = col_def["name"]
-        col_type = col_def.get("type", "string")
+    # Write invalid events to DLQ
+    invalid_count = write_invalid_to_dlq(dlq_df, batch_id)
 
-        # Cast to appropriate type
-        if col_type == "long":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("long").alias(col_name)
-            )
-        elif col_type == "decimal":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("decimal(18,2)").alias(col_name)
-            )
-        elif col_type == "int":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("int").alias(col_name)
-            )
-        elif col_type == "boolean":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("boolean").alias(col_name)
-            )
-        else:
-            # Default: string
-            select_expressions.append(
-                F.col(f"payload.{col_name}").alias(col_name)
-            )
-
-    result = parsed_df.select(*select_expressions)
-
-    # Transform Debezium operation codes
-    # __op: c=create, u=update, d=delete, r=read/snapshot
-    result = (
-        result
-        .withColumn(
-            "__cdc_operation",
-            F.when(F.col("_raw_op") == "c", "INSERT")
-             .when(F.col("_raw_op") == "u", "UPDATE")
-             .when(F.col("_raw_op") == "d", "DELETE")
-             .when(F.col("_raw_op") == "r", "SNAPSHOT")
-             .otherwise(F.col("_raw_op"))
-        )
-        .withColumn(
-            "__cdc_timestamp_ms",
-            F.col("_raw_ts_ms").cast("long")
-        )
-        .withColumn(
-            "__cdc_timestamp",
-            F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000)
-        )
-    )
-
-    # Drop internal fields
-    result = result.drop("_cdc_key", "_raw_op", "_raw_ts_ms", "_raw_deleted",
-                         "_kafka_topic", "_kafka_partition", "_kafka_offset", "_kafka_timestamp")
-
-    # Write to Iceberg using append mode
-    row_count = result.count()
-    print(f"[Batch {batch_id}] Writing {row_count} rows to {target_table}")
-    result.writeTo(target_table).append()
-
-    print(f"[Batch {batch_id}] Completed writing to {target_table}")
+    if invalid_count > 0:
+        print(f"[Batch {batch_id}] ⚠ DLQ: {invalid_count} invalid events routed to cdc_dead_letter")
+        print(f"[Batch {batch_id}] Batch completed: {valid_count} valid → Bronze, {invalid_count} invalid → DLQ")
+    else:
+        print(f"[Batch {batch_id}] Batch completed: {valid_count} valid → Bronze, 0 invalid")
 
 
 def load_config(config_path: str) -> Dict:
@@ -219,7 +145,7 @@ def main():
     # Write stream with foreachBatch
     query = (
         stream_df.writeStream
-        .foreachBatch(lambda df, id: process_cdc_batch(df, id, target_table, config))
+        .foreachBatch(lambda df, id: process_cdc_batch(df, id, target_table, config, spark))
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime=trigger_interval)
         .queryName(f"cdc_{kafka_topic.replace('.', '_')}")

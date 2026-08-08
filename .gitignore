@@ -63,3 +63,7 @@ dbt/dbt_modules/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# ── Personal (interview prep, session logs) ──────────────────────────────────
+docs/interview/
+docs/session-report-*.md

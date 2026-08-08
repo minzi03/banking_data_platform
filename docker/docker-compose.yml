@@ -221,7 +221,9 @@ services:
   # ===========================================================================
 
   spark-master:
-    image: apache/spark:3.5.3
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
     container_name: banking-spark-master
     hostname: spark-master
     user: root
@@ -685,6 +687,65 @@ services:
       - tools
 
 # =============================================================================
+# MONITORING LAYER (Prometheus + Grafana + Freshness Exporter)
+# =============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: banking-prometheus
+    hostname: prometheus
+    ports:
+      - "9095:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    mem_limit: 256m
+    networks:
+      - lakehouse_net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: banking-grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/banking-platform.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    mem_limit: 256m
+    depends_on:
+      - prometheus
+    networks:
+      - lakehouse_net
+
+  freshness-exporter:
+    build:
+      context: ./monitoring/exporters
+      dockerfile: Dockerfile
+    container_name: banking-freshness-exporter
+    hostname: freshness-exporter
+    ports:
+      - "9119:9119"
+    environment:
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      PORT: "9119"
+    mem_limit: 128m
+    depends_on:
+      - trino
+    networks:
+      - lakehouse_net
+
+# =============================================================================
 # VOLUMES
 # =============================================================================
 volumes:
@@ -694,6 +755,8 @@ volumes:
   airflow-logs:
   om-mysql-data:
   om-es-data:
+  prometheus-data:
+  grafana-data:
 
 # =============================================================================
 # NETWORKS
