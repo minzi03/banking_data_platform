@@ -465,20 +465,19 @@ python data_generator/generate_all.py --host localhost --port 5432
 - Spark cluster: 1 master + 1 worker (single-node)
 - Airflow: local production-like config (not distributed HA)
 - Churn logic: rule-based risk scoring (not ML model)
-- Observability: distributed across service-native UIs (no centralized monitoring)
 - Default credentials for local development only
 
 ---
 
 ## Roadmap
 
-### P0: Portfolio Polish (Current)
+### P0: Portfolio Polish ✅
 
 - [x] Architecture diagram
 - [x] README rewrite
-- [ ] Demo script (5 minutes)
-- [ ] Interview talking points
-- [ ] Evidence screenshots
+- [x] Demo script (5 minutes)
+- [x] Interview talking points
+- [x] Evidence screenshots
 
 ### P1: CDC Consolidation ✅
 
