@@ -7,6 +7,7 @@ Logs all pipeline actions for compliance and debugging:
 - Contract validation
 - Lineage emission
 - Data quality checks
+- PII access tracking
 
 Usage:
     from governance.audit import AuditLogger
@@ -20,6 +21,9 @@ Usage:
         status="success",
         details="Ingested 10000 rows from PostgreSQL",
     )
+
+    # Persist to PostgreSQL
+    logger.write_to_pg(spark)
 """
 
 import os
@@ -80,8 +84,10 @@ class AuditAction:
     EMIT_LINEAGE = "emit_lineage"
     DATA_QUALITY = "data_quality"
     PII_MASKING = "pii_masking"
+    PII_ACCESS = "pii_access"
     CONTRACT_VALIDATION = "contract_validation"
     MAINTENANCE = "maintenance"
+    SECURITY = "security"
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +228,39 @@ class AuditLogger:
             status="success" if passed else "failed",
             details=f"{validation_type}: {details}",
             metadata={"validation_type": validation_type, "passed": passed},
+        )
+
+    def log_pii_access(
+        self,
+        table_name: str,
+        column_name: str,
+        user_name: str,
+        access_type: str,
+        query_text: str = "",
+    ) -> None:
+        """
+        Log PII column access for compliance tracking.
+
+        Args:
+            table_name: Table containing PII
+            column_name: PII column accessed
+            user_name: User who accessed the data
+            access_type: "read", "mask", "export"
+            query_text: SQL query (optional)
+        """
+        self.log_action(
+            action=AuditAction.PII_ACCESS,
+            table_name=table_name,
+            dag_id="system",
+            dag_run_id="manual",
+            status="success",
+            details=f"PII access: {column_name} by {user_name}",
+            metadata={
+                "column_name": column_name,
+                "user_name": user_name,
+                "access_type": access_type,
+                "query_text": query_text[:500] if query_text else "",
+            },
         )
 
     def get_records(
