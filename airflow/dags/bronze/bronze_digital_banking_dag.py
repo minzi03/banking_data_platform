@@ -36,10 +36,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Bronze ingestion — digital_banking (PostgreSQL)",
-    schedule_interval=None,
+    schedule_interval="0 2 * * *",  # Daily at 2:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
-    tags=["bronze", "digital_banking", "postgresql"],
+    tags=["bronze", "digital_banking", "postgresql", "production"],
 )
 
 conn_tmpl = resolve_jdbc_conn(CONN_ID)

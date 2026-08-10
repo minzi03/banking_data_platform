@@ -6,14 +6,14 @@ schema drift detection, lineage tracking, and audit trail for the
 Medallion architecture.
 """
 
-from governance.contracts import DatasetContract, QualityRules, AIGovernance
+from governance.anomaly_detection import AnomalyDetector, AnomalyResult
+from governance.audit import AuditAction, AuditLogger, AuditRecord
+from governance.contracts import AIGovernance, DatasetContract, QualityRules
 from governance.contracts_registry import ContractRegistry
 from governance.enforcement import ContractEnforcer, ValidationResult
-from governance.anomaly_detection import AnomalyDetector, AnomalyResult
 from governance.freshness_checks import FreshnessChecker, FreshnessResult
+from governance.lineage import LineageRecord, LineageTracker, TransformType
 from governance.schema_drift import SchemaDriftDetector, SchemaDriftResult
-from governance.lineage import LineageTracker, LineageRecord, TransformType
-from governance.audit import AuditLogger, AuditRecord, AuditAction
 
 __all__ = [
     # Contracts

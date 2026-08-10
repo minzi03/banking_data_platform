@@ -1,0 +1,268 @@
+# =============================================================================
+# Performance Benchmark Pipeline — Banking Data Platform
+# =============================================================================
+# Trigger: Weekly schedule (Sunday 2am) or manual
+# Steps: Start Docker stack → Run ETL → Execute benchmark queries → Report
+# =============================================================================
+
+name: Performance Benchmark
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2am UTC
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Benchmark duration (short/medium/long)'
+        required: false
+        default: 'medium'
+        type: choice
+        options:
+          - short
+          - medium
+          - long
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  POSTGRES_USER: banking_admin
+  POSTGRES_PASSWORD: BankingAdmin123
+  POSTGRES_DB: banking_db
+
+jobs:
+  # ===========================================================================
+  # Job 1: Performance Benchmark
+  # ===========================================================================
+  benchmark:
+    name: 📊 Performance Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-timeout pyyaml
+
+      - name: Start Docker stack
+        working-directory: docker
+        run: |
+          echo "=== Starting Docker stack for benchmark ==="
+          docker compose -f docker-compose.ci.yml up -d
+
+          # Wait for all services
+          echo "Waiting for services..."
+          timeout 120 bash -c 'until docker exec ci-postgres pg_isready -U banking_admin; do sleep 2; done'
+          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done'
+          timeout 60 bash -c 'until curl -sf http://localhost:8181/; do sleep 2; done'
+          timeout 60 bash -c 'until curl -sf http://localhost:9090; do sleep 2; done'
+          timeout 180 bash -c 'until docker exec ci-trino trino --execute "SELECT 1"; do sleep 5; done'
+
+          echo "✅ All services healthy"
+
+      - name: Create schemas and tables
+        run: |
+          echo "=== Creating Iceberg schemas ==="
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze'
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver'
+          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold'
+
+          echo "=== Running Iceberg DDL ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-sql \
+            --master spark://spark-master:7077 \
+            -f /opt/project/docker/init_iceberg/01_ddl_bronze.sql
+
+          docker exec ci-spark-master /opt/spark/bin/spark-sql \
+            --master spark://spark-master:7077 \
+            -f /opt/project/docker/init_iceberg/02_ddl_silver.sql
+
+          docker exec ci-spark-master /opt/spark/bin/spark-sql \
+            --master spark://spark-master:7077 \
+            -f /opt/project/docker/init_iceberg/03_ddl_gold.sql
+
+          echo "✅ Tables created"
+
+      - name: Generate seed data
+        run: |
+          echo "=== Generating seed data ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 \
+            /opt/project/data_generator/generate_all.py \
+            --host postgres --port 5432
+          echo "✅ Seed data generated"
+
+      - name: Run full ETL pipeline
+        run: |
+          echo "=== Running Bronze ETL ==="
+          for config in /opt/project/code_etl/bronze/configs/*.yml; do
+            table=$(basename "$config" .yml)
+            echo "  Ingesting $table..."
+            docker exec ci-spark-master /opt/spark/bin/spark-submit \
+              --master spark://spark-master:7077 \
+              --executor-memory 2g \
+              --executor-cores 2 \
+              /opt/project/code_etl/bronze/ingest.py \
+              --config "$config" \
+              --cob_dt 2026-01-01 || true
+          done
+
+          echo "=== Running Silver ETL ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 \
+            --executor-memory 2g \
+            /opt/project/code_etl/silver/bootstrap/initial_load.py \
+            --cob_dt 2026-01-01
+
+          echo "=== Running Gold ETL ==="
+          docker exec ci-spark-master /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 \
+            --executor-memory 2g \
+            /opt/project/code_etl/gold/bootstrap/initial_load.py \
+            --cob_dt 2026-01-01
+
+          echo "✅ ETL pipeline complete"
+
+      - name: Run benchmark queries
+        run: |
+          echo "=== Running Performance Benchmark ==="
+          echo "Duration: ${{ github.event.inputs.duration || 'medium' }}"
+
+          # Create results file
+          echo "query,execution_time_ms,rows_returned" > benchmark-results.csv
+
+          # Benchmark queries
+          queries=(
+            "simple_count:SELECT COUNT(*) FROM lakehouse.gold.mart_customer_360:gold"
+            "rfm_segments:SELECT rfm_segment, COUNT(*) FROM lakehouse.gold.rfm_segment GROUP BY rfm_segment:gold"
+            "churn_analysis:SELECT churn_risk, COUNT(*) FROM lakehouse.gold.churn_prediction GROUP BY churn_risk:gold"
+            "customer_lookup:SELECT * FROM lakehouse.gold.mart_customer_360 WHERE customer_id = 1000:gold"
+            "branch_performance:SELECT branch_code, COUNT(*) FROM lakehouse.gold.mart_customer_360 GROUP BY branch_code:gold"
+          )
+
+          for query_info in "${queries[@]}"; do
+            IFS=':' read -r name query schema <<< "$query_info"
+            echo "Running: $name"
+
+            start_time=$(date +%s%N)
+            result=$(docker exec ci-trino trino --catalog iceberg --schema "$schema" --execute "$query" 2>/dev/null | grep -v WARNING | grep -v "^Aug")
+            end_time=$(date +%s%N)
+
+            duration=$(( (end_time - start_time) / 1000000 ))
+            rows=$(echo "$result" | wc -l)
+
+            echo "$name,$duration,$rows" >> benchmark-results.csv
+            echo "  $name: ${duration}ms, ${rows} rows"
+          done
+
+          echo ""
+          echo "=== Benchmark Results ==="
+          cat benchmark-results.csv
+
+      - name: Compare with baseline
+        run: |
+          echo "=== Comparing with baseline ==="
+
+          # Check if baseline exists
+          if [ -f "benchmark-baseline.csv" ]; then
+            echo "Baseline found, comparing..."
+            python -c "
+          import csv
+
+          with open('benchmark-baseline.csv') as f:
+              baseline = {row['query']: int(row['execution_time_ms']) for row in csv.DictReader(f)}
+
+          with open('benchmark-results.csv') as f:
+              results = {row['query']: int(row['execution_time_ms']) for row in csv.DictReader(f)}
+
+          print('Query | Baseline | Current | Change')
+          print('-' * 50)
+
+          for query in results:
+              base = baseline.get(query, 0)
+              curr = results[query]
+              if base > 0:
+                  change = ((curr - base) / base) * 100
+                  print(f'{query}: {base}ms → {curr}ms ({change:+.1f}%)')
+              else:
+                  print(f'{query}: {curr}ms (new)')
+          "
+          else
+            echo "No baseline found, using current run as baseline"
+            cp benchmark-results.csv benchmark-baseline.csv
+          fi
+
+      - name: Update baseline
+        if: github.event_name == 'schedule'
+        run: |
+          echo "=== Updating baseline ==="
+          cp benchmark-results.csv benchmark-baseline.csv
+          echo "Baseline updated"
+
+      - name: Create benchmark report
+        run: |
+          echo "=== Creating benchmark report ==="
+          cat > benchmark-report.md << 'EOF'
+          # Performance Benchmark Report
+
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Duration:** ${{ github.event.inputs.duration || 'medium' }}
+
+          ## Results
+
+          | Query | Execution Time | Rows |
+          |-------|----------------|------|
+          EOF
+
+          # Add results to report
+          while IFS=, read -r query time rows; do
+            if [ "$query" != "query" ]; then
+              echo "| $query | ${time}ms | $rows |" >> benchmark-report.md
+            fi
+          done < benchmark-results.csv
+
+          echo "" >> benchmark-report.md
+          echo "## Summary" >> benchmark-report.md
+          echo "" >> benchmark-report.md
+
+          # Calculate total time
+          total_time=$(awk -F, 'NR>1 {sum+=$2} END {print sum}' benchmark-results.csv)
+          echo "**Total benchmark time:** ${total_time}ms" >> benchmark-report.md
+
+          cat benchmark-report.md
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results.csv
+            benchmark-baseline.csv
+            benchmark-report.md
+
+      - name: Commit baseline update
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add benchmark-baseline.csv
+          git commit -m "chore: Update benchmark baseline [skip ci]" || true
+          git push || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "=== Cleaning up ==="
+          cd docker
+          docker compose -f docker-compose.ci.yml down -v --remove-orphans
+          echo "✅ Cleanup complete"

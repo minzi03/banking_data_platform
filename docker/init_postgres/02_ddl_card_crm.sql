@@ -19,7 +19,7 @@ $$ LANGUAGE plpgsql;
 -- =============================================================================
 -- 1. CARD (card information)
 -- =============================================================================
-CREATE TABLE card_crm.card (
+CREATE TABLE IF NOT EXISTS card_crm.card (
     card_id         BIGINT          NOT NULL,
     card_no_masked  VARCHAR(19)     NOT NULL,       -- format: 4111****1234
     customer_id     BIGINT          NOT NULL,        -- logical FK -> core_banking.customer
@@ -44,10 +44,11 @@ CREATE TABLE card_crm.card (
     )
 );
 
-CREATE INDEX idx_card_customer ON card_crm.card(customer_id);
-CREATE INDEX idx_card_status ON card_crm.card(status);
-CREATE INDEX idx_card_last_upd ON card_crm.card(last_updated);
+CREATE INDEX IF NOT EXISTS idx_card_customer ON card_crm.card(customer_id);
+CREATE INDEX IF NOT EXISTS idx_card_status ON card_crm.card(status);
+CREATE INDEX IF NOT EXISTS idx_card_last_upd ON card_crm.card(last_updated);
 
+DROP TRIGGER IF EXISTS trg_card_last_upd ON card_crm.card;
 CREATE TRIGGER trg_card_last_upd
     BEFORE UPDATE ON card_crm.card
     FOR EACH ROW EXECUTE FUNCTION card_crm.set_last_updated();
@@ -55,7 +56,7 @@ CREATE TRIGGER trg_card_last_upd
 -- =============================================================================
 -- 2. CARD_TXN (card transactions) — large table (~500K rows/month)
 -- =============================================================================
-CREATE TABLE card_crm.card_txn (
+CREATE TABLE IF NOT EXISTS card_crm.card_txn (
     txn_id              BIGINT          NOT NULL,
     card_id             BIGINT          NOT NULL,
     customer_id         BIGINT          NOT NULL,        -- denormalized
@@ -78,10 +79,11 @@ CREATE TABLE card_crm.card_txn (
     CONSTRAINT chk_ct_txn_amount CHECK (txn_amount <> 0)
 );
 
-CREATE INDEX idx_card_txn_card_date ON card_crm.card_txn(card_id, txn_date);
-CREATE INDEX idx_card_txn_cust_date ON card_crm.card_txn(customer_id, txn_date);
-CREATE INDEX idx_card_txn_last_upd ON card_crm.card_txn(last_updated);
+CREATE INDEX IF NOT EXISTS idx_card_txn_card_date ON card_crm.card_txn(card_id, txn_date);
+CREATE INDEX IF NOT EXISTS idx_card_txn_cust_date ON card_crm.card_txn(customer_id, txn_date);
+CREATE INDEX IF NOT EXISTS idx_card_txn_last_upd ON card_crm.card_txn(last_updated);
 
+DROP TRIGGER IF EXISTS trg_card_txn_last_upd ON card_crm.card_txn;
 CREATE TRIGGER trg_card_txn_last_upd
     BEFORE UPDATE ON card_crm.card_txn
     FOR EACH ROW EXECUTE FUNCTION card_crm.set_last_updated();
@@ -89,7 +91,7 @@ CREATE TRIGGER trg_card_txn_last_upd
 -- =============================================================================
 -- 3. CRM_INTERACTION (CRM interactions) — ~50K rows/month
 -- =============================================================================
-CREATE TABLE card_crm.crm_interaction (
+CREATE TABLE IF NOT EXISTS card_crm.crm_interaction (
     interaction_id      BIGINT          NOT NULL,
     customer_id         BIGINT          NOT NULL,
     interaction_date    TIMESTAMP       NOT NULL,
@@ -111,10 +113,11 @@ CREATE TABLE card_crm.crm_interaction (
     CONSTRAINT chk_crm_score CHECK (satisfaction_score IS NULL OR satisfaction_score BETWEEN 1 AND 5)
 );
 
-CREATE INDEX idx_crm_customer_date ON card_crm.crm_interaction(customer_id, interaction_date);
-CREATE INDEX idx_crm_category ON card_crm.crm_interaction(category);
-CREATE INDEX idx_crm_last_upd ON card_crm.crm_interaction(last_updated);
+CREATE INDEX IF NOT EXISTS idx_crm_customer_date ON card_crm.crm_interaction(customer_id, interaction_date);
+CREATE INDEX IF NOT EXISTS idx_crm_category ON card_crm.crm_interaction(category);
+CREATE INDEX IF NOT EXISTS idx_crm_last_upd ON card_crm.crm_interaction(last_updated);
 
+DROP TRIGGER IF EXISTS trg_crm_interaction_last_upd ON card_crm.crm_interaction;
 CREATE TRIGGER trg_crm_interaction_last_upd
     BEFORE UPDATE ON card_crm.crm_interaction
     FOR EACH ROW EXECUTE FUNCTION card_crm.set_last_updated();

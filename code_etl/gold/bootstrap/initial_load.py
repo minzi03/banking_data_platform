@@ -12,9 +12,9 @@ Usage:
     --cob_dt 2025-01-01
 """
 
-import sys
-import subprocess
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
@@ -98,7 +98,7 @@ def run_gold_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
     """Run a single Gold job via spark-submit."""
     name = job_def["name"]
     config_path = job_def["config"]
-    job_type = job_def["type"]
+    job_type = job_def["type"]  # noqa: F841
 
     cmd = [
         spark_submit,
@@ -106,7 +106,7 @@ def run_gold_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
         "--deploy-mode", "client",
         "--conf", "spark.driver.memory=512m",
         "--conf", "spark.executor.memory=768m",
-        f"code_etl/gold/base_job/gold_job.py",
+        "code_etl/gold/base_job/gold_job.py",
         "--config", config_path,
         "--cob_dt", cob_dt,
     ]
@@ -127,7 +127,7 @@ def run_gold_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
         logger.error(f"  ✗ {name} TIMEOUT (600s)")
         return False
     except Exception as e:
-        logger.error(f"  ✗ {name} ERROR: {str(e)}")
+        logger.error(f"  ✗ {name} ERROR: {e}")
         return False
 
 

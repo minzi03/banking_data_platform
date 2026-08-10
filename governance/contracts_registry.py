@@ -8,7 +8,6 @@ Provides lookup by dataset_id and validation of contract schema.
 import os
 from logging import getLogger
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import yaml
 
@@ -30,7 +29,7 @@ class ContractRegistry:
         all_contracts = registry.get_all_contracts()
     """
 
-    def __init__(self, datasets_dir: Optional[str] = None):
+    def __init__(self, datasets_dir: str | None = None):
         """
         Initialize registry by loading all YAML contracts.
 
@@ -39,8 +38,8 @@ class ContractRegistry:
                          Defaults to governance/datasets/
         """
         self._datasets_dir = datasets_dir or _DEFAULT_DATASETS_DIR
-        self._contracts: Dict[str, DatasetContract] = {}
-        self._errors: List[Dict] = []
+        self._contracts: dict[str, DatasetContract] = {}
+        self._errors: list[dict] = []
         self._load_all()
 
     def _load_all(self) -> None:
@@ -97,7 +96,7 @@ class ContractRegistry:
     # Public API
     # -----------------------------------------------------------------------
 
-    def get_contract(self, dataset_id: str) -> Optional[DatasetContract]:
+    def get_contract(self, dataset_id: str) -> DatasetContract | None:
         """
         Get contract by dataset_id.
 
@@ -109,18 +108,18 @@ class ContractRegistry:
         """
         return self._contracts.get(dataset_id)
 
-    def get_all_contracts(self) -> Dict[str, DatasetContract]:
+    def get_all_contracts(self) -> dict[str, DatasetContract]:
         """Get all loaded contracts."""
         return dict(self._contracts)
 
-    def get_contracts_by_layer(self, layer: str) -> Dict[str, DatasetContract]:
+    def get_contracts_by_layer(self, layer: str) -> dict[str, DatasetContract]:
         """Get all contracts for a specific layer (bronze, silver, gold)."""
         return {
             k: v for k, v in self._contracts.items()
             if v.layer == layer
         }
 
-    def get_contracts_by_owner(self, owner: str) -> Dict[str, DatasetContract]:
+    def get_contracts_by_owner(self, owner: str) -> dict[str, DatasetContract]:
         """Get all contracts for a specific owner."""
         return {
             k: v for k, v in self._contracts.items()
@@ -133,7 +132,7 @@ class ContractRegistry:
         return len(self._contracts)
 
     @property
-    def errors(self) -> List[Dict]:
+    def errors(self) -> list[dict]:
         """List of loading errors."""
         return list(self._errors)
 
@@ -142,7 +141,7 @@ class ContractRegistry:
         """Whether there were any loading errors."""
         return len(self._errors) > 0
 
-    def validate_all(self) -> List[Dict]:
+    def validate_all(self) -> list[dict]:
         """
         Validate all loaded contracts and return issues.
 
@@ -172,7 +171,7 @@ class ContractRegistry:
     def summary(self) -> str:
         """Print summary of loaded contracts."""
         lines = [
-            f"Contract Registry Summary",
+            "Contract Registry Summary",
             f"  Total contracts: {self.contract_count}",
             f"  Loading errors: {len(self._errors)}",
             "",

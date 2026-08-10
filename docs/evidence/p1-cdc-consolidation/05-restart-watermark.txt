@@ -1,0 +1,88 @@
+# Evidence: P1.3 — Restart Recovery & Watermark Persistence
+
+## Test: State survives Spark session restart
+
+### Step 1: Record state before restart
+```sql
+-- Watermark
+SELECT * FROM lakehouse.meta.cdc_watermark WHERE table_name = 'dim_customer_current';
+-- dim_customer_current | 1786193213758 | 5 | 2026-08-08 12:47:59.768935 UTC
+
+-- Row count
+SELECT COUNT(*) AS rows, COUNT(DISTINCT customer_id) AS distinct_customers
+FROM lakehouse.silver.dim_customer_current;
+-- rows = 10,000, distinct = 10,000
+
+-- Customer 1001 current email
+SELECT customer_id, email FROM dim_customer_current WHERE customer_id = 1001;
+-- 1001 | final.test@example.com
+```
+
+### Step 2: New UPDATE event
+```sql
+UPDATE core_banking.customer
+SET email = 'restart.test@example.com'
+WHERE customer_id = 1001;
+-- Result: UPDATE 1
+```
+
+### Step 3: Run consolidation (NEW Spark session = restart)
+```
+spark-submit --master spark://spark-master:7077 \
+  cdc_consolidation.py \
+  --config cdc_consolidation_customer.yml
+
+-- Output:
+-- Watermark: ts_ms=1786193213758, batch_id=5
+-- Incremental events: 1
+-- After dedup: 1 unique records
+-- MERGE completed successfully
+-- Watermark updated: ts_ms=1786193366534, batch_id=6
+```
+
+### Step 4: Verify state after restart
+```sql
+-- Customer 1001 updated
+SELECT customer_id, email FROM dim_customer_current WHERE customer_id = 1001;
+-- 1001 | restart.test@example.com ✅
+
+-- No duplicates
+SELECT COUNT(*) AS rows, COUNT(DISTINCT customer_id) AS distinct_customers
+FROM lakehouse.silver.dim_customer_current;
+-- rows = 10,000, distinct = 10,000 ✅
+
+-- Watermark advanced
+SELECT * FROM lakehouse.meta.cdc_watermark WHERE table_name = 'dim_customer_current';
+-- dim_customer_current | 1786193366534 | 6 | 2026-08-08 12:50:15.786144 UTC ✅
+```
+
+### Step 5: Run again with no new events (idempotency after restart)
+```
+spark-submit --master spark://spark-master:7077 \
+  cdc_consolidation.py \
+  --config cdc_consolidation_customer.yml
+
+-- Output:
+-- Watermark: ts_ms=1786193366534, batch_id=6
+-- Incremental events: 0
+-- No new events. Skipping.
+```
+
+### Step 6: Final verification
+```sql
+-- State unchanged
+SELECT COUNT(*) AS rows FROM lakehouse.silver.dim_customer_current;
+-- 10,000 ✅
+
+-- Watermark unchanged
+SELECT * FROM lakehouse.meta.cdc_watermark WHERE table_name = 'dim_customer_current';
+-- dim_customer_current | 1786193366534 | 6 | 2026-08-08 12:50:15.786144 UTC ✅
+```
+
+## Verification
+- Watermark persisted in Iceberg across Spark sessions ✅
+- New session reads watermark correctly ✅
+- Processes only incremental events since last watermark ✅
+- No duplicates after restart ✅
+- Idempotent re-run produces no state change ✅
+- Watermark does not regress ✅

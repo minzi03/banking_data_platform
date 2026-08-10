@@ -1,15 +1,12 @@
 """Các hàm dùng chung cho tất cả job tầng Silver."""
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
-from utils.yaml_loader import load_config
 from utils.sql_renderer import render_sql
-from utils.logger import get_logger
-from spark.spark_session import get_spark_session
 
 
 def parse_arguments(description: str = "Silver Layer Job") -> argparse.Namespace:

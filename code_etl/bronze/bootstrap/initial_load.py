@@ -16,18 +16,18 @@ Usage:
     --cob_dt 2025-01-01
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "base_job"))
 
-from spark.spark_session import get_spark_session
 from spark.iceberg_utils import get_iceberg_table_name, write_to_iceberg
-from utils.yaml_loader import load_config
-from utils.sql_renderer import render_sql
+from spark.spark_session import get_spark_session
 from utils.logger import get_logger
+from utils.sql_renderer import render_sql
+from utils.yaml_loader import load_config
 
 # Tất cả YAML configs cho Bronze layer
 BRONZE_CONFIGS = [
@@ -65,8 +65,6 @@ def parse_arguments():
 
 def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
     """Load all Bronze tables from PostgreSQL."""
-    import os
-
     results = {"success": [], "failed": []}
 
     for config_path in BRONZE_CONFIGS:
@@ -129,9 +127,9 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
             results["success"].append((table_name, row_count))
             logger.info(f"✓ {table_name}: {row_count:,} rows loaded")
 
-        except Exception as e:
-            logger.error(f"✗ {table_name} FAILED: {str(e)}")
-            results["failed"].append((table_name, str(e)))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"✗ {table_name} FAILED: {e}")
+            results["failed"].append((table_name, f"{e}"))
 
     return results
 
@@ -172,8 +170,8 @@ def main():
         logger.info(f"Total rows: {total_rows:,}")
         logger.info(f"Failed: {len(results['failed'])}")
 
-    except Exception as e:
-        logger.error(f"Bootstrap failed: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Bootstrap failed")
         raise
     finally:
         if spark:

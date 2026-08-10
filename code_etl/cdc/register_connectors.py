@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Debezium Connector Registration Script — Banking Data Platform
 
@@ -13,9 +12,10 @@ Usage:
 
 import argparse
 import json
-import requests
+import sys
 import time
-from typing import Dict, List
+
+import requests
 
 
 def wait_for_debezium(url: str, timeout: int = 60) -> bool:
@@ -34,7 +34,7 @@ def wait_for_debezium(url: str, timeout: int = 60) -> bool:
     return False
 
 
-def create_connector(url: str, connector_name: str, config: Dict) -> bool:
+def create_connector(url: str, connector_name: str, config: dict) -> bool:
     """Create or update a Debezium connector."""
     api_url = f"{url}/connectors/{connector_name}/config"
 
@@ -53,18 +53,18 @@ def create_connector(url: str, connector_name: str, config: Dict) -> bool:
             print(f"✗ Failed to create connector '{connector_name}': {response.status_code}")
             print(f"  Response: {response.text}")
             return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"✗ Error creating connector '{connector_name}': {e}")
         return False
 
 
-def get_connector_status(url: str, connector_name: str) -> Dict:
+def get_connector_status(url: str, connector_name: str) -> dict:
     """Get connector status."""
     try:
         response = requests.get(f"{url}/connectors/{connector_name}/status", timeout=10)
         if response.status_code == 200:
             return response.json()
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     return {}
 
@@ -238,4 +238,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

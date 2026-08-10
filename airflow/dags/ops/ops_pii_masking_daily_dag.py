@@ -39,10 +39,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Daily PII masking — sandbox.dim_customer_masked + mart_customer_360_masked",
-    schedule_interval=None,
+    schedule_interval="0 8 * * *",  # Daily at 8:00 AM (Production - after Gold)
     catchup=False,
     max_active_tasks=1,
-    tags=["ops", "pii", "masking", "compliance"],
+    tags=["ops", "pii", "masking", "compliance", "production"],
 )
 
 # Wait for gold_mart360_dag

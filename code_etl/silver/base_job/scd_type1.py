@@ -12,11 +12,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.yaml_loader import load_config
-from utils.logger import get_logger
-from spark.spark_session import get_spark_session
-from common_utils import parse_arguments, get_target_table, load_source_df
+from common_utils import get_target_table, load_source_df, parse_arguments
 from spark.iceberg_utils import table_exists
+from spark.spark_session import get_spark_session
+from utils.logger import get_logger
+from utils.yaml_loader import load_config
 
 
 def validate_config(config: dict):
@@ -90,8 +90,8 @@ def main():
     try:
         spark = get_spark_session(app_name=f"silver-scd1-{config['target']['table']}")
         run_scd_type1(spark, config, args.cob_dt, logger)
-    except Exception as e:
-        logger.error(f"Job SCD Type 1 thất bại: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Job SCD Type 1 thất bại")
         raise
     finally:
         if spark:

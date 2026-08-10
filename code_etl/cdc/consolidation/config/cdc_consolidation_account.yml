@@ -1,0 +1,50 @@
+# =============================================================================
+# CDC Consolidation Config — Account
+# =============================================================================
+# Source: Bronze CDC (append-only change history)
+# Target: Silver Current State (latest state per account)
+# =============================================================================
+
+source_table: lakehouse.bronze.core_account_cdc
+target_table: lakehouse.silver.dim_account_current
+business_key: account_id
+
+# Column mappings (source → target)
+columns:
+  - account_id
+  - account_no
+  - customer_id
+  - product_code
+  - branch_code
+  - account_type
+  - currency
+  - balance
+  - open_date
+  - close_date
+  - status
+
+# Type conversions (Bronze BIGINT/VARCHAR → Silver proper types)
+conversions:
+  open_date: epoch_days_to_date
+  close_date: epoch_days_to_date
+  balance: decimal_nullable
+  last_updated: epoch_micros_to_timestamp
+
+# Event ordering (deterministic tie-breaker)
+ordering:
+  - column: __cdc_timestamp_ms
+    direction: desc
+  - column: __spark_batch_id
+    direction: desc
+
+# CDC metadata columns
+metadata:
+  operation_column: __cdc_operation
+  event_timestamp_column: __cdc_timestamp
+  event_timestamp_ms_column: __cdc_timestamp_ms
+  batch_id_column: __spark_batch_id
+
+# Retention (optional - for future cleanup)
+retention:
+  enabled: false
+  keep_days: 90

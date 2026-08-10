@@ -77,18 +77,64 @@ DIM_TABLES = [
 ]
 
 
-def rewrite_data_files(spark, table: str) -> None:
-    logger.info("rewrite_data_files: %s", table)
+def rewrite_data_files(spark, table: str, strategy: str = "binpack") -> None:
+    """
+    Compact small files into optimal-sized Parquet files.
+
+    Strategy options:
+    - binpack: Default, good for general compaction
+    - sort: Better for tables with clear sort order (e.g., fact tables)
+
+    Parameters optimized for performance:
+    - min-input-files: 3 (compact when 3+ small files exist)
+    - target-file-size-bytes: 256MB (optimal for Iceberg + Parquet)
+    """
+    logger.info("rewrite_data_files: %s (strategy=%s)", table, strategy)
     spark.sql(f"""
         CALL lakehouse.system.rewrite_data_files(
             table => '{table}',
-            strategy => 'binpack',
+            strategy => '{strategy}',
             options => map(
-                'min-input-files', '5',
-                'target-file-size-bytes', '134217728'
+                'min-input-files', '3',
+                'target-file-size-bytes', '268435456'
             )
         )
     """)
+
+    # Run Z-Order after compaction for Gold tables
+    if "gold." in table:
+        _run_zorder_after_compaction(spark, table)
+
+
+def _run_zorder_after_compaction(spark, table: str) -> None:
+    """
+    Run Z-Order after compaction for Gold tables.
+    This co-locates data by customer_id for faster queries.
+    """
+    table_name = table.split(".")[-1] if "." in table else table
+
+    # Z-Order columns for Gold tables
+    zorder_columns = {
+        "mart_customer_360": "customer_id",
+        "rfm_segment": "rfm_segment, customer_id",
+        "churn_prediction": "churn_risk, customer_id",
+        "cross_sell_segment": "cross_sell_score, customer_id",
+        "campaign_target": "campaign_type, customer_id",
+    }
+
+    if table_name not in zorder_columns:
+        return
+
+    try:
+        cols = zorder_columns[table_name]
+        logger.info("Running Z-Order on %s by (%s)", table, cols)
+        spark.sql(f"""
+            OPTIMIZE {table}
+            ZORDER BY ({cols})
+        """)
+    except Exception as e:
+        # Z-Order failure is non-fatal
+        logger.warning("Z-Order failed for %s: %s", table, e)
 
 
 def expire_snapshots(spark, table: str, retain_days: int = 7, min_snapshots: int = 3) -> None:
@@ -127,8 +173,8 @@ def run_maintenance(spark, tables: list[str], mode: str) -> None:
                 remove_orphan_files(spark, table)
             else:
                 expire_snapshots(spark, table)
-        except Exception as exc:
-            logger.error("Maintenance FAILED for %s: %s", table, exc, exc_info=True)
+        except Exception:
+            logger.exception("Maintenance FAILED for %s", table)
             errors.append(table)
 
     if errors:

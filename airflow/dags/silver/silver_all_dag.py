@@ -85,10 +85,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Silver layer — 8 dims + 5 facts",
-    schedule_interval=None,
+    schedule_interval="0 4 * * *",  # Daily at 4:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
-    tags=["silver", "all"],
+    tags=["silver", "all", "production"],
 )
 
 # ── 1. Cờ start ──────────────────────────────────────────────────────────────

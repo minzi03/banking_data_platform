@@ -26,7 +26,6 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Dict, List, Optional
 
 log = getLogger("lineage")
 
@@ -43,14 +42,14 @@ class LineageRecord:
     transform_type: str
     dag_id: str
     dag_run_id: str
-    snapshot_id: Optional[str] = None
+    snapshot_id: str | None = None
     row_count: int = 0
-    column_mappings: Dict[str, str] = field(default_factory=dict)
+    column_mappings: dict[str, str] = field(default_factory=dict)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "source_table": self.source_table,
             "target_table": self.target_table,
@@ -94,7 +93,7 @@ class LineageTracker:
     """
 
     def __init__(self):
-        self._records: List[LineageRecord] = []
+        self._records: list[LineageRecord] = []
         self._pg_url = "jdbc:postgresql://postgres:5432/banking_db"
         self._pg_props = {
             "user": os.environ.get("POSTGRES_USER", "banking_admin"),
@@ -109,9 +108,9 @@ class LineageTracker:
         transform_type: str,
         dag_id: str,
         dag_run_id: str,
-        snapshot_id: Optional[str] = None,
+        snapshot_id: str | None = None,
         row_count: int = 0,
-        column_mappings: Optional[Dict[str, str]] = None,
+        column_mappings: dict[str, str] | None = None,
     ) -> LineageRecord:
         """
         Record a lineage entry.
@@ -148,11 +147,11 @@ class LineageTracker:
 
         return record
 
-    def get_records(self) -> List[LineageRecord]:
+    def get_records(self) -> list[LineageRecord]:
         """Get all recorded lineage entries."""
         return list(self._records)
 
-    def get_upstream(self, table_name: str) -> List[LineageRecord]:
+    def get_upstream(self, table_name: str) -> list[LineageRecord]:
         """
         Get all upstream lineage for a table.
 
@@ -167,7 +166,7 @@ class LineageTracker:
             if r.target_table == table_name
         ]
 
-    def get_downstream(self, table_name: str) -> List[LineageRecord]:
+    def get_downstream(self, table_name: str) -> list[LineageRecord]:
         """
         Get all downstream lineage for a table.
 
@@ -182,7 +181,7 @@ class LineageTracker:
             if r.source_table == table_name
         ]
 
-    def get_full_lineage(self, table_name: str) -> List[LineageRecord]:
+    def get_full_lineage(self, table_name: str) -> list[LineageRecord]:
         """
         Get complete lineage chain (upstream + downstream) for a table.
 
@@ -213,7 +212,11 @@ class LineageTracker:
 
         from pyspark.sql import Row
         from pyspark.sql.types import (
-            StructType, StructField, StringType, IntegerType, TimestampType
+            IntegerType,
+            StringType,
+            StructField,
+            StructType,
+            TimestampType,
         )
 
         schema = StructType([

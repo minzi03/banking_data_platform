@@ -2,16 +2,15 @@
 Integration tests for governance module — End-to-end governance flow.
 """
 
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
+from governance.audit import AuditLogger
 from governance.contracts import DatasetContract, QualityRules
 from governance.contracts_registry import ContractRegistry
 from governance.enforcement import ContractEnforcer, ValidationResult
 from governance.lineage import LineageTracker, TransformType
-from governance.audit import AuditLogger, AuditAction
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

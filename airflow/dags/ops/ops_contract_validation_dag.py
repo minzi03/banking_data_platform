@@ -34,10 +34,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Contract validation — Silver + Gold layer validation",
-    schedule_interval=None,
+    schedule_interval="0 9 * * *",  # Daily at 9:00 AM (Production - after DQ)
     catchup=False,
     max_active_tasks=4,
-    tags=["ops", "governance", "contract-validation"],
+    tags=["ops", "governance", "contract-validation", "production"],
 )
 
 # ---------------------------------------------------------------------------

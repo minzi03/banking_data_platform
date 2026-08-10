@@ -20,7 +20,6 @@ Usage:
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import Dict, List, Optional, Tuple
 
 log = getLogger("anomaly_detection")
 
@@ -33,7 +32,7 @@ class AnomalyResult:
     details: str
     anomaly_count: int = 0
     total_count: int = 0
-    metadata: Dict = field(default_factory=dict)
+    metadata: dict = field(default_factory=dict)
 
 
 class AnomalyDetector:
@@ -50,10 +49,10 @@ class AnomalyDetector:
         self,
         spark,
         table: str,
-        expected_min: Optional[int] = None,
-        expected_max: Optional[int] = None,
+        expected_min: int | None = None,
+        expected_max: int | None = None,
         threshold_pct: float = 20.0,
-        historical_avg: Optional[int] = None,
+        historical_avg: int | None = None,
     ) -> AnomalyResult:
         """
         Detect row count anomalies.
@@ -228,9 +227,9 @@ class AnomalyDetector:
         self,
         df,
         column: str,
-        expected_type: Optional[str] = None,
-        expected_min: Optional[float] = None,
-        expected_max: Optional[float] = None,
+        expected_type: str | None = None,
+        expected_min: float | None = None,
+        expected_max: float | None = None,
     ) -> AnomalyResult:
         """
         Detect column-level anomalies (type, range, etc.).

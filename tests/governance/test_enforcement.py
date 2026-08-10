@@ -2,15 +2,16 @@
 Tests for governance.enforcement — Contract validation before write.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
+
 from governance.contracts import DatasetContract, QualityRules
 from governance.enforcement import (
+    CheckResult,
     ContractEnforcer,
     ValidationResult,
-    CheckResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

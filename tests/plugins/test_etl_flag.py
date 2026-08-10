@@ -11,9 +11,7 @@ Covers:
 import importlib.util
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -79,7 +77,7 @@ class TestMakeStartFlagTask:
         """Extract kwargs from the most recent PostgresOperator call."""
         _mock_postgres_op.reset_mock()
         dag = MagicMock()
-        task = make_start_flag_task("start", "test_dag", "bronze", dag)
+        task = make_start_flag_task("start", "test_dag", "bronze", dag)  # noqa: F841
         # PostgresOperator is called as PostgresOperator(...)
         last_call = _mock_postgres_op.call_args
         return last_call.kwargs if last_call else {}
@@ -99,7 +97,7 @@ class TestMakeStartFlagTask:
         """Should accept custom cob_dt value."""
         _mock_postgres_op.reset_mock()
         dag = MagicMock()
-        task = make_start_flag_task("start", "test_dag", "bronze", dag, cob_dt="2025-01-15")
+        task = make_start_flag_task("start", "test_dag", "bronze", dag, cob_dt="2025-01-15")  # noqa: F841
         kwargs = _mock_postgres_op.call_args.kwargs
         assert kwargs.get("parameters", {}).get("cob_dt") == "2025-01-15"
 
@@ -128,7 +126,7 @@ class TestMakeEndFlagTask:
         """Extract kwargs from the most recent PostgresOperator call."""
         _mock_postgres_op.reset_mock()
         dag = MagicMock()
-        task = make_end_flag_task("end", "test_dag", "bronze", dag)
+        task = make_end_flag_task("end", "test_dag", "bronze", dag)  # noqa: F841
         last_call = _mock_postgres_op.call_args
         return last_call.kwargs if last_call else {}
 
@@ -147,7 +145,7 @@ class TestMakeEndFlagTask:
         """Should accept custom cob_dt value."""
         _mock_postgres_op.reset_mock()
         dag = MagicMock()
-        task = make_end_flag_task("end", "test_dag", "bronze", dag, cob_dt="2025-06-01")
+        task = make_end_flag_task("end", "test_dag", "bronze", dag, cob_dt="2025-06-01")  # noqa: F841
         kwargs = _mock_postgres_op.call_args.kwargs
         assert kwargs.get("parameters", {}).get("cob_dt") == "2025-06-01"
 

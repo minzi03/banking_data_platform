@@ -68,7 +68,7 @@ def write_to_iceberg(df: DataFrame, table_name: str, logger) -> None:
 
     Không gọi df.count() trước write — sẽ gây executor OOM.
     """
-    spark = df.sparkSession
+    spark = df.sparkSession  # noqa: F841
 
     # Create table if not exists
     create_iceberg_table_if_not_exists(df, table_name, logger)

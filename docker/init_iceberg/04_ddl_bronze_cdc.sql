@@ -1,44 +1,26 @@
 -- =============================================================================
--- Bronze CDC Tables — Banking Data Platform
--- These tables store CDC events from Debezium streaming pipeline
+-- Bronze CDC Tables — Banking Data Platform (v3)
+-- Schema matches YAML config columns exactly
 -- =============================================================================
 
--- Core Account CDC
-CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_account_cdc (
-    account_id BIGINT,
-    account_name VARCHAR(255),
-    account_type VARCHAR(50),
-    balance DECIMAL(18,2),
-    status VARCHAR(20),
-    open_date VARCHAR(50),
-    close_date VARCHAR(50),
-    customer_id BIGINT,
-    branch_id BIGINT,
-    currency_code VARCHAR(10),
-    created_at VARCHAR(50),
-    updated_at VARCHAR(50),
-    __cdc_operation VARCHAR(10),
-    __cdc_timestamp TIMESTAMP,
-    __cdc_timestamp_ms BIGINT,
-    __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
-) USING iceberg
-PARTITIONED BY (DATE(__cdc_timestamp));
-
--- Core Customer CDC
+-- Core Customer CDC (matches cdc_core_customer.yml)
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_customer_cdc (
     customer_id BIGINT,
-    customer_name VARCHAR(255),
-    date_of_birth VARCHAR(50),
+    cccd VARCHAR(12),
+    full_name VARCHAR(200),
     gender VARCHAR(10),
-    phone VARCHAR(50),
-    email VARCHAR(255),
+    date_of_birth BIGINT,
+    phone VARCHAR(15),
+    email VARCHAR(200),
     address VARCHAR(500),
     city VARCHAR(100),
-    country VARCHAR(100),
-    customer_type VARCHAR(50),
-    created_at VARCHAR(50),
-    updated_at VARCHAR(50),
+    district VARCHAR(100),
+    branch_code VARCHAR(10),
+    customer_segment VARCHAR(20),
+    kyc_status VARCHAR(20),
+    register_date BIGINT,
+    is_active VARCHAR(10),
+    last_updated BIGINT,
     __cdc_operation VARCHAR(10),
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
@@ -47,17 +29,43 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_customer_cdc (
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
--- Core Transaction CDC
+-- Core Account CDC (matches cdc_core_account.yml)
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_account_cdc (
+    account_id BIGINT,
+    account_no VARCHAR(50),
+    customer_id BIGINT,
+    product_code VARCHAR(20),
+    branch_code VARCHAR(10),
+    account_type VARCHAR(20),
+    currency VARCHAR(10),
+    balance DECIMAL(18,2),
+    open_date BIGINT,
+    close_date BIGINT,
+    status VARCHAR(20),
+    last_updated BIGINT,
+    __cdc_operation VARCHAR(10),
+    __cdc_timestamp TIMESTAMP,
+    __cdc_timestamp_ms BIGINT,
+    __spark_batch_id BIGINT,
+    __ingestion_time TIMESTAMP
+) USING iceberg
+PARTITIONED BY (DATE(__cdc_timestamp));
+
+-- Core Transaction CDC (matches cdc_core_transaction.yml)
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_transaction_cdc (
-    transaction_id BIGINT,
+    txn_id BIGINT,
     account_id BIGINT,
-    transaction_type VARCHAR(50),
-    amount DECIMAL(18,2),
-    currency_code VARCHAR(10),
-    transaction_date VARCHAR(50),
+    customer_id BIGINT,
+    txn_date BIGINT,
+    txn_amount DECIMAL(18,2),
+    txn_type VARCHAR(50),
+    debit_credit VARCHAR(10),
+    balance_after DECIMAL(18,2),
+    channel VARCHAR(50),
     description VARCHAR(500),
-    status VARCHAR(20),
-    created_at VARCHAR(50),
+    counter_account VARCHAR(50),
+    created_ts BIGINT,
+    last_updated BIGINT,
     __cdc_operation VARCHAR(10),
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
@@ -66,20 +74,20 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_transaction_cdc (
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
--- Card Account CDC
+-- Card Account CDC (matches cdc_card_account.yml)
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.card_account_cdc (
-    card_account_id BIGINT,
-    card_number VARCHAR(50),
+    card_id BIGINT,
+    card_no_masked VARCHAR(50),
+    customer_id BIGINT,
+    account_id BIGINT,
+    product_code VARCHAR(20),
     card_type VARCHAR(50),
-    customer_id BIGINT,
-    account_id BIGINT,
+    card_brand VARCHAR(20),
     credit_limit DECIMAL(18,2),
-    current_balance DECIMAL(18,2),
+    issue_date BIGINT,
+    expiry_date BIGINT,
     status VARCHAR(20),
-    issue_date VARCHAR(50),
-    expiry_date VARCHAR(50),
-    created_at VARCHAR(50),
-    updated_at VARCHAR(50),
+    last_updated BIGINT,
     __cdc_operation VARCHAR(10),
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
@@ -88,35 +96,21 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.card_account_cdc (
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
--- Card Transaction CDC
+-- Card Transaction CDC (matches cdc_card_transaction.yml)
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.card_transaction_cdc (
-    card_txn_id BIGINT,
-    card_account_id BIGINT,
-    transaction_type VARCHAR(50),
-    amount DECIMAL(18,2),
-    merchant_name VARCHAR(255),
-    transaction_date VARCHAR(50),
-    status VARCHAR(20),
-    created_at VARCHAR(50),
-    __cdc_operation VARCHAR(10),
-    __cdc_timestamp TIMESTAMP,
-    __cdc_timestamp_ms BIGINT,
-    __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
-) USING iceberg
-PARTITIONED BY (DATE(__cdc_timestamp));
-
--- Online Transaction CDC
-CREATE TABLE IF NOT EXISTS lakehouse.bronze.online_transaction_cdc (
-    online_txn_id BIGINT,
+    txn_id BIGINT,
+    card_id BIGINT,
     customer_id BIGINT,
-    account_id BIGINT,
-    transaction_type VARCHAR(50),
-    amount DECIMAL(18,2),
+    txn_date BIGINT,
+    txn_amount DECIMAL(18,2),
+    txn_type VARCHAR(50),
+    currency VARCHAR(10),
+    merchant_name VARCHAR(255),
+    merchant_category VARCHAR(50),
     channel VARCHAR(50),
     status VARCHAR(20),
-    transaction_date VARCHAR(50),
-    created_at VARCHAR(50),
+    created_ts BIGINT,
+    last_updated BIGINT,
     __cdc_operation VARCHAR(10),
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
@@ -125,21 +119,27 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.online_transaction_cdc (
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
--- =============================================================================
--- Silver CDC Models (for dbt)
--- =============================================================================
-
--- Create Silver schema if not exists
-CREATE SCHEMA IF NOT EXISTS lakehouse.silver_cdc;
-
--- =============================================================================
--- Meta Schema for CDC Watermarks
--- =============================================================================
-CREATE SCHEMA IF NOT EXISTS lakehouse.meta;
-
--- CDC Watermark Table
-CREATE TABLE IF NOT EXISTS lakehouse.meta.cdc_watermark (
-    table_name VARCHAR(100),
-    last_cdc_timestamp TIMESTAMP,
-    last_processed_at TIMESTAMP
-) USING iceberg;
+-- Online Transaction CDC (matches cdc_online_transaction.yml)
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.online_transaction_cdc (
+    transaction_id BIGINT,
+    account_id BIGINT,
+    device_id BIGINT,
+    location_id BIGINT,
+    customer_id BIGINT,
+    transaction_type VARCHAR(50),
+    channel VARCHAR(50),
+    amount DECIMAL(18,2),
+    currency VARCHAR(10),
+    is_fraud VARCHAR(10),
+    fraud_reason VARCHAR(500),
+    status VARCHAR(20),
+    transaction_date BIGINT,
+    created_ts BIGINT,
+    last_updated BIGINT,
+    __cdc_operation VARCHAR(10),
+    __cdc_timestamp TIMESTAMP,
+    __cdc_timestamp_ms BIGINT,
+    __spark_batch_id BIGINT,
+    __ingestion_time TIMESTAMP
+) USING iceberg
+PARTITIONED BY (DATE(__cdc_timestamp));

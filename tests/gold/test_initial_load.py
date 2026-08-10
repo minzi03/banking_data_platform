@@ -91,9 +91,8 @@ class TestParseArguments:
 
     def test_cob_dt_required(self):
         """Should require --cob_dt argument."""
-        with patch("sys.argv", ["initial_load.py"]):
-            with pytest.raises(SystemExit):
-                parse_arguments()
+        with patch("sys.argv", ["initial_load.py"]), pytest.raises(SystemExit):
+            parse_arguments()
 
     def test_cob_dt_parsed(self):
         """Should parse --cob_dt value."""

@@ -24,7 +24,7 @@ ETL_ROOT = PROJECT_ROOT / "code_etl"
 _spec_src = (ETL_ROOT / "silver" / "base_job" / "scd_type1.py").read_text(encoding="utf-8")
 
 # Extract validate_config source code (lines 21-30)
-import textwrap, ast
+import ast
 
 # Parse the full module to extract just validate_config
 tree = ast.parse(_spec_src)

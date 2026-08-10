@@ -36,10 +36,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Bronze ingestion — core_banking (PostgreSQL)",
-    schedule_interval=None,
+    schedule_interval="0 2 * * *",  # Daily at 2:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
-    tags=["bronze", "core_banking", "postgresql"],
+    tags=["bronze", "core_banking", "postgresql", "production"],
 )
 
 # Resolve actual connection values at DAG parse time

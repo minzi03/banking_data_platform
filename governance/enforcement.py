@@ -21,7 +21,7 @@ Usage:
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from governance.contracts import DatasetContract
 
@@ -47,7 +47,7 @@ class ValidationResult:
     """Aggregated result of all contract checks."""
     dataset_id: str
     passed: bool = True
-    checks: List[CheckResult] = field(default_factory=list)
+    checks: list[CheckResult] = field(default_factory=list)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -80,7 +80,7 @@ class ValidationResult:
             lines.append(f"    {icon} {check.check_name}: {check.details}")
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "dataset_id": self.dataset_id,
             "passed": self.passed,
@@ -184,7 +184,7 @@ class ContractEnforcer:
     # -----------------------------------------------------------------------
 
     def _check_required_columns(
-        self, df, required_columns: List[str], result: ValidationResult
+        self, df, required_columns: list[str], result: ValidationResult
     ) -> None:
         """Check that required columns exist in the DataFrame."""
         actual_columns = set(df.columns)
@@ -208,7 +208,7 @@ class ContractEnforcer:
             ))
 
     def _check_non_null(
-        self, df, non_null_columns: List[str], result: ValidationResult
+        self, df, non_null_columns: list[str], result: ValidationResult
     ) -> None:
         """Check that specified columns have no NULL values."""
         issues = []
@@ -240,8 +240,8 @@ class ContractEnforcer:
     def _check_row_count(
         self,
         df,
-        min_rows: Optional[int],
-        max_rows: Optional[int],
+        min_rows: int | None,
+        max_rows: int | None,
         result: ValidationResult,
     ) -> None:
         """Check row count is within expected bounds."""
@@ -273,7 +273,7 @@ class ContractEnforcer:
             ))
 
     def _check_unique(
-        self, df, unique_columns: List[str], result: ValidationResult
+        self, df, unique_columns: list[str], result: ValidationResult
     ) -> None:
         """Check that specified columns have unique values."""
         total = df.count()
@@ -306,7 +306,7 @@ class ContractEnforcer:
             ))
 
     def _check_unique_column_set(
-        self, df, columns: List[str], result: ValidationResult
+        self, df, columns: list[str], result: ValidationResult
     ) -> None:
         """Check that the combination of columns is unique."""
         missing = [col for col in columns if col not in df.columns]
@@ -383,8 +383,8 @@ class ContractEnforcer:
         self,
         df,
         column: str,
-        min_value: Optional[float],
-        max_value: Optional[float],
+        min_value: float | None,
+        max_value: float | None,
         result: ValidationResult,
     ) -> None:
         """Check that column values are within min/max bounds."""

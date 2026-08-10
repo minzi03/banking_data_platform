@@ -15,9 +15,9 @@ Usage:
     --cob_dt 2025-01-01
 """
 
-import sys
-import subprocess
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
@@ -122,7 +122,7 @@ def run_silver_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> boo
     name = job_def["name"]
     job_type = job_def["type"]
     config_path = job_def["config"]
-    module = JOB_TYPE_MAP[job_type]
+    module = JOB_TYPE_MAP[job_type]  # noqa: F841
 
     cmd = [
         spark_submit,
@@ -151,7 +151,7 @@ def run_silver_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> boo
         logger.error(f"  ✗ {name} TIMEOUT (600s)")
         return False
     except Exception as e:
-        logger.error(f"  ✗ {name} ERROR: {str(e)}")
+        logger.error(f"  ✗ {name} ERROR: {e}")
         return False
 
 

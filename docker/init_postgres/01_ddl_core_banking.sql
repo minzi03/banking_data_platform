@@ -19,7 +19,7 @@ $$ LANGUAGE plpgsql;
 -- =============================================================================
 -- 1. BRANCH (bank branches)
 -- =============================================================================
-CREATE TABLE core_banking.branch (
+CREATE TABLE IF NOT EXISTS core_banking.branch (
     branch_code     VARCHAR(10)     NOT NULL,
     branch_name     VARCHAR(200)    NOT NULL,
     region          VARCHAR(20)     NOT NULL,       -- NORTH / CENTRAL / SOUTH
@@ -36,6 +36,7 @@ CREATE TABLE core_banking.branch (
     CONSTRAINT chk_branch_status CHECK (status IN ('ACTIVE', 'CLOSED'))
 );
 
+DROP TRIGGER IF EXISTS trg_branch_last_upd ON core_banking.branch;
 CREATE TRIGGER trg_branch_last_upd
     BEFORE UPDATE ON core_banking.branch
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -43,7 +44,7 @@ CREATE TRIGGER trg_branch_last_upd
 -- =============================================================================
 -- 2. PRODUCT (banking products)
 -- =============================================================================
-CREATE TABLE core_banking.product (
+CREATE TABLE IF NOT EXISTS core_banking.product (
     product_code    VARCHAR(20)     NOT NULL,
     product_name    VARCHAR(200)    NOT NULL,
     product_group   VARCHAR(20)     NOT NULL,       -- DEPOSIT / LOAN / CARD
@@ -59,6 +60,7 @@ CREATE TABLE core_banking.product (
     CONSTRAINT chk_product_active CHECK (is_active IN (0, 1))
 );
 
+DROP TRIGGER IF EXISTS trg_product_last_upd ON core_banking.product;
 CREATE TRIGGER trg_product_last_upd
     BEFORE UPDATE ON core_banking.product
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -66,7 +68,7 @@ CREATE TRIGGER trg_product_last_upd
 -- =============================================================================
 -- 3. CUSTOMER (customers)
 -- =============================================================================
-CREATE TABLE core_banking.customer (
+CREATE TABLE IF NOT EXISTS core_banking.customer (
     customer_id         BIGINT          NOT NULL,
     cccd                VARCHAR(12),                    -- National ID (12 digits)
     full_name           VARCHAR(200)    NOT NULL,
@@ -93,10 +95,11 @@ CREATE TABLE core_banking.customer (
     CONSTRAINT chk_customer_active CHECK (is_active IN (0, 1))
 );
 
-CREATE INDEX idx_customer_branch ON core_banking.customer(branch_code);
-CREATE INDEX idx_customer_segment ON core_banking.customer(customer_segment);
-CREATE INDEX idx_customer_upd ON core_banking.customer(last_updated);
+CREATE INDEX IF NOT EXISTS idx_customer_branch ON core_banking.customer(branch_code);
+CREATE INDEX IF NOT EXISTS idx_customer_segment ON core_banking.customer(customer_segment);
+CREATE INDEX IF NOT EXISTS idx_customer_upd ON core_banking.customer(last_updated);
 
+DROP TRIGGER IF EXISTS trg_customer_last_upd ON core_banking.customer;
 CREATE TRIGGER trg_customer_last_upd
     BEFORE UPDATE ON core_banking.customer
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -104,7 +107,7 @@ CREATE TRIGGER trg_customer_last_upd
 -- =============================================================================
 -- 4. ACCOUNT (deposits & current accounts)
 -- =============================================================================
-CREATE TABLE core_banking.account (
+CREATE TABLE IF NOT EXISTS core_banking.account (
     account_id      BIGINT          NOT NULL,
     account_no      VARCHAR(20)     NOT NULL,
     customer_id     BIGINT          NOT NULL,
@@ -127,9 +130,10 @@ CREATE TABLE core_banking.account (
     CONSTRAINT chk_account_status CHECK (status IN ('ACTIVE', 'CLOSED', 'FROZEN'))
 );
 
-CREATE INDEX idx_account_customer ON core_banking.account(customer_id);
-CREATE INDEX idx_account_upd ON core_banking.account(last_updated);
+CREATE INDEX IF NOT EXISTS idx_account_customer ON core_banking.account(customer_id);
+CREATE INDEX IF NOT EXISTS idx_account_upd ON core_banking.account(last_updated);
 
+DROP TRIGGER IF EXISTS trg_account_last_upd ON core_banking.account;
 CREATE TRIGGER trg_account_last_upd
     BEFORE UPDATE ON core_banking.account
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -137,7 +141,7 @@ CREATE TRIGGER trg_account_last_upd
 -- =============================================================================
 -- 5. DEPOSIT (savings certificates)
 -- =============================================================================
-CREATE TABLE core_banking.deposit (
+CREATE TABLE IF NOT EXISTS core_banking.deposit (
     deposit_id          BIGINT          NOT NULL,
     account_id          BIGINT,                         -- FK -> account (can be NULL for standalone savings)
     customer_id         BIGINT          NOT NULL,
@@ -159,9 +163,10 @@ CREATE TABLE core_banking.deposit (
     CONSTRAINT chk_deposit_term CHECK (term_months IN (1, 3, 6, 12, 24, 36))
 );
 
-CREATE INDEX idx_deposit_customer ON core_banking.deposit(customer_id);
-CREATE INDEX idx_deposit_upd ON core_banking.deposit(last_updated);
+CREATE INDEX IF NOT EXISTS idx_deposit_customer ON core_banking.deposit(customer_id);
+CREATE INDEX IF NOT EXISTS idx_deposit_upd ON core_banking.deposit(last_updated);
 
+DROP TRIGGER IF EXISTS trg_deposit_last_upd ON core_banking.deposit;
 CREATE TRIGGER trg_deposit_last_upd
     BEFORE UPDATE ON core_banking.deposit
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -169,7 +174,7 @@ CREATE TRIGGER trg_deposit_last_upd
 -- =============================================================================
 -- 6. LOAN (loans)
 -- =============================================================================
-CREATE TABLE core_banking.loan (
+CREATE TABLE IF NOT EXISTS core_banking.loan (
     loan_id             BIGINT          NOT NULL,
     customer_id         BIGINT          NOT NULL,
     product_code        VARCHAR(20)     NOT NULL,
@@ -191,10 +196,11 @@ CREATE TABLE core_banking.loan (
     CONSTRAINT chk_loan_amount CHECK (loan_amount > 0)
 );
 
-CREATE INDEX idx_loan_customer ON core_banking.loan(customer_id);
-CREATE INDEX idx_loan_status ON core_banking.loan(loan_status);
-CREATE INDEX idx_loan_upd ON core_banking.loan(last_updated);
+CREATE INDEX IF NOT EXISTS idx_loan_customer ON core_banking.loan(customer_id);
+CREATE INDEX IF NOT EXISTS idx_loan_status ON core_banking.loan(loan_status);
+CREATE INDEX IF NOT EXISTS idx_loan_upd ON core_banking.loan(last_updated);
 
+DROP TRIGGER IF EXISTS trg_loan_last_upd ON core_banking.loan;
 CREATE TRIGGER trg_loan_last_upd
     BEFORE UPDATE ON core_banking.loan
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -202,7 +208,7 @@ CREATE TRIGGER trg_loan_last_upd
 -- =============================================================================
 -- 7. TXN_ACCOUNT (account transactions) — largest table (~1M+ rows/month)
 -- =============================================================================
-CREATE TABLE core_banking.txn_account (
+CREATE TABLE IF NOT EXISTS core_banking.txn_account (
     txn_id          BIGINT          NOT NULL,
     account_id      BIGINT          NOT NULL,
     customer_id     BIGINT          NOT NULL,           -- denormalized for query speed
@@ -225,10 +231,11 @@ CREATE TABLE core_banking.txn_account (
 );
 
 -- Indexes for incremental ingest and customer-level queries
-CREATE INDEX idx_txn_acct_date ON core_banking.txn_account(account_id, txn_date);
-CREATE INDEX idx_txn_cust_date ON core_banking.txn_account(customer_id, txn_date);
-CREATE INDEX idx_txn_upd ON core_banking.txn_account(last_updated);
+CREATE INDEX IF NOT EXISTS idx_txn_acct_date ON core_banking.txn_account(account_id, txn_date);
+CREATE INDEX IF NOT EXISTS idx_txn_cust_date ON core_banking.txn_account(customer_id, txn_date);
+CREATE INDEX IF NOT EXISTS idx_txn_upd ON core_banking.txn_account(last_updated);
 
+DROP TRIGGER IF EXISTS trg_txn_account_last_upd ON core_banking.txn_account;
 CREATE TRIGGER trg_txn_account_last_upd
     BEFORE UPDATE ON core_banking.txn_account
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
@@ -236,7 +243,7 @@ CREATE TRIGGER trg_txn_account_last_upd
 -- =============================================================================
 -- 8. EMPLOYEE (bank employees)
 -- =============================================================================
-CREATE TABLE core_banking.employee (
+CREATE TABLE IF NOT EXISTS core_banking.employee (
     employee_id     BIGINT          NOT NULL,
     full_name       VARCHAR(200)    NOT NULL,
     branch_code     VARCHAR(10)     NOT NULL,
@@ -252,9 +259,10 @@ CREATE TABLE core_banking.employee (
     CONSTRAINT chk_employee_status CHECK (status IN ('ACTIVE', 'TERMINATED'))
 );
 
-CREATE INDEX idx_employee_branch ON core_banking.employee(branch_code);
-CREATE INDEX idx_employee_upd ON core_banking.employee(last_updated);
+CREATE INDEX IF NOT EXISTS idx_employee_branch ON core_banking.employee(branch_code);
+CREATE INDEX IF NOT EXISTS idx_employee_upd ON core_banking.employee(last_updated);
 
+DROP TRIGGER IF EXISTS trg_employee_last_upd ON core_banking.employee;
 CREATE TRIGGER trg_employee_last_upd
     BEFORE UPDATE ON core_banking.employee
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();

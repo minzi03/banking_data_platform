@@ -5,11 +5,10 @@ Provides tmp YAML configs, mock Spark sessions, and sample data
 so individual test files stay focused on assertions.
 """
 
-import os
 import sys
 import textwrap
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 

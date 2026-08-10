@@ -26,10 +26,10 @@ with DAG(
     dag_id='dbt_run',
     default_args=default_args,
     description='Execute dbt semantic layer for Banking Data Platform',
-    schedule_interval='0 6 * * *',  # Daily at 6 AM
+    schedule_interval='0 7 * * *',  # Daily at 7:00 AM (Production - after Gold)
     start_date=datetime(2024, 1, 1),
     catchup=False,
-    tags=['dbt', 'semantic', 'banking'],
+    tags=['dbt', 'semantic', 'banking', 'production'],
 ) as dag:
 
     # Start

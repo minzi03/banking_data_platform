@@ -19,15 +19,16 @@ from functools import reduce
 from pathlib import Path
 
 from pyspark.sql import functions as F
+from pyspark.sql.functions import broadcast
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.yaml_loader import load_config
-from utils.logger import get_logger
+from common_utils import get_target_table, load_source_df, parse_arguments
+from spark.iceberg_utils import create_iceberg_table_if_not_exists, table_exists
 from spark.spark_session import get_spark_session
-from common_utils import parse_arguments, get_target_table, load_source_df
-from spark.iceberg_utils import table_exists, create_iceberg_table_if_not_exists
+from utils.logger import get_logger
+from utils.yaml_loader import load_config
 
 
 def validate_config(config: dict):
@@ -51,7 +52,7 @@ def _build_sk_col_name(config: dict) -> str:
     if explicit:
         return explicit
     table = config["target"]["table"]
-    name = table[4:] if table.startswith("dim_") else table
+    name = table.removeprefix("dim_")
     return name + "_sk"
 
 
@@ -139,6 +140,13 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
     # Bước 3: Phát hiện record thay đổi
     target_current = spark.table(target).filter(F.col(current_flag) == 1)
 
+    # Use broadcast hint if target_current is small (< 10M rows)
+    # This avoids expensive shuffle joins for dimension tables
+    target_count = target_current.count()
+    if target_count < 10_000_000:
+        logger.info(f"Using broadcast join for target ({target_count} rows)")
+        target_current = broadcast(target_current)
+
     join_expr = [source_df[k] == target_current[k] for k in business_keys]
     joined = source_df.alias("s").join(target_current.alias("t"), join_expr, "left")
 
@@ -209,8 +217,8 @@ def main():
     try:
         spark = get_spark_session(app_name=f"silver-scd2-{config['target']['table']}")
         run_scd_type2(spark, config, args.cob_dt, logger)
-    except Exception as e:
-        logger.error(f"Job SCD Type 2 thất bại: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Job SCD Type 2 thất bại")
         raise
     finally:
         if spark:

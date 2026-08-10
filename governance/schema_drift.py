@@ -14,7 +14,6 @@ Usage:
 
 from dataclasses import dataclass, field
 from logging import getLogger
-from typing import Dict, List, Optional, Set, Tuple
 
 log = getLogger("schema_drift")
 
@@ -25,11 +24,11 @@ class SchemaDriftResult:
     check_name: str
     status: str          # "PASS", "WARN", "FAIL"
     details: str
-    added_columns: List[str] = field(default_factory=list)
-    removed_columns: List[str] = field(default_factory=list)
-    type_changes: List[Dict] = field(default_factory=list)
-    current_columns: List[str] = field(default_factory=list)
-    expected_columns: List[str] = field(default_factory=list)
+    added_columns: list[str] = field(default_factory=list)
+    removed_columns: list[str] = field(default_factory=list)
+    type_changes: list[dict] = field(default_factory=list)
+    current_columns: list[str] = field(default_factory=list)
+    expected_columns: list[str] = field(default_factory=list)
 
 
 class SchemaDriftDetector:
@@ -46,8 +45,8 @@ class SchemaDriftDetector:
         self,
         spark,
         table: str,
-        expected_columns: List[str],
-        expected_types: Optional[Dict[str, str]] = None,
+        expected_columns: list[str],
+        expected_types: dict[str, str] | None = None,
         ignore_case: bool = True,
     ) -> SchemaDriftResult:
         """
@@ -154,8 +153,8 @@ class SchemaDriftDetector:
         self,
         spark,
         table: str,
-        required_columns: List[str],
-        non_null_columns: Optional[List[str]] = None,
+        required_columns: list[str],
+        non_null_columns: list[str] | None = None,
     ) -> SchemaDriftResult:
         """
         Detect drift using contract quality rules.
@@ -179,8 +178,8 @@ class SchemaDriftDetector:
         self,
         spark,
         table: str,
-        expected_columns: List[str],
-    ) -> Dict[str, Set[str]]:
+        expected_columns: list[str],
+    ) -> dict[str, set[str]]:
         """
         Get a diff of current vs expected schema.
 
@@ -222,7 +221,7 @@ class SchemaDriftDetector:
                 details=f"Could not read tables: {e}",
             )
 
-        source_columns = list(source_df.columns)
+        source_columns = list(source_df.columns)  # noqa: F841
         target_columns = list(target_df.columns)
 
         return self.detect_drift(

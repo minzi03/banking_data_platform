@@ -2,9 +2,11 @@
 Tests for governance.freshness_checks — SLA-based data freshness monitoring.
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from governance.freshness_checks import FreshnessChecker, FreshnessResult
 
 

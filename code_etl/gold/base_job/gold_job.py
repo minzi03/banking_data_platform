@@ -19,14 +19,63 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.yaml_loader import load_config
-from utils.logger import get_logger
-from spark.spark_session import get_spark_session
-from common_utils import parse_arguments, get_target_table, load_source_df
+from common_utils import get_target_table, load_source_df, parse_arguments
 from spark.iceberg_utils import table_exists
+from spark.spark_session import get_spark_session
+from utils.logger import get_logger
+from utils.yaml_loader import load_config
 
 # Danh sách loại job hợp lệ trong tầng Gold
 VALID_JOB_TYPES = {"mart360", "segment", "time_analytics"}
+
+# Z-Ordering columns for frequently queried tables
+# Key: table name, Value: list of columns to Z-Order by
+ZORDER_COLUMNS = {
+    "mart_customer_360": ["customer_id"],
+    "rfm_segment": ["rfm_segment", "customer_id"],
+    "churn_prediction": ["churn_risk", "customer_id"],
+    "cross_sell_segment": ["cross_sell_score", "customer_id"],
+    "campaign_target": ["campaign_type", "customer_id"],
+    "customer_balance_summary": ["customer_id"],
+    "customer_transaction_summary": ["customer_id"],
+    "customer_product_summary": ["customer_id"],
+    "customer_card_summary": ["customer_id"],
+}
+
+
+def _run_zorder_if_needed(spark, target: str, job_type: str, logger):
+    """
+    Run OPTIMIZE ZORDER for frequently queried tables.
+    This co-locates data by the specified columns, improving read performance.
+    Only runs for tables with < 1M rows to avoid long optimization times.
+    """
+    # Extract table name from full path (e.g., "lakehouse.gold.mart_customer_360" -> "mart_customer_360")
+    table_name = target.split(".")[-1] if "." in target else target
+
+    # Check if this table needs Z-Ordering
+    if table_name not in ZORDER_COLUMNS:
+        return
+
+    try:
+        # Check table row count - skip Z-Order for large tables (> 1M rows)
+        row_count = spark.table(target).count()
+        if row_count > 1_000_000:
+            logger.info(f"[{job_type}] Skipping Z-Order for {target} ({row_count} rows > 1M)")
+            return
+
+        zorder_cols = ZORDER_COLUMNS[table_name]
+        cols_str = ", ".join(zorder_cols)
+        logger.info(f"[{job_type}] Running OPTIMIZE ZORDER BY ({cols_str}) on {target}")
+
+        spark.sql(f"""
+            OPTIMIZE {target}
+            ZORDER BY ({cols_str})
+        """)
+        logger.info(f"[{job_type}] Z-Order completed for {target}")
+
+    except Exception as e:
+        # Z-Order failure is non-fatal, log warning and continue
+        logger.warning(f"[{job_type}] Z-Order failed for {target}: {e}")
 
 
 def validate_config(config: dict):
@@ -50,6 +99,9 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     - Chỉ xóa và ghi lại partition của ngày cob_dt
     - Không ảnh hưởng dữ liệu các ngày khác
     - Idempotent: chạy lại cùng ngày cho ra kết quả như nhau
+
+    Sau khi ghi, thực hiện Z-Ordering cho các cột thường xuyên query
+    để cải thiện performance khi đọc dữ liệu.
     """
     target   = get_target_table(config)
     job_type = config["job"]["type"]
@@ -67,6 +119,10 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     result_df.writeTo(target).overwritePartitions()
     logger.info(f"[{job_type}] Ghi hoàn tất cho {target}")
 
+    # Run Z-Ordering for frequently queried columns (only for key tables)
+    # This improves read performance by co-locating related data
+    _run_zorder_if_needed(spark, target, job_type, logger)
+
 
 def main():
     """Điểm vào của chương trình: parse args → validate config → chạy job → dọn dẹp."""
@@ -78,8 +134,8 @@ def main():
         validate_config(config)
         spark = get_spark_session(app_name=f"gold-{config['job']['type']}-{config['target']['table']}")
         run_gold_job(spark, config, args.cob_dt, logger)
-    except Exception as e:
-        logger.error(f"Gold job thất bại: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Gold job thất bại")
         raise
     finally:
         if spark:

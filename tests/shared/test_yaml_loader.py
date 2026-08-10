@@ -7,8 +7,6 @@ Covers:
 """
 
 import importlib
-import os
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -20,6 +18,7 @@ ETL_SHARED = str(PROJECT_ROOT / "code_etl" / "shared")
 
 # Direct import via importlib to avoid package name conflicts
 import importlib.util
+
 _spec = importlib.util.spec_from_file_location(
     "yaml_loader",
     str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "yaml_loader.py")

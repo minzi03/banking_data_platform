@@ -7,6 +7,7 @@ Logs all pipeline actions for compliance and debugging:
 - Contract validation
 - Lineage emission
 - Data quality checks
+- PII access tracking
 
 Usage:
     from governance.audit import AuditLogger
@@ -20,13 +21,15 @@ Usage:
         status="success",
         details="Ingested 10000 rows from PostgreSQL",
     )
+
+    # Persist to PostgreSQL
+    logger.write_to_pg(spark)
 """
 
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Dict, List, Optional
 
 log = getLogger("audit")
 
@@ -45,14 +48,14 @@ class AuditRecord:
     status: str          # "success", "failed", "warning"
     details: str = ""
     row_count: int = 0
-    duration_seconds: Optional[float] = None
-    error_message: Optional[str] = None
-    metadata: Dict = field(default_factory=dict)
+    duration_seconds: float | None = None
+    error_message: str | None = None
+    metadata: dict = field(default_factory=dict)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "action": self.action,
             "table_name": self.table_name,
@@ -80,8 +83,10 @@ class AuditAction:
     EMIT_LINEAGE = "emit_lineage"
     DATA_QUALITY = "data_quality"
     PII_MASKING = "pii_masking"
+    PII_ACCESS = "pii_access"
     CONTRACT_VALIDATION = "contract_validation"
     MAINTENANCE = "maintenance"
+    SECURITY = "security"
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +102,7 @@ class AuditLogger:
     """
 
     def __init__(self):
-        self._records: List[AuditRecord] = []
+        self._records: list[AuditRecord] = []
         self._pg_url = "jdbc:postgresql://postgres:5432/banking_db"
         self._pg_props = {
             "user": os.environ.get("POSTGRES_USER", "banking_admin"),
@@ -114,9 +119,9 @@ class AuditLogger:
         status: str,
         details: str = "",
         row_count: int = 0,
-        duration_seconds: Optional[float] = None,
-        error_message: Optional[str] = None,
-        metadata: Optional[Dict] = None,
+        duration_seconds: float | None = None,
+        error_message: str | None = None,
+        metadata: dict | None = None,
     ) -> AuditRecord:
         """
         Log a pipeline action.
@@ -166,7 +171,7 @@ class AuditLogger:
         dag_id: str,
         dag_run_id: str,
         row_count: int,
-        duration_seconds: Optional[float] = None,
+        duration_seconds: float | None = None,
         status: str = "success",
     ) -> AuditRecord:
         """Log a data ingestion action."""
@@ -188,7 +193,7 @@ class AuditLogger:
         dag_run_id: str,
         row_count: int,
         transform_type: str = "",
-        duration_seconds: Optional[float] = None,
+        duration_seconds: float | None = None,
         status: str = "success",
     ) -> AuditRecord:
         """Log a data transformation action."""
@@ -224,12 +229,45 @@ class AuditLogger:
             metadata={"validation_type": validation_type, "passed": passed},
         )
 
+    def log_pii_access(
+        self,
+        table_name: str,
+        column_name: str,
+        user_name: str,
+        access_type: str,
+        query_text: str = "",
+    ) -> None:
+        """
+        Log PII column access for compliance tracking.
+
+        Args:
+            table_name: Table containing PII
+            column_name: PII column accessed
+            user_name: User who accessed the data
+            access_type: "read", "mask", "export"
+            query_text: SQL query (optional)
+        """
+        self.log_action(
+            action=AuditAction.PII_ACCESS,
+            table_name=table_name,
+            dag_id="system",
+            dag_run_id="manual",
+            status="success",
+            details=f"PII access: {column_name} by {user_name}",
+            metadata={
+                "column_name": column_name,
+                "user_name": user_name,
+                "access_type": access_type,
+                "query_text": query_text[:500] if query_text else "",
+            },
+        )
+
     def get_records(
         self,
-        table_name: Optional[str] = None,
-        action: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> List[AuditRecord]:
+        table_name: str | None = None,
+        action: str | None = None,
+        status: str | None = None,
+    ) -> list[AuditRecord]:
         """
         Get audit records with optional filters.
 
@@ -255,9 +293,9 @@ class AuditLogger:
     def get_audit_trail(
         self,
         table_name: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-    ) -> List[AuditRecord]:
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> list[AuditRecord]:
         """
         Get audit trail for a specific table.
 
@@ -301,8 +339,12 @@ class AuditLogger:
 
         from pyspark.sql import Row
         from pyspark.sql.types import (
-            StructType, StructField, StringType, IntegerType,
-            FloatType, TimestampType
+            FloatType,
+            IntegerType,
+            StringType,
+            StructField,
+            StructType,
+            TimestampType,
         )
 
         schema = StructType([

@@ -26,7 +26,6 @@ Usage:
 import os
 import sys
 from logging import getLogger
-from typing import Optional
 
 log = getLogger("lineage_tracker")
 
@@ -37,14 +36,13 @@ _GOVERNANCE_PATH = os.path.join(
 if _GOVERNANCE_PATH not in sys.path:
     sys.path.insert(0, _GOVERNANCE_PATH)
 
-from governance.lineage import LineageTracker, TransformType
-
+from governance.lineage import LineageTracker
 
 # ---------------------------------------------------------------------------
 # Singleton instance
 # ---------------------------------------------------------------------------
 
-_tracker: Optional[LineageTracker] = None
+_tracker: LineageTracker | None = None
 
 
 def get_lineage_tracker() -> LineageTracker:
@@ -70,7 +68,7 @@ def record_lineage(
     transform_type: str,
     dag_id: str,
     dag_run_id: str,
-    snapshot_id: Optional[str] = None,
+    snapshot_id: str | None = None,
     row_count: int = 0,
 ):
     """

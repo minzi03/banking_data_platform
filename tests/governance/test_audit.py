@@ -2,9 +2,7 @@
 Tests for governance.audit — Audit trail logging.
 """
 
-import pytest
-from governance.audit import AuditLogger, AuditRecord, AuditAction
-
+from governance.audit import AuditAction, AuditLogger, AuditRecord
 
 # ---------------------------------------------------------------------------
 # Test AuditAction

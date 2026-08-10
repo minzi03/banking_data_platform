@@ -15,9 +15,8 @@ Usage:
 import argparse
 import os
 import sys
-from datetime import datetime
-from logging import basicConfig, getLogger, INFO
-from typing import Any, Dict, List, Optional, Tuple
+from logging import INFO, basicConfig, getLogger
+from typing import Any
 
 import yaml
 
@@ -46,7 +45,7 @@ RULES_FILE = os.path.join(_HERE, "quarantine_rules.yml")
 # ---------------------------------------------------------------------------
 # YAML Loader
 # ---------------------------------------------------------------------------
-def load_rules(path: str) -> Dict[str, Any]:
+def load_rules(path: str) -> dict[str, Any]:
     """Load quarantine rules from YAML file."""
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -55,7 +54,7 @@ def load_rules(path: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Violation Check Executor
 # ---------------------------------------------------------------------------
-def check_violation(spark, source_table: str, condition: str) -> List[Dict]:
+def check_violation(spark, source_table: str, condition: str) -> list[dict]:
     """
     Execute a violation check and return violating records.
 
@@ -85,7 +84,7 @@ def check_violation(spark, source_table: str, condition: str) -> List[Dict]:
 # ---------------------------------------------------------------------------
 # Write to Quarantine Table
 # ---------------------------------------------------------------------------
-def write_to_quarantine(spark, records: List[Dict], target_table: str,
+def write_to_quarantine(spark, records: list[dict], target_table: str,
                        violation_type: str, source_table: str) -> int:
     """
     Write violating records to quarantine table.
@@ -104,8 +103,9 @@ def write_to_quarantine(spark, records: List[Dict], target_table: str,
         return 0
 
     try:
-        from pyspark.sql import Row
         from datetime import datetime
+
+        from pyspark.sql import Row
 
         # Get target table schema
         target_df = spark.table(target_table)
@@ -145,8 +145,8 @@ def write_to_quarantine(spark, records: List[Dict], target_table: str,
 # ---------------------------------------------------------------------------
 # Run Quarantine Checks for One Rule Set
 # ---------------------------------------------------------------------------
-def run_quarantine_checks(spark, rule_name: str, rule_config: Dict,
-                         cob_dt: str) -> List[Dict]:
+def run_quarantine_checks(spark, rule_name: str, rule_config: dict,
+                         cob_dt: str) -> list[dict]:
     """
     Run all quarantine checks for a rule set.
 
@@ -219,7 +219,7 @@ def run_quarantine_checks(spark, rule_name: str, rule_config: Dict,
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
-def print_summary(results: List[Dict]) -> Tuple[int, int, int]:
+def print_summary(results: list[dict]) -> tuple[int, int, int]:
     """Print summary and return (pass, warn, fail) counts."""
     pass_count = sum(1 for r in results if r["status"] == "PASS")
     warn_count = sum(1 for r in results if r["status"] == "WARNED")

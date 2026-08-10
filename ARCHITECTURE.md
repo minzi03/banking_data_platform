@@ -68,6 +68,21 @@ Bronze ──Spark SQL──▶ Silver (SCD1/SCD2)
                        └── Config: YAML files in code_etl/silver/
 ```
 
+### 2b. CDC Consolidation Flow (Silver Current-State)
+```
+Bronze CDC ──CDC Consolidation──▶ Silver Current-State
+(append-only)    (config-driven)    (mutable, latest state)
+                  │
+                  ├── dim_customer_current
+                  └── dim_account_current
+
+Key features:
+- Deterministic deduplication (timestamp + batch_id)
+- INSERT/UPDATE/DELETE handling via Iceberg MERGE
+- Persisted watermarks for incremental processing
+- Idempotent reprocessing (re-run = no change)
+```
+
 ### 3. Aggregation Flow (Gold)
 ```
 Silver ──Spark SQL──▶ Gold (Marts)
@@ -158,8 +173,8 @@ Pipeline Run ──▶ LineageTracker ──▶ PostgreSQL (lineage_log)
 | Layer | Tables | Rows (approx) |
 |-------|--------|---------------|
 | Source | 16 | ~2.6M |
-| Bronze | 16 | ~2.6M |
-| Silver | 13 | ~2.5M |
+| Bronze | 16 (batch) + 6 (CDC) | ~2.6M + CDC events |
+| Silver | 13 (batch) + 2 (CDC current) | ~2.5M + 40K |
 | Gold | 10 | ~100K |
 
 ## 🔗 Related

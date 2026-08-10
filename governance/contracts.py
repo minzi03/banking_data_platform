@@ -9,10 +9,9 @@ Each governed dataset has a contract defining:
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -57,8 +56,8 @@ class PhysicalLocation(BaseModel):
 class RangeCheck(BaseModel):
     """Range validation for a numeric column."""
     column: str
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
+    min_value: float | None = None
+    max_value: float | None = None
 
 
 class ReferentialIntegrity(BaseModel):
@@ -70,23 +69,23 @@ class ReferentialIntegrity(BaseModel):
 
 class QualityRules(BaseModel):
     """Quality rules for dataset validation."""
-    required_columns: List[str] = Field(
+    required_columns: list[str] = Field(
         default_factory=list,
         description="Columns that must exist in the schema"
     )
-    non_null_columns: List[str] = Field(
+    non_null_columns: list[str] = Field(
         default_factory=list,
         description="Columns that must not contain NULL values"
     )
-    min_row_count: Optional[int] = Field(
+    min_row_count: int | None = Field(
         default=None,
         description="Minimum expected row count"
     )
-    max_row_count: Optional[int] = Field(
+    max_row_count: int | None = Field(
         default=None,
         description="Maximum expected row count"
     )
-    date_column: Optional[str] = Field(
+    date_column: str | None = Field(
         default=None,
         description="Primary date column for freshness checks"
     )
@@ -94,23 +93,23 @@ class QualityRules(BaseModel):
         default=False,
         description="If True, dates must not be in the future"
     )
-    unique_check: List[str] = Field(
+    unique_check: list[str] = Field(
         default_factory=list,
         description="Columns that must be individually unique"
     )
-    unique_column_sets: List[List[str]] = Field(
+    unique_column_sets: list[list[str]] = Field(
         default_factory=list,
         description="Column sets that must be unique together (composite uniqueness)"
     )
-    range_checks: List[RangeCheck] = Field(
+    range_checks: list[RangeCheck] = Field(
         default_factory=list,
         description="Range validations for numeric columns"
     )
-    referential_integrity: List[ReferentialIntegrity] = Field(
+    referential_integrity: list[ReferentialIntegrity] = Field(
         default_factory=list,
         description="Foreign key integrity checks"
     )
-    freshness_sla_hours: Optional[int] = Field(
+    freshness_sla_hours: int | None = Field(
         default=None,
         description="Maximum allowed data age in hours"
     )
@@ -126,11 +125,11 @@ class AIGovernance(BaseModel):
         default="limited_risk",
         description="Risk classification (e.g., 'minimal_risk', 'limited_risk', 'high_risk')"
     )
-    intended_uses: List[str] = Field(
+    intended_uses: list[str] = Field(
         default_factory=list,
         description="Approved use cases"
     )
-    prohibited_uses: List[str] = Field(
+    prohibited_uses: list[str] = Field(
         default_factory=list,
         description="Prohibited use cases"
     )
@@ -181,11 +180,11 @@ class DatasetContract(BaseModel):
         ...,
         description="Physical location in the lakehouse"
     )
-    dag_id: Optional[str] = Field(
+    dag_id: str | None = Field(
         default=None,
         description="Airflow DAG ID that produces this dataset"
     )
-    upstream_dataset_ids: List[str] = Field(
+    upstream_dataset_ids: list[str] = Field(
         default_factory=list,
         description="List of upstream dataset IDs"
     )
@@ -202,6 +201,6 @@ class DatasetContract(BaseModel):
         use_enum_values = True
         validate_assignment = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return self.model_dump()

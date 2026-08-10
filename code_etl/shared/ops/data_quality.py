@@ -20,8 +20,8 @@ import argparse
 import os
 import sys
 from datetime import datetime
-from logging import basicConfig, getLogger, INFO
-from typing import Any, Dict, List, Optional, Tuple
+from logging import INFO, basicConfig, getLogger
+from typing import Any
 
 import yaml
 
@@ -57,7 +57,7 @@ LAYER_PREFIXES = {
 # ---------------------------------------------------------------------------
 # YAML Loader
 # ---------------------------------------------------------------------------
-def load_rules(path: str) -> Dict[str, Any]:
+def load_rules(path: str) -> dict[str, Any]:
     """Load DQ rules from YAML file."""
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -67,7 +67,7 @@ def load_rules(path: str) -> Dict[str, Any]:
 # Individual Check Executors
 # ---------------------------------------------------------------------------
 
-def check_row_count(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_row_count(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check row count >= min_rows."""
     try:
         df = spark.table(table)
@@ -84,7 +84,7 @@ def check_row_count(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_null(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_null(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check columns are not NULL."""
     try:
         df = spark.table(table)
@@ -106,7 +106,7 @@ def check_null(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_unique(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_unique(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check columns are unique."""
     try:
         df = spark.table(table)
@@ -130,7 +130,7 @@ def check_unique(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_range(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_range(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check column values are within min/max bounds."""
     try:
         df = spark.table(table)
@@ -141,7 +141,7 @@ def check_range(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         if col_name not in df.columns:
             return "FAIL", "N/A", f"Column '{col_name}' not found"
 
-        total = df.count()
+        total = df.count()  # noqa: F841
         out_of_range = df.filter(
             (df[col_name] < min_val) | (df[col_name] > max_val)
         ).count() if min_val is not None and max_val is not None else 0
@@ -154,12 +154,12 @@ def check_range(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         if out_of_range > 0:
             bounds = f"[{min_val}, {max_val}]" if min_val and max_val else f">={min_val}" if min_val else f"<={max_val}"
             return "FAIL", bounds, f"{out_of_range} values out of range {bounds}"
-        return "PASS", str(min_val), f"All values within bounds"
+        return "PASS", str(min_val), "All values within bounds"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_referential_integrity(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_referential_integrity(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check FK column values exist in referenced table."""
     try:
         col_name = rule.get("column")
@@ -195,7 +195,7 @@ def check_referential_integrity(spark, table: str, rule: Dict) -> Tuple[str, str
 # New Check Types — Phase 1: Governance & Data Quality
 # ---------------------------------------------------------------------------
 
-def check_anomaly_detection(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_anomaly_detection(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check for statistical anomalies (volume deviation, outliers)."""
     try:
         from governance.anomaly_detection import AnomalyDetector
@@ -220,7 +220,7 @@ def check_anomaly_detection(spark, table: str, rule: Dict) -> Tuple[str, str, st
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_freshness(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_freshness(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check data freshness against SLA."""
     try:
         from governance.freshness_checks import FreshnessChecker
@@ -241,7 +241,7 @@ def check_freshness(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
         return "FAIL", "N/A", f"Error: {e}"
 
 
-def check_schema_drift(spark, table: str, rule: Dict) -> Tuple[str, str, str]:
+def check_schema_drift(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check for schema drift against expected columns."""
     try:
         from governance.schema_drift import SchemaDriftDetector
@@ -281,7 +281,7 @@ CHECK_DISPATCH = {
 # Run All Checks for One Table
 # ---------------------------------------------------------------------------
 
-def run_checks_for_table(spark, table: str, checks: List[Dict], cob_dt: str) -> List[Dict[str, Any]]:
+def run_checks_for_table(spark, table: str, checks: list[dict], cob_dt: str) -> list[dict[str, Any]]:
     """Run all DQ checks for a single table, return result records."""
     results = []
     for check in checks:
@@ -321,7 +321,7 @@ def run_checks_for_table(spark, table: str, checks: List[Dict], cob_dt: str) -> 
 # Write Results to PostgreSQL
 # ---------------------------------------------------------------------------
 
-def write_results_to_pg(results: List[Dict[str, Any]]) -> None:
+def write_results_to_pg(results: list[dict[str, Any]]) -> None:
     """Write DQ results to opslakehouse.data_quality_log via JDBC."""
     if not results:
         log.info("No results to write.")
@@ -334,9 +334,16 @@ def write_results_to_pg(results: List[Dict[str, Any]]) -> None:
         "driver": "org.postgresql.Driver",
     }
 
-    from pyspark.sql import Row
-    from pyspark.sql.types import StructType, StructField, StringType, DateType, TimestampType
     import datetime
+
+    from pyspark.sql import Row
+    from pyspark.sql.types import (
+        DateType,
+        StringType,
+        StructField,
+        StructType,
+        TimestampType,
+    )
 
     spark = results[0]["_spark"]
     cob_dt_str = results[0]["cob_dt"]
@@ -396,7 +403,7 @@ def write_results_to_pg(results: List[Dict[str, Any]]) -> None:
 # Summary
 # ---------------------------------------------------------------------------
 
-def print_summary(results: List[Dict[str, Any]]) -> Tuple[int, int, int]:
+def print_summary(results: list[dict[str, Any]]) -> tuple[int, int, int]:
     """Print summary and return (pass, warn, fail) counts."""
     pass_count = sum(1 for r in results if r["check_status"] == "PASS")
     warn_count = sum(1 for r in results if r["check_status"] == "WARN")

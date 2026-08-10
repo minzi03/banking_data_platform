@@ -1,0 +1,112 @@
+# =============================================================================
+# Production Schedule Configuration — Banking Data Platform
+# =============================================================================
+# This file defines the production schedule for all DAGs.
+# DAGs will be updated to use these schedules when deployed to production.
+#
+# Schedule Legend:
+#   - None: Manual trigger only
+#   - Cron: Automated schedule
+#   - @daily: Run once a day at midnight
+#   - @hourly: Run once an hour
+# =============================================================================
+
+# CDC Pipeline (Real-time)
+cdc:
+  register_connectors:
+    schedule: null  # Run once on setup
+    description: "Register Debezium connectors"
+  streaming_pipeline:
+    schedule: null  # Continuous running
+    description: "CDC streaming jobs (run once, then continuous)"
+
+# Bronze Layer (Daily at 2:00 AM)
+bronze:
+  core_banking_dag:
+    schedule: "0 2 * * *"  # Daily at 2:00 AM
+    description: "Bronze ingestion — core_banking (8 tables)"
+  card_crm_dag:
+    schedule: "0 2 * * *"  # Daily at 2:00 AM
+    description: "Bronze ingestion — card_crm (3 tables)"
+  digital_banking_dag:
+    schedule: "0 2 * * *"  # Daily at 2:00 AM
+    description: "Bronze ingestion — digital_banking (5 tables)"
+
+# Silver Layer (Daily at 4:00 AM)
+silver:
+  all_dag:
+    schedule: "0 4 * * *"  # Daily at 4:00 AM
+    description: "Silver layer — 13 tables (8 dims + 5 facts)"
+    depends_on:
+      - bronze_core_banking_dag
+      - bronze_card_crm_dag
+      - bronze_digital_banking_dag
+
+# Gold Layer (Daily at 6:00 AM)
+gold:
+  all_dag:
+    schedule: "0 6 * * *"  # Daily at 6:00 AM
+    description: "Gold layer — 19 tables (9 history + 9 current)"
+    depends_on:
+      - silver_all_dag
+
+# dbt Semantic Layer (Daily at 7:00 AM)
+dbt:
+  run_dag:
+    schedule: "0 7 * * *"  # Daily at 7:00 AM
+    description: "dbt run — 12 ephemeral models"
+    depends_on:
+      - gold_all_dag
+
+# Operations
+ops:
+  data_quality_dag:
+    schedule: "0 8 * * *"  # Daily at 8:00 AM
+    description: "Data quality checks"
+    depends_on:
+      - gold_all_dag
+  pii_masking_daily_dag:
+    schedule: "0 8 * * *"  # Daily at 8:00 AM
+    description: "PII masking for compliance"
+    depends_on:
+      - gold_all_dag
+  maintenance_weekly_dag:
+    schedule: "0 3 * * 0"  # Weekly on Sunday at 3:00 AM
+    description: "Weekly maintenance tasks"
+  contract_validation_dag:
+    schedule: "0 9 * * *"  # Daily at 9:00 AM
+    description: "Data contract validation"
+  quarantine_dag:
+    schedule: "0 9 * * *"  # Daily at 9:00 AM
+    description: "Quarantine invalid records"
+  lineage_dag:
+    schedule: null  # Manual trigger only
+    description: "Lineage tracking"
+
+# =============================================================================
+# Production Schedule Summary
+# =============================================================================
+#
+# Time (GMT+7)    DAG                              Duration    Notes
+# ─────────────────────────────────────────────────────────────────────────────
+# 2:00 AM         Bronze (3 DAGs)                  ~30 min     Parallel execution
+# 4:00 AM         Silver                           ~45 min     Sequential (dims → facts)
+# 6:00 AM         Gold                             ~30 min     Parallel execution
+# 7:00 AM         dbt                              ~10 min     Ephemeral models
+# 8:00 AM         Data Quality + PII Masking       ~20 min     Parallel execution
+# 9:00 AM         Contract Validation + Quarantine ~15 min     Parallel execution
+# Sunday 3:00 AM  Maintenance                      ~60 min     Weekly tasks
+# =============================================================================
+
+# =============================================================================
+# Dependency Chain
+# =============================================================================
+#
+# CDC (24/7) ──────────────────────────────────────────────────────────────────
+#
+# Bronze (2:00 AM) ──► Silver (4:00 AM) ──► Gold (6:00 AM) ──► dbt (7:00 AM)
+#                                                            ├──► Data Quality (8:00 AM)
+#                                                            ├──► PII Masking (8:00 AM)
+#                                                            ├──► Contract Validation (9:00 AM)
+#                                                            └──► Quarantine (9:00 AM)
+# =============================================================================

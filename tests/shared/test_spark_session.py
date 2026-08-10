@@ -9,12 +9,8 @@ Uses mock to avoid requiring actual Spark/MinIO.
 """
 
 import importlib.util
-import os
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -44,7 +40,7 @@ class TestGetSparkSession:
         mock_spark_cls.builder.appName.return_value = mock_builder
         mock_builder.getOrCreate.return_value = MagicMock()
 
-        spark = _spark_mod.get_spark_session("test_app")
+        spark = _spark_mod.get_spark_session("test_app")  # noqa: F841
         mock_spark_cls.builder.appName.assert_called_with("test_app")
 
     @patch.object(_spark_mod, "SparkSession")
@@ -71,7 +67,7 @@ class TestGetSparkSession:
         mock_builder.config.return_value = mock_builder
         mock_builder.getOrCreate.return_value = MagicMock()
 
-        spark = _spark_mod.get_spark_session("test_env")
+        spark = _spark_mod.get_spark_session("test_env")  # noqa: F841
 
         calls = mock_builder.config.call_args_list
         config_keys = [call[0][0] for call in calls]
@@ -93,7 +89,7 @@ class TestGetSparkSession:
         mock_spark_cls.builder.appName.return_value = mock_builder
         mock_builder.getOrCreate.return_value = MagicMock()
 
-        spark = _spark_mod.get_spark_session("test_no_env")
+        spark = _spark_mod.get_spark_session("test_no_env")  # noqa: F841
         mock_builder.config.assert_not_called()
 
     @patch.object(_spark_mod, "SparkSession")

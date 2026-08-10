@@ -2,10 +2,11 @@
 Tests for governance.anomaly_detection — Statistical outlier detection.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
-from governance.anomaly_detection import AnomalyDetector, AnomalyResult
+from unittest.mock import MagicMock
 
+import pytest
+
+from governance.anomaly_detection import AnomalyDetector, AnomalyResult
 
 # ---------------------------------------------------------------------------
 # Fixtures

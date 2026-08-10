@@ -3,9 +3,8 @@ Tests for governance.contracts_registry — Contract loading and validation.
 """
 
 import pytest
-from pathlib import Path
-from governance.contracts_registry import ContractRegistry
 
+from governance.contracts_registry import ContractRegistry
 
 # ---------------------------------------------------------------------------
 # Fixtures

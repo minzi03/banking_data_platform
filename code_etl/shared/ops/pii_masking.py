@@ -36,7 +36,7 @@ logger = logging.getLogger("pii_masking")
 # Salt cho hash PII — phải set PII_HASH_SALT env var trước khi chạy
 _pii_salt_raw = os.environ.get("PII_HASH_SALT")
 if not _pii_salt_raw:
-    raise EnvironmentError("PII_HASH_SALT environment variable is required but not set")
+    raise OSError("PII_HASH_SALT environment variable is required but not set")
 PII_SALT = _pii_salt_raw
 PII_SALT_SQL = PII_SALT.replace("'", "''")
 

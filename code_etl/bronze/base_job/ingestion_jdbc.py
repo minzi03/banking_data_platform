@@ -6,19 +6,20 @@ Hỗ trợ 3 chiến lược nạp: full_snapshot, incremental, initial_full.
 Nguồn: PostgreSQL (single source) → Lakehouse Bronze (Iceberg)
 """
 
-import sys
 import argparse
+import sys
 from pathlib import Path
+
 from pyspark.sql import functions as F
 
 # Thêm shared vào sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
-from spark.spark_session import get_spark_session
 from spark.iceberg_utils import get_iceberg_table_name, write_to_iceberg
-from utils.yaml_loader import load_config
-from utils.sql_renderer import render_sql
+from spark.spark_session import get_spark_session
 from utils.logger import get_logger
+from utils.sql_renderer import render_sql
+from utils.yaml_loader import load_config
 
 
 def parse_arguments():
@@ -170,8 +171,8 @@ def main():
             logger=logger
         )
 
-    except Exception as e:
-        logger.error(f"Job nạp dữ liệu thất bại: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Job nạp dữ liệu thất bại")
         raise
     finally:
         if spark:

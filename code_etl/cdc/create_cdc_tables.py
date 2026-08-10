@@ -2,7 +2,9 @@
 """Create CDC tables in Iceberg Bronze layer."""
 
 import os
+
 from pyspark.sql import SparkSession
+
 
 def main():
     spark = (

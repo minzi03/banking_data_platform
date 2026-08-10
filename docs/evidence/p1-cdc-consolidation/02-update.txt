@@ -1,0 +1,42 @@
+# Evidence: P1.2 — UPDATE Handling
+
+## Test: UPDATE customer 1001 email
+
+### Step 1: PostgreSQL UPDATE
+```sql
+UPDATE core_banking.customer
+SET email = 'restart.test@example.com'
+WHERE customer_id = 1001;
+-- Result: UPDATE 1
+```
+
+### Step 2: Bronze CDC captures event
+```sql
+SELECT customer_id, email, __cdc_operation, __cdc_timestamp_ms
+FROM lakehouse.bronze.core_customer_cdc
+WHERE customer_id = 1001
+ORDER BY __cdc_timestamp_ms DESC
+LIMIT 3;
+
+-- Result:
+-- customer_id | email                    | __cdc_operation | __cdc_timestamp_ms
+-- 1001        | restart.test@example.com | UPDATE          | 1786193366534
+-- 1001        | final.test@example.com   | SNAPSHOT        | 1786178605044
+-- 1001        | final.test@example.com   | UPDATE          | 1786175929765
+```
+
+### Step 3: Silver Current updated after consolidation
+```sql
+SELECT customer_id, email, __cdc_timestamp_ms, __consolidated_at
+FROM lakehouse.silver.dim_customer_current
+WHERE customer_id = 1001;
+
+-- Result:
+-- customer_id | email                    | __cdc_timestamp_ms | __consolidated_at
+-- 1001        | restart.test@example.com | 1786193366534      | 2026-08-08 12:50:12.362551 UTC
+```
+
+## Verification
+- Bronze captures UPDATE event ✅
+- Silver reflects updated email ✅
+- Only 1 row per customer_id (no duplicates) ✅

@@ -2,9 +2,7 @@
 Tests for governance.lineage — Lineage tracking across the pipeline.
 """
 
-import pytest
-from governance.lineage import LineageTracker, LineageRecord, TransformType
-
+from governance.lineage import LineageRecord, LineageTracker, TransformType
 
 # ---------------------------------------------------------------------------
 # Test TransformType

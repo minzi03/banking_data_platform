@@ -15,9 +15,12 @@ Usage:
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import Optional
 
-from pyspark.sql import functions as F
+# Lazy import: pyspark may not be available in CI governance checks
+try:
+    from pyspark.sql import functions as F
+except ImportError:
+    F = None  # type: ignore[assignment]
 
 log = getLogger("freshness_checks")
 
@@ -28,9 +31,9 @@ class FreshnessResult:
     check_name: str
     status: str          # "PASS", "WARN", "FAIL"
     details: str
-    last_updated: Optional[str] = None
-    age_hours: Optional[float] = None
-    sla_hours: Optional[int] = None
+    last_updated: str | None = None
+    age_hours: float | None = None
+    sla_hours: int | None = None
 
 
 class FreshnessChecker:

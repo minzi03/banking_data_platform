@@ -1,0 +1,41 @@
+=== P2 OBSERVABILITY EVIDENCE ===
+Date: 2026-08-08 14:29:49 UTC
+
+--- 1. Freshness Exporter Metrics ---
+# HELP cdc_freshness_seconds Seconds since last CDC consolidation
+# TYPE cdc_freshness_seconds gauge
+cdc_freshness_seconds{table="dim_customer_current"} 4778
+cdc_freshness_seconds{table="dim_account_current"} 5820
+# HELP cdc_row_count Number of rows in current-state table
+# TYPE cdc_row_count gauge
+cdc_row_count{table="dim_customer_current"} 10000
+cdc_row_count{table="dim_account_current"} 30000
+# HELP cdc_recent_events CDC events in last hour
+# TYPE cdc_recent_events gauge
+cdc_recent_events 0
+# HELP exporter_up 1 if Trino is reachable
+# TYPE exporter_up gauge
+exporter_up 1
+
+
+--- 2. Prometheus Targets ---
+"health":"up"
+"health":"down"
+
+
+--- 3. Prometheus Query: cdc_freshness_seconds ---
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"cdc_freshness_seconds","instance":"freshness-exporter:9119","job":"cdc-freshness","table":"dim_customer_current"},"value":[1786199389.796,"4778"]},{"metric":{"__name__":"cdc_freshness_seconds","instance":"freshness-exporter:9119","job":"cdc-freshness","table":"dim_account_current"},"value":[1786199389.796,"5820"]}]}}
+
+--- 4. Prometheus Query: cdc_row_count ---
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"cdc_row_count","instance":"freshness-exporter:9119","job":"cdc-freshness","table":"dim_customer_current"},"value":[1786199389.830,"10000"]},{"metric":{"__name__":"cdc_row_count","instance":"freshness-exporter:9119","job":"cdc-freshness","table":"dim_account_current"},"value":[1786199389.830,"30000"]}]}}
+
+--- 5. Grafana Dashboard Search ---
+[{"id":1,"uid":"banking-cdc-pipeline","title":"Banking Data Platform — CDC Pipeline","uri":"db/banking-data-platform-e28094-cdc-pipeline","url":"/d/banking-cdc-pipeline/banking-data-platform-e28094-cdc-pipeline","slug":"","type":"dash-db","tags":["banking","cdc","data-platform"],"isStarred":false,"sortMeta":0}]
+
+--- 6. Grafana Datasource Check ---
+[{"id":1,"uid":"PBFA97CFB590B2093","orgId":1,"name":"Prometheus","type":"prometheus","typeName":"Prometheus","typeLogoUrl":"public/app/plugins/datasource/prometheus/img/prometheus_logo.svg","access":"proxy","url":"http://prometheus:9090","user":"","database":"","basicAuth":false,"isDefault":true,"jsonData":{},"readOnly":false}]
+
+--- 7. Container Status ---
+banking-freshness-exporter   Up 5 minutes              0.0.0.0:9119->9119/tcp, [::]:9119->9119/tcp
+banking-grafana              Up 17 minutes             0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+banking-prometheus           Up 17 minutes             0.0.0.0:9095->9090/tcp, [::]:9095->9090/tcp

@@ -3,16 +3,16 @@ Tests for governance.contracts — Pydantic models for dataset contracts.
 """
 
 import pytest
+
 from governance.contracts import (
-    DatasetContract,
-    QualityRules,
     AIGovernance,
+    DatasetContract,
     PhysicalLocation,
     QualityClass,
+    QualityRules,
     RefreshSLA,
     Severity,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

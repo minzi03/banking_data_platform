@@ -3,9 +3,6 @@ Tests for code_etl.shared.ops.data_quality — DQ check dispatch and utilities.
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -2,10 +2,11 @@
 Tests for governance.schema_drift — Schema drift detection.
 """
 
-import pytest
 from unittest.mock import MagicMock
-from governance.schema_drift import SchemaDriftDetector, SchemaDriftResult
 
+import pytest
+
+from governance.schema_drift import SchemaDriftDetector, SchemaDriftResult
 
 # ---------------------------------------------------------------------------
 # Fixtures
