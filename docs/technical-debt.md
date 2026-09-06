@@ -207,16 +207,63 @@ has to be queried from the platform.
 
 ---
 
-## TD-3 — Secrets committed in the repository
+## TD-3 — Publicly committed secrets and private key material
 
-**Status:** open (recorded at `portfolio-v1.1`, deliberately deferred to its own PR)
+**Status:** open. **Repository visibility: PUBLIC** (verified, not assumed).
 
-`docker/secrets/*.txt` and a hard-coded password in the Debezium connector
-registration script are local development credentials, but they are real
-credentials in version control.
+The original entry listed only `docker/secrets/*.txt` and the Debezium password.
+That was incomplete: a PEM private key is also tracked, and it is a different
+class of exposure from a local development password.
 
-### Acceptance
+### Known exposures
 
-Values move to `.env` / a secret store, the files are removed from the working
-tree, history rewriting is decided explicitly (rewrite or accept), and CI gains
-a check that fails on new committed secrets.
+```text
+docker/secrets/*.txt
+  airflow_fernet_key.txt · airflow_secret_key.txt
+  minio_root_password.txt · postgres_password.txt
+  local/dev credentials for PostgreSQL / MinIO / Airflow
+
+hard-coded Debezium password in code_etl/cdc/register_connectors.py
+
+docker/conf/private_key.pem
+  begins -----BEGIN PRIVATE KEY-----
+  present since the initial commit (cb8c9f8)
+  no current repository reference — grep across the tree matches nothing
+  historical purpose and usage unknown
+```
+
+### Two different risk levels
+
+```text
+dev-local passwords
+  → real exposure, but scope may be limited if they were never reused
+    outside the local docker stack
+
+unknown PEM private key
+  → higher priority: nobody knows what access it once granted
+```
+
+That the key is unreferenced today says only that nothing uses it *now*.
+**Unknown usage is not evidence of safety.**
+
+### The part that is easy to get wrong
+
+> Deleting the file from HEAD does not remediate a secret that has already been
+> published in Git history.
+
+`git rm` removes it from the current tree. Anyone who clones the repository
+still receives every committed version. Remediation is rotation, or history
+rewrite, or an explicit decision to accept — not deletion.
+
+### Closure criteria
+
+```text
+[ ] identify whether private_key.pem was ever used and what it protected
+[ ] rotate/revoke the key if it was ever usable
+[ ] rotate any committed credentials that could have been reused outside local dev
+[ ] remove secret material from the current tree
+[ ] prevent recommit via ignore rules / secret scanning
+[ ] decide explicitly whether a Git history rewrite is required
+[ ] if history is rewritten, verify the material is no longer present in
+    reachable history
+```
