@@ -115,6 +115,46 @@ pattern rather than assuming it is absent.
 
 ---
 
+## TD-5 — Shell failure propagation and false-success patterns
+
+**Status:** open (recorded at `portfolio-v1.1`)
+
+A swallowed child exit code has now been found five separate times in this
+repository. That is a pattern, not a run of bad luck, and each instance produced
+the same outcome: something reported success while doing nothing.
+
+| # | Where | Shape |
+| --- | --- | --- |
+| 1 | Bronze bootstrap | returned `0` with all 16 tables failed |
+| 2 | `benchmark.yml` Bronze ETL loop | `\|\| true` around every ingest |
+| 3 | `benchmark.yml` query runner | `$(cmd \| grep …)` takes `grep`'s status |
+| 4 | `benchmark.yml` baseline commit | `git push \|\| true` |
+| 5 | `ci-trino-init` | `sh -c` ending in `echo`, so five failed `CREATE SCHEMA` calls still exited `0` |
+
+Instances 1–5 were each found by accident or by adding a verification step, never
+by a check that looks for the pattern itself.
+
+### Acceptance
+
+```text
+[ ] critical shell steps use set -euo pipefail or equivalent
+[ ] no critical command is masked by || true
+[ ] one-shot containers fail non-zero when any required command fails
+[ ] pipeline exit status comes from the producer being verified
+[ ] success logs are emitted only after post-condition verification
+[ ] CI has a static contract test for known false-success patterns
+```
+
+The last item is the one that closes the loop. `tests/governance/` already hosts
+static contract tests of this kind (`test_airflow_dag_contracts.py`), so the
+pattern check belongs there rather than in review habit.
+
+Related: the fifth instance is why the benchmark workflow verifies schemas after
+`trino-init` exits `0`. Exit code is necessary, not sufficient — the post-condition
+has to be queried from the platform.
+
+---
+
 ## TD-3 — Secrets committed in the repository
 
 **Status:** open (recorded at `portfolio-v1.1`, deliberately deferred to its own PR)
