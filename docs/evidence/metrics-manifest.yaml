@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: f7c1b626ecb6a881e5c59c284846ea2b372a9c7d
+    git_commit: 1b6a1425a4492052ec50267e0e7537a383b8a00d
     git_branch: main
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T10:14:43Z'
+    generated_at_utc: '2026-09-06T10:27:07Z'
     requested_cob_dt: '2026-09-06'
     verification_scope: full
   environment:
