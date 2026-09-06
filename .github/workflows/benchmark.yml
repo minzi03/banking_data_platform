@@ -111,10 +111,17 @@ jobs:
           # Chờ một container one-shot (mc, trino-init) chạy xong và kiểm tra
           # exit code THẬT. Không đọc $? qua pipe — đó là cách một lỗi biến mất.
           wait_for_completion() {
+            # `ps -aq`, KHÔNG phải `ps -q`. Không có -a thì compose chỉ liệt kê
+            # service đang CHẠY, nên một container one-shot thoát nhanh sẽ trả
+            # về id rỗng và bị báo nhầm là "chưa được tạo". Đã xảy ra thật:
+            # log hiện `Container ci-mc Started` rồi ngay dòng sau là
+            # "mc không có container nào được tạo" — mc đã chạy xong trước khi
+            # ta kịp hỏi. Các lần chạy trước xanh chỉ vì nó tình cờ còn sống
+            # đúng lúc; đây là race, không phải may rủi vô hại.
             local service="$1" deadline=$((SECONDS + 180)) cid state code
-            cid=$($COMPOSE ps -q "$service")
+            cid=$($COMPOSE ps -aq "$service")
             if [ -z "$cid" ]; then
-              echo "::error::$service không có container nào được tạo"
+              echo "::error::$service: compose không tạo container nào (kể cả đã thoát)"
               return 1
             fi
             while [ $SECONDS -lt $deadline ]; do
@@ -516,6 +523,30 @@ jobs:
           echo "::endgroup::"
 
           echo "✅ ETL pipeline complete"
+
+      # =====================================================================
+      # TẠM THỜI — baseline evidence cho TD-1. Sẽ được THAY bằng job
+      # `Trino Integration` riêng, không phải xoá đi lặng lẽ.
+      #
+      # Mục đích: biết CHÍNH XÁC 34 test integration hiện tại gặp gì trên
+      # platform hiện tại, với đúng fixture TD-2 (một snapshot 2026-01-01).
+      # Chưa sửa catalog, chưa sửa uniqueness, chưa tạo snapshot thứ hai —
+      # nếu sửa trước thì fixture problem và test-semantics problem trộn vào
+      # nhau trong cùng một run và không phân loại được.
+      #
+      # Step này ĐƯỢC PHÉP đỏ. Không `continue-on-error`: exit code của pytest
+      # vẫn quyết định trạng thái workflow; log đi ra artifact qua một step
+      # `if: always()` riêng.
+      # =====================================================================
+      # Fixture SCD2 + 34 Trino integration test đã CHUYỂN sang job
+      # `trino-integration` trong ci.yml, nơi chúng chặn PR được. Ở đây chúng
+      # từng là harness tạm để lấy baseline; giữ lại sẽ thành hai nơi định
+      # nghĩa cùng một gate.
+      #
+      # Phần dựng stack + seed + ETL phía trên vẫn trùng với ci.yml. Đó là chủ
+      # ý ở thời điểm này: hai job có yêu cầu khối lượng dữ liệu khác nhau
+      # (benchmark cần volume production-like, integration thì không), nên
+      # chúng được dự kiến sẽ TÁCH chứ không hội tụ. Xem TD-6.
 
       - name: Run benchmark queries
         run: |

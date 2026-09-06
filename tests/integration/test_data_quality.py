@@ -58,6 +58,31 @@ def get_row_count(table: str, schema: str = "bronze") -> int:
     return int(result[0]) if result else 0
 
 
+def assert_unique_grain(table: str, key: str, schema: str = "bronze") -> None:
+    """
+    Khẳng định `key` là duy nhất TRONG MỖI cob_dt của một bảng full-snapshot.
+
+    Tìm thẳng nhóm bị trùng thay vì so hai con số đếm: câu lỗi nói được đúng
+    key nào và ở snapshot nào, thay vì chỉ "N rows, M distinct". Cũng tránh
+    COUNT(DISTINCT (a, b)) — cú pháp composite distinct phụ thuộc dialect.
+    """
+    duplicates = run_trino_query(
+        f"""
+        SELECT {key}, cob_dt, COUNT(*) AS n
+        FROM {table}
+        GROUP BY {key}, cob_dt
+        HAVING COUNT(*) > 1
+        ORDER BY n DESC
+        LIMIT 5
+        """,
+        schema=schema,
+    )
+    assert not duplicates, (
+        f"{schema}.{table}: ({key}, cob_dt) không duy nhất — "
+        f"{len(duplicates)} nhóm trùng (5 đầu): {duplicates}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Row Count Tests
 # ---------------------------------------------------------------------------
@@ -141,29 +166,27 @@ class TestNullChecks:
 class TestUniqueConstraints:
     """Test that key columns have unique values."""
 
-    @pytest.mark.integration
-    def test_bronze_customer_id_unique(self):
-        """core_customer.customer_id should be unique."""
-        count = get_row_count("core_customer", schema="bronze")
-        distinct = get_distinct_count("core_customer", "customer_id", schema="bronze")
-        assert count == distinct, \
-            f"core_customer.customer_id has duplicates: {count} rows, {distinct} distinct"
+    # Bronze là FULL SNAPSHOT theo cob_dt: cùng một business key xuất hiện lại
+    # ở mỗi ngày là ĐÚNG. Ba test này trước đây so COUNT(*) toàn bảng với
+    # COUNT(DISTINCT key) toàn bảng, tức mã hoá giả định "Bronze chỉ có một
+    # snapshot" — sai với kiến trúc. Chúng pass ở baseline chỉ vì fixture khi
+    # đó đúng một cob_dt, và sẽ biến thành false failure ngay khi có snapshot
+    # thứ hai. Invariant thật là: một key tối đa một lần TRONG MỖI snapshot.
 
     @pytest.mark.integration
-    def test_bronze_account_id_unique(self):
-        """core_account.account_id should be unique."""
-        count = get_row_count("core_account", schema="bronze")
-        distinct = get_distinct_count("core_account", "account_id", schema="bronze")
-        assert count == distinct, \
-            f"core_account.account_id has duplicates: {count} rows, {distinct} distinct"
+    def test_bronze_customer_id_unique_within_each_snapshot(self):
+        """core_customer.customer_id unique trong từng cob_dt."""
+        assert_unique_grain("core_customer", "customer_id")
 
     @pytest.mark.integration
-    def test_bronze_branch_code_unique(self):
-        """core_branch.branch_code should be unique."""
-        count = get_row_count("core_branch", schema="bronze")
-        distinct = get_distinct_count("core_branch", "branch_code", schema="bronze")
-        assert count == distinct, \
-            f"core_branch.branch_code has duplicates: {count} rows, {distinct} distinct"
+    def test_bronze_account_id_unique_within_each_snapshot(self):
+        """core_account.account_id unique trong từng cob_dt."""
+        assert_unique_grain("core_account", "account_id")
+
+    @pytest.mark.integration
+    def test_bronze_branch_code_unique_within_each_snapshot(self):
+        """core_branch.branch_code unique trong từng cob_dt."""
+        assert_unique_grain("core_branch", "branch_code")
 
     @pytest.mark.integration
     def test_silver_customer_sk_unique(self):
@@ -186,8 +209,8 @@ class TestReferentialIntegrity:
         """All account customer_ids should exist in core_customer."""
         result = run_trino_query("""
             SELECT COUNT(*)
-            FROM lakehouse.bronze.core_account a
-            LEFT JOIN lakehouse.bronze.core_customer c
+            FROM iceberg.bronze.core_account a
+            LEFT JOIN iceberg.bronze.core_customer c
               ON a.customer_id = c.customer_id
             WHERE c.customer_id IS NULL
         """, schema="bronze")
@@ -199,8 +222,8 @@ class TestReferentialIntegrity:
         """Silver dim_branch branch_codes should exist in Bronze."""
         result = run_trino_query("""
             SELECT COUNT(*)
-            FROM lakehouse.silver.dim_branch s
-            LEFT JOIN lakehouse.bronze.core_branch b
+            FROM iceberg.silver.dim_branch s
+            LEFT JOIN iceberg.bronze.core_branch b
               ON s.branch_code = b.branch_code
             WHERE b.branch_code IS NULL
         """, schema="silver")
