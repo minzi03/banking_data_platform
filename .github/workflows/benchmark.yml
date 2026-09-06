@@ -170,21 +170,66 @@ jobs:
           $COMPOSE up -d mc
           wait_for_completion mc
 
-          echo "=== Phase 3/4: Iceberg REST catalog + Trino (readiness ${READINESS_TIMEOUT}s) ==="
-          echo "stage=catalog_query_engine" >> "$GITHUB_OUTPUT"
+          echo "=== Phase 3/5: Trino (readiness ${READINESS_TIMEOUT}s) ==="
+          echo "stage=trino_engine" >> "$GITHUB_OUTPUT"
           $COMPOSE up -d iceberg-rest trino
-          record_readiness "$STACK_T0" iceberg-rest trino
+          record_readiness "$STACK_T0" trino
 
-          echo "=== Phase 4/4: schema bootstrap ==="
+          # -------------------------------------------------------------------
+          # Readiness THẬT của catalog: Trino DÙNG được nó. Không phải "port
+          # 8181 mở", cũng không phải "REST trả HTTP 200" — hai thứ đó là proxy
+          # signal. Đây là consumer path thật:
+          #   iceberg-rest → Trino Iceberg connector → SHOW SCHEMAS FROM iceberg
+          #
+          # Gate này chạy TRƯỚC trino-init để tách hai lớp lỗi: nếu SHOW SCHEMAS
+          # hỏng thì là catalog connectivity; nếu SHOW SCHEMAS chạy được mà
+          # trino-init hỏng thì là schema bootstrap. Trước đây hai lớp này lẫn
+          # vào nhau.
+          # -------------------------------------------------------------------
+          echo "=== Phase 4/5: Iceberg catalog queryable qua Trino ==="
+          echo "stage=catalog_queryable" >> "$GITHUB_OUTPUT"
+          CATALOG_TIMEOUT=180
+          catalog_t0=$(date +%s)
+          until docker exec ci-trino trino --execute "SHOW SCHEMAS FROM iceberg" \
+                  >/tmp/catalog-check.out 2>/tmp/catalog-check.err
+          do
+            if [ $(( $(date +%s) - catalog_t0 )) -ge $CATALOG_TIMEOUT ]; then
+              echo "::error::Iceberg catalog không query được qua Trino trong ${CATALOG_TIMEOUT}s"
+              echo "=== Trino stderr ==="
+              cat /tmp/catalog-check.err || true
+              exit 1
+            fi
+            sleep 3
+          done
+          echo "CATALOG_QUERYABLE_SECONDS=$(( $(date +%s) - STACK_T0 ))" >> "$GITHUB_ENV"
+          echo "  ✓ catalog query được sau $(( $(date +%s) - STACK_T0 ))s"
+
+          echo "=== Phase 5/5: schema bootstrap ==="
           echo "stage=schema_bootstrap" >> "$GITHUB_OUTPUT"
           $COMPOSE up -d trino-init
           wait_for_completion trino-init
 
+          # Kiểm chứng kết quả bootstrap, không tin vào exit code một mình.
+          echo "=== Xác nhận schema đã tồn tại ==="
+          docker exec ci-trino trino --output-format CSV_UNQUOTED \
+            --execute "SHOW SCHEMAS FROM iceberg" > /tmp/schemas.out
+          missing=""
+          for schema in bronze silver gold serving; do
+            grep -qx "$schema" /tmp/schemas.out || missing="$missing $schema"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::trino-init exit 0 nhưng thiếu schema:$missing"
+            cat /tmp/schemas.out
+            exit 1
+          fi
+          echo "  ✓ bronze/silver/gold/serving đều có"
+
           # Khẳng định lại bằng chính compose: nếu vòng poll ở trên có sai sót
           # thì bước này vẫn bắt được. Lúc này mọi service đã healthy nên nó
-          # trả về gần như tức thì.
+          # trả về gần như tức thì. iceberg-rest KHÔNG có trong danh sách vì nó
+          # cố ý không có healthcheck — readiness của nó do gate phía trên chứng.
           $COMPOSE up -d --wait --wait-timeout 60 \
-            postgres minio spark-master spark-worker-1 iceberg-rest trino
+            postgres minio spark-master spark-worker-1 trino
 
           echo "STACK_START_SECONDS=$(( $(date +%s) - STACK_T0 ))" >> "$GITHUB_ENV"
           echo "stage=done" >> "$GITHUB_OUTPUT"
@@ -212,8 +257,8 @@ jobs:
             echo "| minio ready | ${MINIO_READY_SECONDS:-not_reached} |"
             echo "| spark-master ready | ${SPARK_MASTER_READY_SECONDS:-not_reached} |"
             echo "| spark-worker-1 ready | ${SPARK_WORKER_1_READY_SECONDS:-not_reached} |"
-            echo "| iceberg-rest ready | ${ICEBERG_REST_READY_SECONDS:-not_reached} |"
             echo "| trino ready | ${TRINO_READY_SECONDS:-not_reached} |"
+            echo "| Iceberg catalog queryable | ${CATALOG_QUERYABLE_SECONDS:-not_reached} |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Diagnose stack failure
@@ -246,6 +291,15 @@ jobs:
               unhealthy="$unhealthy $service"
             fi
           done
+
+          # iceberg-rest cố ý không có healthcheck, nên nó không bao giờ tự lọt
+          # vào danh sách trên. Nếu hỏng ở giai đoạn liên quan tới catalog thì
+          # log của nó chính là thứ cần đọc — thêm tường minh.
+          case "${{ steps.start_stack.outputs.stage }}" in
+            trino_engine|catalog_queryable|schema_bootstrap)
+              unhealthy="$unhealthy iceberg-rest trino"
+              ;;
+          esac
 
           echo ""
           if [ -n "$unhealthy" ]; then
