@@ -96,304 +96,90 @@ Silver Current
 
 # Architecture
 
-<p align="center">
-  <a href="docs/images/banking_data_platform_architecture_3.png">
-    <img
-      src="docs/images/banking_data_platform_architecture_3.png"
-      alt="Banking Data Platform — End-to-End Batch and Near-Real-Time Lakehouse Architecture"
-      width="100%"
-    />
-  </a>
-</p>
+The platform is easier to understand as five cooperating planes than as a list
+of technologies. The first four move and shape data; the fifth controls and
+verifies all of them.
 
-<p align="center">
-  <em>
-    End-to-end architecture showing scheduled batch analytics,
-    near-real-time CDC, Apache Iceberg Lakehouse processing,
-    orchestration, governance, analytical serving,
-    observability, and failure isolation.
-  </em>
-</p>
+```text
+┌──────────────────────────────────────────────┐
+│ 1. Operational sources                       │
+│    PostgreSQL — core banking, cards, digital │
+└───────────────────────┬──────────────────────┘
+                        │  batch path  +  change-data-capture path
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 2. Data movement                             │
+│    Spark JDBC · Debezium → Kafka             │
+│    Spark Structured Streaming                │
+└───────────────────────┬──────────────────────┘
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 3. Lakehouse transformation                  │
+│    Bronze → Silver → historical Gold         │
+│    Spark on Apache Iceberg                   │
+└───────────────────────┬──────────────────────┘
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 4. Analytical serving                        │
+│    dbt, executed through Trino               │
+│    current-serving Iceberg tables            │
+└──────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════╗
+║ 5. Control, governance and evidence          ║
+║    Airflow · data contracts · data quality   ║
+║    OpenMetadata · CI · evidence manifest     ║
+║    — spans planes 1–4, not a stage after them║
+╚══════════════════════════════════════════════╝
+```
+
+### 1. Operational sources
+
+PostgreSQL is the operational source of truth across three banking domains:
+core banking, cards and CRM, and digital banking. Nothing downstream writes
+back to it.
+
+### 2. Data movement
+
+Two independent paths leave the source. A scheduled batch path reads over JDBC.
+A change-data-capture path streams the write-ahead log through Debezium and
+Kafka into Spark Structured Streaming, where malformed events are diverted to a
+dead-letter queue instead of failing the micro-batch.
+
+### 3. Lakehouse transformation
+
+Persistent state begins here. Bronze holds a full snapshot per close-of-business
+date; Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
+Gold holds the business marts. Every layer is partitioned by an explicit
+`cob_dt`, and business dates are derived explicitly from UTC storage rather than
+inherited from a session timezone.
+
+### 4. Analytical serving
+
+Spark owns history. dbt, executed through Trino, owns current-serving
+publication: it reads one explicit snapshot from historical Gold and publishes
+the current-serving Iceberg tables consumers actually query. A consumer never
+chooses a partition, and a missing snapshot fails the build rather than serving
+stale data quietly.
+
+### 5. Control, governance and evidence
+
+This plane runs across the other four rather than after them. Airflow
+orchestrates and enforces completion contracts between layers; data contracts
+and data-quality checks constrain what each layer may contain; OpenMetadata
+carries catalog and lineage. CI stands up the whole topology and tests against
+real pipeline output. Published metrics come from a versioned evidence manifest
+and are drift-checked, so a number in this README cannot diverge from what was
+measured.
 
 ---
 
-## Architecture at a Glance
+For component relationships and major flows, see
+**[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
-### Batch Analytics Path
-
-```text
-PostgreSQL
-    ↓
-Spark JDBC
-    ↓
-Bronze Batch
-    ↓
-Spark Transformations
-    ↓
-Silver SCD1/SCD2 + Facts
-    ↓
-Spark Business Transformations
-    ↓
-Historical Gold  (10 tables, partitioned by cob_dt)
-    ↓
-dbt build --select tag:serving   (executed through Trino)
-    ↓
-iceberg.serving  (9 tables, one cob_dt snapshot)
-    ↓
-Trino
-    ↓
-Superset
-```
-
-Spark owns history; dbt owns what is served. A consumer reads
-`iceberg.serving.*` and never has to pick a `cob_dt`.
-
-### Near-Real-Time CDC Path
-
-```text
-PostgreSQL WAL
-    ↓
-Debezium
-    ↓
-Kafka
-    ↓
-Spark Structured Streaming
-    ↓
-CDC Validation
-   /             \
-valid           invalid
-  ↓                ↓
-Bronze CDC         DLQ
-  ↓
-CDC Consolidation
-  ↓
-Silver Current
-├── dim_customer_current
-└── dim_account_current
-```
-
-> **Architecture boundary:**  
-> `Silver Current` does **not** currently feed Gold.  
-> Gold analytics remain batch-derived in `portfolio-v1.1`.
-
----
-
-## Technical Architecture
-
-```mermaid
-flowchart LR
-
-    %% =========================================================
-    %% SOURCE
-    %% =========================================================
-
-    subgraph Source["Source System"]
-        PG["PostgreSQL 15<br/>Operational Source of Truth<br/>16 Source Datasets"]
-    end
-
-    %% =========================================================
-    %% BATCH
-    %% =========================================================
-
-    subgraph Batch["Scheduled Batch Processing"]
-        JDBC["Spark JDBC<br/>YAML-Driven ETL"]
-        BST["Spark<br/>Silver Transformations"]
-        GST["Spark<br/>Gold Transformations"]
-    end
-
-    %% =========================================================
-    %% CDC
-    %% =========================================================
-
-    subgraph CDC["Near-Real-Time CDC"]
-        WAL["PostgreSQL WAL"]
-        DEB["Debezium 2.6<br/>3 Connectors"]
-        KAF["Kafka<br/>12 CDC Topics"]
-        SSS["Spark Structured<br/>Streaming"]
-        VAL{"CDC<br/>Validation"}
-        CON["Config-Driven CDC Consolidation<br/><br/>Deduplication<br/>Watermark: timestamp + batch id<br/>(not partition-aware)<br/>Idempotent Iceberg MERGE"]
-        DLQ["CDC Dead Letter Queue<br/><br/>Raw Payload<br/>Error Context<br/>Kafka Metadata"]
-    end
-
-    %% =========================================================
-    %% LAKEHOUSE
-    %% =========================================================
-
-    subgraph Lakehouse["Apache Iceberg Lakehouse on MinIO"]
-
-        subgraph Bronze["Bronze Layer"]
-            BB["Bronze Batch<br/>16 Source Tables"]
-            BC["Bronze CDC<br/>6 Append-Only Tables<br/><br/>INSERT / UPDATE / DELETE / SNAPSHOT"]
-        end
-
-        subgraph Silver["Silver Layer"]
-            SA["Silver Analytical<br/><br/>8 Dimensions<br/>2 SCD Type 2<br/>6 SCD Type 1<br/>5 Fact Tables"]
-            SC["Silver Current-State<br/><br/>dim_customer_current — 10K<br/>dim_account_current — 30K"]
-        end
-
-        subgraph Gold["Gold Layer"]
-            GA["Historical Gold<br/>10 Tables — partitioned by cob_dt<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
-        end
-
-        subgraph ServingLayer["Serving Layer"]
-            SV["iceberg.serving<br/>9 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
-        end
-    end
-
-    %% =========================================================
-    %% SERVING
-    %% =========================================================
-
-    subgraph Serving["Serving & Analytics"]
-        TRINO["Trino<br/>SQL Query Engine"]
-        DBT["dbt<br/>Serving Publisher<br/>9 Models + Tests"]
-        SUP["Apache Superset<br/>Dashboards"]
-    end
-
-    %% =========================================================
-    %% GOVERNANCE
-    %% =========================================================
-
-    subgraph Governance["Governance & Security"]
-        CTR["33 Data Contracts"]
-        DQ["8 Data Quality Checks"]
-        OM["OpenMetadata<br/>53 Production Tables<br/>22 Lineage Edges"]
-        SEC["RBAC<br/>Column Masking<br/>PII Controls<br/>Audit Trail"]
-    end
-
-    %% =========================================================
-    %% OBSERVABILITY
-    %% =========================================================
-
-    subgraph Observability["Observability"]
-        FEX["CDC Freshness Exporter"]
-        PRM["Prometheus<br/>15s Scrape"]
-        GRF["Grafana<br/>CDC Pipeline Dashboard"]
-    end
-
-    %% =========================================================
-    %% ORCHESTRATION / CI-CD
-    %% =========================================================
-
-    subgraph Ops["Orchestration & CI/CD"]
-        AF["Apache Airflow<br/>16 DAGs"]
-        GH["GitHub Actions<br/>472 Automated Tests"]
-    end
-
-    %% =========================================================
-    %% BATCH FLOW
-    %% =========================================================
-
-    PG --> JDBC
-    JDBC --> BB
-    BB --> BST
-    BST --> SA
-    SA --> GST
-    GST --> GA
-
-    %% =========================================================
-    %% CDC FLOW
-    %% =========================================================
-
-    PG --> WAL
-    WAL --> DEB
-    DEB --> KAF
-    KAF --> SSS
-    SSS --> VAL
-
-    VAL -->|valid| BC
-    VAL -.->|invalid| DLQ
-
-    BC --> CON
-    CON --> SC
-
-    %% =========================================================
-    %% SERVING
-    %% =========================================================
-
-    GA --> DBT
-    DBT -->|dbt build --select tag:serving, via Trino| SV
-    SV --> TRINO
-    GA -.->|ad-hoc / historical queries| TRINO
-    TRINO --> SUP
-
-    %% =========================================================
-    %% ORCHESTRATION
-    %% =========================================================
-
-    AF -.-> JDBC
-    AF -.-> BST
-    AF -.-> GST
-    AF -.-> DBT
-    AF -.-> CON
-    AF -.-> DQ
-
-    GH -.-> AF
-
-    %% =========================================================
-    %% GOVERNANCE
-    %% =========================================================
-
-    CTR -.-> BB
-    CTR -.-> BC
-    CTR -.-> SA
-    CTR -.-> SC
-
-    DQ -.-> SA
-    DQ -.-> SC
-    DQ -.-> GA
-
-    OM -.-> BB
-    OM -.-> BC
-    OM -.-> SA
-    OM -.-> SC
-    OM -.-> GA
-
-    SEC -.-> TRINO
-    SEC -.-> SA
-    SEC -.-> GA
-
-    %% =========================================================
-    %% OBSERVABILITY
-    %% =========================================================
-
-    SC -.-> TRINO
-    TRINO -.-> FEX
-    FEX --> PRM
-    PRM --> GRF
-
-    %% =========================================================
-    %% STYLES
-    %% =========================================================
-
-    classDef source fill:#e0e0e0,stroke:#616161,color:#000
-    classDef batch fill:#bbdefb,stroke:#1565c0,color:#000
-    classDef cdc fill:#ffe0b2,stroke:#ef6c00,color:#000
-    classDef bronze fill:#d7ccc8,stroke:#5d4037,color:#000
-    classDef silver fill:#f5f5f5,stroke:#9e9e9e,color:#000
-    classDef gold fill:#fff9c4,stroke:#f9a825,color:#000
-    classDef serving fill:#e1bee7,stroke:#7b1fa2,color:#000
-    classDef governance fill:#b2dfdb,stroke:#00796b,color:#000
-    classDef observability fill:#c8e6c9,stroke:#2e7d32,color:#000
-    classDef dlq fill:#ffcdd2,stroke:#c62828,color:#000
-    classDef cicd fill:#c5cae9,stroke:#283593,color:#000
-
-    class PG source
-    class JDBC,BST,GST,AF batch
-    class WAL,DEB,KAF,SSS,VAL,CON cdc
-    class DLQ dlq
-    class BB,BC bronze
-    class SA,SC silver
-    class GA gold
-    class TRINO,DBT,SUP serving
-    class CTR,DQ,OM,SEC governance
-    class FEX,PRM,GRF observability
-    class GH cicd
-```
-
-For a deeper technical walkthrough, see:
-
-**[docs/architecture/architecture.md](docs/architecture/architecture.md)**
+For implementation detail — orchestration, CDC semantics, serving mechanics and
+time semantics — see
+**[docs/architecture/architecture.md](docs/architecture/architecture.md)**.
 
 ---
 
@@ -1837,7 +1623,6 @@ FEATURE FREEZE
 | Document                                                                   | Purpose                            |
 | -------------------------------------------------------------------------- | ---------------------------------- |
 | [Architecture](docs/architecture/architecture.md)                          | Detailed technical architecture    |
-| [Architecture Image](docs/images/banking_data_platform_architecture_3.png) | Portfolio architecture overview    |
 | [Demo](docs/demo/demo.md)                                                  | 5-minute project walkthrough       |
 | [Interview Talking Points](docs/interview/talking-points.md)               | Architecture and design discussion |
 | [P1 Interview Prep](docs/interview/p1-interview-prep.md)                   | CDC deep-dive questions            |
