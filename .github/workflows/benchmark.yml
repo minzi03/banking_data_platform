@@ -525,7 +525,7 @@ jobs:
             "rfm_segments|SELECT rfm_segment, COUNT(*) FROM iceberg.gold.rfm_segment GROUP BY rfm_segment"
             "churn_analysis|SELECT churn_risk, COUNT(*) FROM iceberg.gold.churn_prediction GROUP BY churn_risk"
             "customer_lookup|SELECT * FROM iceberg.gold.mart_customer_360 WHERE customer_id = 1000"
-            "branch_performance|SELECT branch_code, COUNT(*) FROM iceberg.gold.mart_customer_360 GROUP BY branch_code"
+            "branch_performance|SELECT primary_branch_code, COUNT(*) FROM iceberg.gold.mart_customer_360 GROUP BY primary_branch_code"
           )
 
           for query_info in "${queries[@]}"; do
