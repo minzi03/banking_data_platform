@@ -88,6 +88,24 @@ empty environment:
 statically: every `spark-submit` goes through `docker exec`, and every `conn_id`
 a DAG references is created by `airflow-init`.
 
+### Test isolation
+
+Several test modules stubbed `sys.modules["pyspark"]` at import time and never
+restored it, leaking a global fake `pyspark` into every test that ran
+afterwards. Removing that leak revealed two suites that had never provided
+their own dependencies and were passing on the leak:
+
+- `tests/governance/test_anomaly_detection.py` — `anomaly_detection.py` imports
+  pyspark lazily inside the function under test, so the stub has to be active at
+  call time. It now installs its own, via `patch.dict`, unconditionally, so the
+  local and CI paths are identical.
+- `tests/shared/test_spark_session.py` — every test already patches
+  `SparkSession`, so pyspark only needs to be importable. It now stubs pyspark
+  only when genuinely absent, and restores `sys.modules` afterwards.
+
+The Gold regression CI job also gained `jinja2`, a real dependency of
+`gold_job.py` through `utils/yaml_loader.py`, which the job had never installed.
+
 ### Evidence
 
 - Added `docs/evidence/metrics-manifest.yaml` — an evidence contract that fixes

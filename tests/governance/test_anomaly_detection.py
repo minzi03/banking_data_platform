@@ -1,12 +1,41 @@
 """
 Tests for governance.anomaly_detection — Statistical outlier detection.
+
+Các test này chạy trên MagicMock DataFrame, không cần Spark thật. Nhưng
+`detect_statistical_outlier` / `detect_column_anomaly` import pyspark LƯỜI
+(bên trong hàm), nên phải stub lúc CHẠY chứ không phải lúc import module.
+
+Trước đây chúng pass trong CI nhờ tai nạn: `tests/ops/test_data_quality.py`
+gán `sys.modules["pyspark"] = MagicMock()` ở mức module và không khôi phục, nên
+mọi test chạy sau đều thừa hưởng một pyspark giả toàn cục. Khi rò rỉ đó được
+dọn, các test này lộ ra là chưa từng tự lo dependency của mình. Fixture dưới
+đây làm việc đó tường minh và `patch.dict` tự khôi phục sau mỗi test.
 """
 
-from unittest.mock import MagicMock
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from governance.anomaly_detection import AnomalyDetector, AnomalyResult
+
+
+@pytest.fixture(autouse=True)
+def _stub_pyspark_functions():
+    """
+    Stub luôn, kể cả khi máy có pyspark thật: local và CI phải chạy cùng một
+    đường. Nếu chỉ stub khi thiếu pyspark thì lỗi kiểu này lại chỉ nổ trên CI.
+    """
+    stub = MagicMock(name="pyspark")
+    with patch.dict(
+        sys.modules,
+        {
+            "pyspark": stub,
+            "pyspark.sql": stub.sql,
+            "pyspark.sql.functions": stub.sql.functions,
+        },
+    ):
+        yield
 
 # ---------------------------------------------------------------------------
 # Fixtures

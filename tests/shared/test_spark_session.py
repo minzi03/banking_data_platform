@@ -6,9 +6,20 @@ Covers:
   - get_iceberg_table_name: table name concatenation
 
 Uses mock to avoid requiring actual Spark/MinIO.
+
+Không cần pyspark thật. Mọi test ở đây đều `@patch.object(_spark_mod,
+"SparkSession")`, nên pyspark chỉ cần *import được* để exec_module chạy xong.
+Job unit trong CI cố ý không cài pyspark (300MB cho một job 20 giây), nên nếu
+thiếu thì stub — và stub phải được gỡ ngay sau khi load, vì để rác trong
+sys.modules đã từng làm hỏng các test chạy sau trong repo này.
+
+Chỉ stub khi pyspark thật sự vắng mặt: ở máy dev có pyspark, test vẫn chạy trên
+import thật, nên vẫn bắt được nếu API pyspark đổi.
 """
 
+import contextlib
 import importlib.util
+import sys
 
 import pytest
 from pathlib import Path
@@ -16,20 +27,43 @@ from unittest.mock import MagicMock, patch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Direct imports via importlib
-_spec_spark = importlib.util.spec_from_file_location(
-    "spark_session_mod",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "spark" / "spark_session.py")
-)
-_spark_mod = importlib.util.module_from_spec(_spec_spark)
-_spec_spark.loader.exec_module(_spark_mod)
 
-_spec_iceberg = importlib.util.spec_from_file_location(
-    "iceberg_utils_mod",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "spark" / "iceberg_utils.py")
-)
-_iceberg_mod = importlib.util.module_from_spec(_spec_iceberg)
-_spec_iceberg.loader.exec_module(_iceberg_mod)
+@contextlib.contextmanager
+def _pyspark_importable():
+    """Đảm bảo `from pyspark.sql import SparkSession` chạy được, rồi dọn sạch."""
+    try:
+        import pyspark.sql  # noqa: F401
+        yield
+        return
+    except ImportError:
+        pass
+
+    saved = {name: sys.modules.get(name) for name in ("pyspark", "pyspark.sql")}
+    pyspark_stub = MagicMock(name="pyspark")
+    sys.modules["pyspark"] = pyspark_stub
+    sys.modules["pyspark.sql"] = pyspark_stub.sql
+    try:
+        yield
+    finally:
+        for name, previous in saved.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+
+
+def _load(module_name: str, relative_path: str):
+    spec = importlib.util.spec_from_file_location(
+        module_name, str(PROJECT_ROOT / relative_path)
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+with _pyspark_importable():
+    _spark_mod = _load("spark_session_mod", "code_etl/shared/spark/spark_session.py")
+    _iceberg_mod = _load("iceberg_utils_mod", "code_etl/shared/spark/iceberg_utils.py")
 
 
 def _utc_session() -> MagicMock:

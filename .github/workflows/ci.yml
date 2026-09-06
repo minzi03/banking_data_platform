@@ -266,7 +266,10 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml pytest 'pyspark==3.5.3'
+          # jinja2: gold_job.py -> utils/yaml_loader.py render SQL bằng Template.
+          # Case 6 nạp gold_job thật để test guard fail-loud, nên nó là dependency
+          # thật của job này, không phải thứ stub được.
+          pip install pyyaml pytest jinja2 'pyspark==3.5.3'
 
       - name: Run Gold regression (executable)
         if: steps.gate.outputs.run == 'true'
