@@ -42,7 +42,7 @@ iceberg.serving  (9 tables, one cob_dt snapshot)
     ↓
 Trino
     ↓
-Superset
+SQL consumers
 
 
 CDC
@@ -138,7 +138,6 @@ flowchart LR
     subgraph Serving["Query, Transformation & Analytics"]
         TRINO["Trino<br/>Interactive SQL Query Engine"]
         DBT["dbt<br/>Serving Publisher<br/>9 Models + Tests"]
-        SUP["Apache Superset<br/>Dashboards & Analytics"]
     end
 
     %% =========================================================
@@ -218,7 +217,6 @@ flowchart LR
     DBT -->|dbt build --select tag:serving, via Trino| SV
     SV --> TRINO
     GA -.->|ad-hoc / historical queries| TRINO
-    TRINO --> SUP
 
     %% =========================================================
     %% ORCHESTRATION
@@ -302,7 +300,7 @@ flowchart LR
     class SA,SC silver
     class GA gold
 
-    class TRINO,DBT,SUP serving
+    class TRINO,DBT serving
 
     class CTR,DQ,OM,SEC governance
 
@@ -375,7 +373,7 @@ Gold Analytics
     ↓
 Trino
     ↓
-Superset
+SQL consumers
 ```
 
 The batch path is responsible for the historical analytical model and Gold business marts.
@@ -1054,7 +1052,7 @@ Historical Gold (Spark, 10 tables)
         ↓
 iceberg.serving.* (9 tables)
         ↓
-Trino ──┬── Superset
+Trino ──┬── SQL consumers
         ├── Streamlit
         └── SQL consumers
 ```
@@ -1406,7 +1404,6 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | Apache Kafka Broker  | 3.6.x                  | Event streaming                    |
 | OpenMetadata         | 1.5.6                  | Catalog, lineage, governance       |
 | dbt Core             | Repository-pinned      | Gold semantic models and tests     |
-| Apache Superset      | Repository-pinned      | Analytics dashboards               |
 | Prometheus           | Repository-pinned      | Metrics collection                 |
 | Grafana              | Repository-pinned      | Metrics visualization              |
 | Docker Compose       | —                      | Local platform deployment          |
@@ -1430,7 +1427,6 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | Trino                      |      8085 |          8080 | http://localhost:8085         |
 | Iceberg REST               |      8181 |          8181 | http://localhost:8181         |
 | OpenMetadata               |      8585 |          8585 | http://localhost:8585         |
-| Superset                   |      8088 |          8088 | http://localhost:8088         |
 | Streamlit                  |      8501 |          8501 | http://localhost:8501         |
 | Prometheus                 |      9095 |          9090 | http://localhost:9095         |
 | Grafana                    |      3000 |          3000 | http://localhost:3000         |
@@ -1624,7 +1620,7 @@ Airflow, OpenMetadata, governance, CI/CD, and observability coordinate or inspec
 
 # 29. Interview-Ready Architecture Summary
 
-> The platform uses PostgreSQL as the operational source of truth and separates scheduled batch analytics from near-real-time CDC. The batch path uses Spark JDBC to populate an Iceberg Medallion Lakehouse, where Spark builds SCD1/SCD2 dimensions, fact tables, and Gold business marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists them as append-only Bronze CDC history, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. Trino, dbt, and Superset serve analytical workloads, while Airflow, OpenMetadata, data contracts, data-quality checks, security controls, Prometheus/Grafana, and CI/CD provide cross-cutting platform capabilities.
+> The platform uses PostgreSQL as the operational source of truth and separates scheduled batch analytics from near-real-time CDC. The batch path uses Spark JDBC to populate an Iceberg Medallion Lakehouse, where Spark builds SCD1/SCD2 dimensions, fact tables, and Gold business marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists them as append-only Bronze CDC history, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. Trino and dbt handle analytical publication and query access, while Airflow, OpenMetadata, data contracts, data-quality checks, security controls, Prometheus/Grafana, and CI/CD provide cross-cutting platform capabilities.
 
 ---
 

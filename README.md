@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  Apache Spark · Apache Iceberg · MinIO · Apache Airflow · Debezium · Kafka · Trino · dbt · OpenMetadata · Apache Superset
+  Apache Spark · Apache Iceberg · MinIO · Apache Airflow · Debezium · Kafka · Trino · dbt · OpenMetadata
 </p>
 
 <p align="center">
@@ -43,7 +43,7 @@
 
 An end-to-end, production-like banking lakehouse built to show how batch, CDC, data quality, governance, analytical serving and CI/CD fit together as **one platform** rather than a collection of isolated pipelines.
 
-Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and served through Trino and dbt.
+Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and published for analytical access through Trino and dbt.
 
 The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
@@ -75,7 +75,7 @@ The platform combines:
 - **Apache Spark** for batch and streaming processing
 - **Apache Iceberg + MinIO** for lakehouse storage
 - **Apache Airflow** for orchestration
-- **Trino + dbt + Apache Superset** for analytical serving
+- **Trino + dbt** for analytical publication and query access
 - **OpenMetadata** for catalog, lineage, and governance
 - **Prometheus + Grafana** for CDC freshness observability
 - **Dead Letter Queue (DLQ)** handling for malformed CDC events
@@ -158,9 +158,14 @@ inherited from a session timezone.
 
 Spark owns history. dbt, executed through Trino, owns current-serving
 publication: it reads one explicit snapshot from historical Gold and publishes
-the current-serving Iceberg tables consumers actually query. A consumer never
-chooses a partition, and a missing snapshot fails the build rather than serving
+the current-serving Iceberg tables. A consumer of those tables never has to
+choose a partition, and a missing snapshot fails the build rather than serving
 stale data quietly.
+
+Publication and adoption are different claims. The serving tables are built and
+tested; no downstream consumer has yet been verified reading them — the
+Streamlit dashboard code and this README's SQL examples both query historical
+Gold directly. Tracked as TD-7.
 
 ### 5. Control, governance and evidence
 
@@ -201,7 +206,6 @@ time semantics — see
 | Data contracts and Data Quality        | ✅ Implemented |
 | OpenMetadata catalog and lineage       | ✅ Implemented |
 | Trino + dbt serving layer              | ✅ Implemented |
-| Apache Superset analytics              | ✅ Implemented |
 | Prometheus + Grafana monitoring        | ✅ Implemented |
 | GitHub Actions CI/CD                   | ✅ Implemented |
 
@@ -293,11 +297,10 @@ intact, and nothing compared the two.
 
 *Fix:* each source aggregates to `customer_id` in its own CTE before joining.
 
-*Evidence:* a regression fixture with a hand-computed expected total. The RFM
-case asserts a monetary value of `1500.00` — ten account transactions and five
-card transactions at 100 each, with the refund excluded from the amount but not
-from the frequency. The fixture fails against the pre-fix SQL and passes against
-the corrected one.
+*Evidence:* the RFM regression fixture asserts a monetary value of `1500.00` —
+ten account transactions and five card transactions at 100 each, with the refund
+excluded from monetary value but retained in frequency. The test protects the
+corrected join-grain semantics from regression.
 
 ---
 
@@ -412,7 +415,7 @@ Spark Business Transformations
     ↓
 Gold Analytics
     ↓
-Trino / dbt / Superset
+Trino / dbt
 ```
 
 Batch ingestion is driven by reusable YAML configuration and Spark ETL jobs.
@@ -1114,9 +1117,7 @@ Spark
 Current Serving Layer (9 materialized Iceberg tables)
           │
           ├── Trino
-          ├── Superset
-          ├── Streamlit
-          └── downstream SQL consumers
+          └── SQL consumers
 ```
 
 This boundary matters because objects created by one engine are not
@@ -1127,8 +1128,8 @@ actually serves them.
 
 ## Trino
 
-Interactive SQL access to Iceberg. Trino is the serving engine: dbt, Superset,
-Streamlit and the SQL examples in this README all go through it.
+Interactive SQL access to Iceberg. Trino is the query engine: dbt and the SQL
+examples in this README go through it.
 
 The Trino catalog is named `iceberg` (Trino derives the catalog name from
 `docker/init_trino/catalog/iceberg.properties`). Spark addresses the same
@@ -1171,12 +1172,6 @@ SERVING_COMPLETE(cob_dt)
 `dbt build` — not `dbt run` — so model creation and tests are one gate. Tests
 assert one row per customer, exactly one `cob_dt` per serving table, and that
 the served `cob_dt` equals the requested one.
-
----
-
-## Apache Superset
-
-Superset provides analytical dashboards over `iceberg.serving.*` through Trino.
 
 ---
 
@@ -1496,7 +1491,7 @@ Airflow
     ↓
 OpenMetadata
     ↓
-Superset / Analytics
+SQL consumers
 ```
 
 Runtime evidence:
@@ -1610,8 +1605,7 @@ Then open Airflow and run the required workflows according to their dependencies
 | Trino                    | http://localhost:8085         | SQL query engine                 |
 | Iceberg REST Catalog     | http://localhost:8181         | Iceberg catalog                  |
 | OpenMetadata             | http://localhost:8585         | Catalog / lineage                |
-| Apache Superset          | http://localhost:8088         | BI dashboards                    |
-| Streamlit                | http://localhost:8501         | Additional analytics application |
+| Streamlit                | http://localhost:8501         | Dashboard code, not runtime-verified — see TD-7 |
 | Prometheus               | http://localhost:9095         | Metrics                          |
 | Grafana                  | http://localhost:3000         | Monitoring dashboard             |
 | Freshness Exporter       | http://localhost:9119/metrics | Prometheus metrics               |
@@ -1729,7 +1723,6 @@ FEATURE FREEZE
 | Trino                | 443                    | Interactive SQL query engine |
 | dbt Core             | Repository-pinned      | Gold models and tests        |
 | OpenMetadata         | 1.5.6                  | Catalog, lineage, governance |
-| Apache Superset      | Repository-pinned      | Analytics dashboards         |
 | Prometheus           | Repository-pinned      | Metrics collection           |
 | Grafana              | Repository-pinned      | Metrics visualization        |
 | Docker Compose       | —                      | Local platform deployment    |
@@ -1836,7 +1829,7 @@ They do not replace the physical processing flow.
 
 # Interview-Ready Summary
 
-> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt/Superset analytical serving, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
+> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt analytical publication, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
 
 ---
 

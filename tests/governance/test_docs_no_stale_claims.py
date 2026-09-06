@@ -65,6 +65,14 @@ BANNED_CLAIMS = [
      "số test trong sơ đồ phải khớp manifest, không đóng băng ở v1.0"),
     ("Per-Partition Watermarks",
      "watermark là (timestamp, batch id) theo bảng — sơ đồ nói sai giống prose cũ"),
+    # --- Component không tồn tại ---
+    # 24 service trong docker-compose gồm `streamlit`, KHÔNG có `superset`.
+    # Tài liệu gọi nhầm tên ứng dụng dashboard suốt một thời gian dài — demo.md
+    # còn ghi "Superset at http://localhost:8501", vốn là cổng của Streamlit.
+    # Chỉ cấm trong DOCS (tài liệu mô tả trạng thái HIỆN TẠI); CHANGELOG và
+    # technical-debt được phép nhắc nó như một claim lịch sử.
+    ("Superset",
+     "không có service superset trong stack; ứng dụng dashboard là Streamlit"),
 ]
 
 # Claim chỉ bị cấm trong ngữ cảnh mô tả Trino (Spark vẫn gọi warehouse là lakehouse)
