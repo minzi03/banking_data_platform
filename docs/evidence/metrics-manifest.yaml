@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 174ed472636fe6fe9194bd893fe89a706ceebc13
-    git_branch: hardening/ci-trino-readiness
+    git_commit: 0817d0c95706bd895c7c418129fb8db1e342b173
+    git_branch: docs/portfolio-executive-summary
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T16:26:34Z'
+    generated_at_utc: '2026-09-06T19:26:20Z'
     requested_cob_dt: '2026-09-06'
     verification_scope: full
   environment:
@@ -525,23 +525,23 @@ metrics:
       declared: 34
       metric_type: static
       provenance: collector:integration_tests
-      definition: 'Số hàm `def test_*` trong hai module integration mà gate
-        PR-blocking `trino-integration` thực sự chạy: tests/integration/
-        test_data_quality.py và test_etl_validation.py. Cùng semantic đếm với
-        automated_tests.test_functions, nhưng scope đúng các test chạy qua Trino
-        trên dữ liệu pipeline thật. Tách riêng vì đây là headline claim ở đầu
-        README — một con số được publish thì phải đo được.
+      definition: 'Số hàm `def test_*` trong hai module integration mà gate PR-blocking
+        `trino-integration` thực sự chạy: tests/integration/ test_data_quality.py
+        và test_etl_validation.py. Cùng semantic đếm với automated_tests.test_functions,
+        nhưng scope đúng các test chạy qua Trino trên dữ liệu pipeline thật. Tách
+        riêng vì đây là headline claim ở đầu README — một con số được publish thì
+        phải đo được.
 
         '
     automated_tests:
       test_functions:
-        value: 462
+        value: 472
         declared: 472
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 555
+        value: 568
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -844,7 +844,7 @@ readme_bindings:
     claim: '| Trino integration tests    |             34 |'
   - location: executive_summary
     claim: 34 Trino-backed integration tests
-- readme_claim: '| Automated tests            |            462 |'
+- readme_claim: '| Automated tests            |            472 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             24 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value

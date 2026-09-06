@@ -179,7 +179,7 @@ flowchart LR
         DEV["Developer"]
         GH["GitHub"]
         GHA["GitHub Actions"]
-        TEST["Tests / Validation<br/>462 Automated Tests"]
+        TEST["Tests / Validation<br/>472 Automated Tests"]
         DOCKER["Docker Compose"]
     end
 
@@ -1380,7 +1380,7 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | **Catalog**       | Production data tables         |             53 |
 |                   | Lineage edges                  |             22 |
 | **Orchestration** | Airflow DAGs                   |             16 |
-| **Testing**       | Automated tests                |            462 |
+| **Testing**       | Automated tests                |            472 |
 | **Platform**      | Docker services                |             24 |
 | **CDC Current**   | Customer rows                  |         10,000 |
 |                   | Account rows                   |         30,000 |

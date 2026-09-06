@@ -275,7 +275,7 @@ flowchart LR
 
     subgraph Ops["Orchestration & CI/CD"]
         AF["Apache Airflow<br/>16 DAGs"]
-        GH["GitHub Actions<br/>462 Automated Tests"]
+        GH["GitHub Actions<br/>472 Automated Tests"]
     end
 
     %% =========================================================
@@ -444,7 +444,7 @@ counts are ambiguous without them.
 | Data contracts             |             33 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              8 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             16 | Files defining at least one DAG (17 DAG objects — one file defines two)         |
-| Automated tests            |            462 | Python `def test_*` functions                                                   |
+| Automated tests            |            472 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             24 | 20 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
