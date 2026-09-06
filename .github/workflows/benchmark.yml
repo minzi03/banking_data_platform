@@ -111,10 +111,17 @@ jobs:
           # Chờ một container one-shot (mc, trino-init) chạy xong và kiểm tra
           # exit code THẬT. Không đọc $? qua pipe — đó là cách một lỗi biến mất.
           wait_for_completion() {
+            # `ps -aq`, KHÔNG phải `ps -q`. Không có -a thì compose chỉ liệt kê
+            # service đang CHẠY, nên một container one-shot thoát nhanh sẽ trả
+            # về id rỗng và bị báo nhầm là "chưa được tạo". Đã xảy ra thật:
+            # log hiện `Container ci-mc Started` rồi ngay dòng sau là
+            # "mc không có container nào được tạo" — mc đã chạy xong trước khi
+            # ta kịp hỏi. Các lần chạy trước xanh chỉ vì nó tình cờ còn sống
+            # đúng lúc; đây là race, không phải may rủi vô hại.
             local service="$1" deadline=$((SECONDS + 180)) cid state code
-            cid=$($COMPOSE ps -q "$service")
+            cid=$($COMPOSE ps -aq "$service")
             if [ -z "$cid" ]; then
-              echo "::error::$service không có container nào được tạo"
+              echo "::error::$service: compose không tạo container nào (kể cả đã thoát)"
               return 1
             fi
             while [ $SECONDS -lt $deadline ]; do
