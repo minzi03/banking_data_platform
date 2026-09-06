@@ -20,7 +20,7 @@ docker compose ps
 **Say**:
 > "This is a production-like banking data platform with 24 Docker containers. It implements dual-path ingestion: batch processing through JDBC and near-real-time CDC using Debezium, Kafka, and Spark Structured Streaming."
 
-**Point out**: PostgreSQL, Spark, Kafka, Debezium, Trino, Airflow, OpenMetadata, Superset
+**Point out**: PostgreSQL, Spark, Kafka, Debezium, Trino, Airflow, OpenMetadata
 
 ---
 
@@ -156,16 +156,14 @@ docker exec banking-trino trino \
 
 ---
 
-### 04:45–05:00 — Superset + Closing
+### 04:45–05:00 — Closing
 
-**Show**: Superset at http://localhost:8501
+The dashboard step is intentionally omitted. The Streamlit application in
+`streamlit/` connects to Trino with the Spark catalog name `lakehouse`, while
+the Trino catalog is `iceberg`, so its queries do not currently run. Demoing it
+would mean demoing a broken path. Tracked as TD-7.
 
-**Navigate to**: Executive Overview dashboard
-
-**Show**: Key metrics (customer count, total AUM, RFM distribution)
-
-**Say**:
-> "Superset provides 10 analytics pages covering Customer 360, RFM analysis, churn risk, and campaign targeting."
+**Show instead**: the Trino SQL examples from the README, executed live.
 
 ---
 

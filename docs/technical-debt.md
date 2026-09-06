@@ -115,6 +115,56 @@ pattern rather than assuming it is absent.
 
 ---
 
+## TD-7 — Streamlit runtime and serving-consumer alignment
+
+**Status:** open (recorded during portfolio packaging)
+
+### Observed
+
+```text
+streamlit/app.py exists — 1007 lines, nine Gold queries, filters and charts
+it connects to Trino with catalog="lakehouse"
+verified Trino catalogs are "iceberg" and "system"
+  → SHOW CATALOGS returns exactly those two
+  → trino --catalog lakehouse --execute "SELECT COUNT(*) FROM gold.mart_customer_360"
+    fails with Catalog 'lakehouse' not found
+so every dashboard query fails against the verified stack
+
+its queries read FROM gold.* — historical Gold, not the serving tables
+the README SQL examples also read historical Gold
+→ no verified downstream consumer currently reads the dbt-managed serving tables
+```
+
+The documentation compounded this by calling the dashboard "Superset" for a
+long time. There is no `superset` service; `demo.md` even said "Superset at
+http://localhost:8501", which is Streamlit's port. That naming error has been
+corrected separately; this item covers the behaviour.
+
+### What this does and does not mean
+
+Publication correctness and consumer adoption are different claims. The serving
+tables are built, tested and gated in CI — that part stands. What is not
+demonstrated is that anything downstream consumes them.
+
+### Acceptance
+
+```text
+[ ] fix and runtime-verify Streamlit connectivity
+[ ] decide the intended consumer contract: historical Gold or serving
+[ ] if serving is intended, migrate the queries to the serving tables
+[ ] verify the consumer queries through Trino
+[ ] only then restore an active dbt exposure
+[ ] add a contract test preventing the Spark catalog name "lakehouse"
+    in Trino-facing code
+```
+
+The last item earns its place. `lakehouse` leaking into Trino-facing code has
+now happened four times: two integration tests, the `branch_performance`
+benchmark query, and this dashboard. At four occurrences it is not a typo, it is
+a cross-engine naming contract that needs a static check.
+
+---
+
 ## TD-6 — Two workflows build the same lakehouse fixture
 
 **Status:** open (recorded at TD-1)

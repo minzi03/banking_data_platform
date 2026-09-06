@@ -142,8 +142,24 @@ def validate_contract(manifest: dict) -> list[str]:
                     )
 
     for binding in manifest["readme_bindings"]:
-        if get_path(manifest, binding["manifest_path"]) is MISSING:
-            errors.append(f"readme_binding trỏ tới node không tồn tại: {binding['manifest_path']}")
+        path = binding.get("manifest_path")
+        if not path or get_path(manifest, path) is MISSING:
+            errors.append(f"readme_binding trỏ tới node không tồn tại: {path}")
+            continue
+        # Một metric có thể được chiếu vào nhiều nơi trong README (bảng metric,
+        # executive summary, …). Mỗi projection phải có `claim`; một binding
+        # không có projection nào thì không kiểm được gì.
+        projections = list(binding.get("readme_claims", []) or [])
+        if "readme_claim" not in binding and not projections:
+            errors.append(f"readme_binding {path}: không có projection nào")
+        for entry in projections:
+            if isinstance(entry, dict):
+                if not entry.get("claim"):
+                    errors.append(f"readme_binding {path}: projection thiếu `claim`")
+                if not entry.get("location"):
+                    errors.append(f"readme_binding {path}: projection thiếu `location`")
+            elif not isinstance(entry, str):
+                errors.append(f"readme_binding {path}: projection sai kiểu: {type(entry).__name__}")
 
     return errors
 
@@ -248,6 +264,27 @@ def _test_functions(_manifest: dict) -> int:
     )
 
 
+INTEGRATION_TEST_MODULES = (
+    "tests/integration/test_data_quality.py",
+    "tests/integration/test_etl_validation.py",
+)
+
+
+def _integration_tests(_manifest: dict) -> int:
+    """
+    Số test integration mà gate PR-blocking thực sự chạy.
+
+    Cùng semantic đếm với `_test_functions` (`def test_*`), nhưng scope đúng hai
+    module chạy qua Trino. Tách riêng vì đây là con số được publish ở đầu
+    README: một headline metric phải đo được, không phải gõ tay.
+    """
+    return sum(
+        len(re.findall(r"^\s*def test_", (REPO_ROOT / rel).read_text(encoding="utf-8"),
+                       re.MULTILINE))
+        for rel in INTEGRATION_TEST_MODULES
+    )
+
+
 def _pytest_collected_nodes(_manifest: dict) -> int | None:
     """Cần chạy pytest — trả None nếu không chạy được, không làm hỏng collect."""
     try:
@@ -295,6 +332,7 @@ def collect_repo_metrics(manifest: dict) -> dict[str, Any]:
         "platform.airflow_dag_objects.value": _airflow_dag_objects,
         "platform.automated_tests.test_functions.value": _test_functions,
         "platform.automated_tests.collected_pytest_nodes.value": _pytest_collected_nodes,
+        "platform.integration_tests.value": _integration_tests,
         "platform.dq_check_types.value": _dq_check_types,
     }
     values = {path: fn(manifest) for path, fn in simple.items()}

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  Apache Spark · Apache Iceberg · MinIO · Apache Airflow · Debezium · Kafka · Trino · dbt · OpenMetadata · Apache Superset
+  Apache Spark · Apache Iceberg · MinIO · Apache Airflow · Debezium · Kafka · Trino · dbt · OpenMetadata
 </p>
 
 <p align="center">
@@ -39,6 +39,30 @@
 
 ---
 
+## Executive summary
+
+An end-to-end, production-like banking lakehouse built to show how batch, CDC, data quality, governance, analytical serving and CI/CD fit together as **one platform** rather than a collection of isolated pipelines.
+
+Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and published for analytical access through Trino and dbt.
+
+The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
+
+Spark owns history: **10 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **9 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+
+Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
+
+CI goes past unit tests. A reproducible Docker-based Trino/Iceberg topology runs **34 Trino-backed integration tests** against real pipeline output, including a real SCD Type 2 transition. The gate is path-aware, blocks the pull request when it is relevant, and was deliberately negative-tested: an intentional data assertion failure was pushed, the pull request went red, and the revert restored it.
+
+Two principles shaped that work.
+
+> **A green test is only valuable if the invariant itself is correct.**
+>
+> **A fallback that looks defensive can be a fabricated measurement.**
+
+Several defects surfaced not because a job crashed, but because a previously green path was validating the wrong thing or suppressing the real failure signal. They are written up in [Engineering Decisions & Failures Found](#engineering-decisions--failures-found).
+
+---
+
 ## What is this project?
 
 **Banking Data Platform** is a production-like data engineering project that implements two complementary ingestion paths for banking workloads:
@@ -51,7 +75,7 @@ The platform combines:
 - **Apache Spark** for batch and streaming processing
 - **Apache Iceberg + MinIO** for lakehouse storage
 - **Apache Airflow** for orchestration
-- **Trino + dbt + Apache Superset** for analytical serving
+- **Trino + dbt** for analytical publication and query access
 - **OpenMetadata** for catalog, lineage, and governance
 - **Prometheus + Grafana** for CDC freshness observability
 - **Dead Letter Queue (DLQ)** handling for malformed CDC events
@@ -72,304 +96,95 @@ Silver Current
 
 # Architecture
 
-<p align="center">
-  <a href="docs/images/banking_data_platform_architecture_3.png">
-    <img
-      src="docs/images/banking_data_platform_architecture_3.png"
-      alt="Banking Data Platform — End-to-End Batch and Near-Real-Time Lakehouse Architecture"
-      width="100%"
-    />
-  </a>
-</p>
+The platform is easier to understand as five cooperating planes than as a list
+of technologies. The first four move and shape data; the fifth controls and
+verifies all of them.
 
-<p align="center">
-  <em>
-    End-to-end architecture showing scheduled batch analytics,
-    near-real-time CDC, Apache Iceberg Lakehouse processing,
-    orchestration, governance, analytical serving,
-    observability, and failure isolation.
-  </em>
-</p>
+```text
+┌──────────────────────────────────────────────┐
+│ 1. Operational sources                       │
+│    PostgreSQL — core banking, cards, digital │
+└───────────────────────┬──────────────────────┘
+                        │  batch path  +  change-data-capture path
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 2. Data movement                             │
+│    Spark JDBC · Debezium → Kafka             │
+│    Spark Structured Streaming                │
+└───────────────────────┬──────────────────────┘
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 3. Lakehouse transformation                  │
+│    Bronze → Silver → historical Gold         │
+│    Spark on Apache Iceberg                   │
+└───────────────────────┬──────────────────────┘
+                        ▼
+┌──────────────────────────────────────────────┐
+│ 4. Analytical serving                        │
+│    dbt, executed through Trino               │
+│    current-serving Iceberg tables            │
+└──────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════╗
+║ 5. Control, governance and evidence          ║
+║    Airflow · data contracts · data quality   ║
+║    OpenMetadata · CI · evidence manifest     ║
+║    — spans planes 1–4, not a stage after them║
+╚══════════════════════════════════════════════╝
+```
+
+### 1. Operational sources
+
+PostgreSQL is the operational source of truth across three banking domains:
+core banking, cards and CRM, and digital banking. Nothing downstream writes
+back to it.
+
+### 2. Data movement
+
+Two independent paths leave the source. A scheduled batch path reads over JDBC.
+A change-data-capture path streams the write-ahead log through Debezium and
+Kafka into Spark Structured Streaming, where malformed events are diverted to a
+dead-letter queue instead of failing the micro-batch.
+
+### 3. Lakehouse transformation
+
+Persistent state begins here. Bronze holds a full snapshot per close-of-business
+date; Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
+Gold holds the business marts. Every layer is partitioned by an explicit
+`cob_dt`, and business dates are derived explicitly from UTC storage rather than
+inherited from a session timezone.
+
+### 4. Analytical serving
+
+Spark owns history. dbt, executed through Trino, owns current-serving
+publication: it reads one explicit snapshot from historical Gold and publishes
+the current-serving Iceberg tables. A consumer of those tables never has to
+choose a partition, and a missing snapshot fails the build rather than serving
+stale data quietly.
+
+Publication and adoption are different claims. The serving tables are built and
+tested; no downstream consumer has yet been verified reading them — the
+Streamlit dashboard code and this README's SQL examples both query historical
+Gold directly. Tracked as TD-7.
+
+### 5. Control, governance and evidence
+
+This plane runs across the other four rather than after them. Airflow
+orchestrates and enforces completion contracts between layers; data contracts
+and data-quality checks constrain what each layer may contain; OpenMetadata
+carries catalog and lineage. CI stands up the whole topology and tests against
+real pipeline output. Published metrics come from a versioned evidence manifest
+and are drift-checked, so a number in this README cannot diverge from what was
+measured.
 
 ---
 
-## Architecture at a Glance
+For component relationships and major flows, see
+**[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
-### Batch Analytics Path
-
-```text
-PostgreSQL
-    ↓
-Spark JDBC
-    ↓
-Bronze Batch
-    ↓
-Spark Transformations
-    ↓
-Silver SCD1/SCD2 + Facts
-    ↓
-Spark Business Transformations
-    ↓
-Historical Gold  (10 tables, partitioned by cob_dt)
-    ↓
-dbt build --select tag:serving   (executed through Trino)
-    ↓
-iceberg.serving  (9 tables, one cob_dt snapshot)
-    ↓
-Trino
-    ↓
-Superset
-```
-
-Spark owns history; dbt owns what is served. A consumer reads
-`iceberg.serving.*` and never has to pick a `cob_dt`.
-
-### Near-Real-Time CDC Path
-
-```text
-PostgreSQL WAL
-    ↓
-Debezium
-    ↓
-Kafka
-    ↓
-Spark Structured Streaming
-    ↓
-CDC Validation
-   /             \
-valid           invalid
-  ↓                ↓
-Bronze CDC         DLQ
-  ↓
-CDC Consolidation
-  ↓
-Silver Current
-├── dim_customer_current
-└── dim_account_current
-```
-
-> **Architecture boundary:**  
-> `Silver Current` does **not** currently feed Gold.  
-> Gold analytics remain batch-derived in `portfolio-v1.1`.
-
----
-
-## Technical Architecture
-
-```mermaid
-flowchart LR
-
-    %% =========================================================
-    %% SOURCE
-    %% =========================================================
-
-    subgraph Source["Source System"]
-        PG["PostgreSQL 15<br/>Operational Source of Truth<br/>16 Source Datasets"]
-    end
-
-    %% =========================================================
-    %% BATCH
-    %% =========================================================
-
-    subgraph Batch["Scheduled Batch Processing"]
-        JDBC["Spark JDBC<br/>YAML-Driven ETL"]
-        BST["Spark<br/>Silver Transformations"]
-        GST["Spark<br/>Gold Transformations"]
-    end
-
-    %% =========================================================
-    %% CDC
-    %% =========================================================
-
-    subgraph CDC["Near-Real-Time CDC"]
-        WAL["PostgreSQL WAL"]
-        DEB["Debezium 2.6<br/>3 Connectors"]
-        KAF["Kafka<br/>12 CDC Topics"]
-        SSS["Spark Structured<br/>Streaming"]
-        VAL{"CDC<br/>Validation"}
-        CON["Config-Driven CDC Consolidation<br/><br/>Deduplication<br/>Watermark: timestamp + batch id<br/>(not partition-aware)<br/>Idempotent Iceberg MERGE"]
-        DLQ["CDC Dead Letter Queue<br/><br/>Raw Payload<br/>Error Context<br/>Kafka Metadata"]
-    end
-
-    %% =========================================================
-    %% LAKEHOUSE
-    %% =========================================================
-
-    subgraph Lakehouse["Apache Iceberg Lakehouse on MinIO"]
-
-        subgraph Bronze["Bronze Layer"]
-            BB["Bronze Batch<br/>16 Source Tables"]
-            BC["Bronze CDC<br/>6 Append-Only Tables<br/><br/>INSERT / UPDATE / DELETE / SNAPSHOT"]
-        end
-
-        subgraph Silver["Silver Layer"]
-            SA["Silver Analytical<br/><br/>8 Dimensions<br/>2 SCD Type 2<br/>6 SCD Type 1<br/>5 Fact Tables"]
-            SC["Silver Current-State<br/><br/>dim_customer_current — 10K<br/>dim_account_current — 30K"]
-        end
-
-        subgraph Gold["Gold Layer"]
-            GA["Historical Gold<br/>10 Tables — partitioned by cob_dt<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
-        end
-
-        subgraph ServingLayer["Serving Layer"]
-            SV["iceberg.serving<br/>9 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
-        end
-    end
-
-    %% =========================================================
-    %% SERVING
-    %% =========================================================
-
-    subgraph Serving["Serving & Analytics"]
-        TRINO["Trino<br/>SQL Query Engine"]
-        DBT["dbt<br/>Serving Publisher<br/>9 Models + Tests"]
-        SUP["Apache Superset<br/>Dashboards"]
-    end
-
-    %% =========================================================
-    %% GOVERNANCE
-    %% =========================================================
-
-    subgraph Governance["Governance & Security"]
-        CTR["33 Data Contracts"]
-        DQ["8 Data Quality Checks"]
-        OM["OpenMetadata<br/>53 Production Tables<br/>22 Lineage Edges"]
-        SEC["RBAC<br/>Column Masking<br/>PII Controls<br/>Audit Trail"]
-    end
-
-    %% =========================================================
-    %% OBSERVABILITY
-    %% =========================================================
-
-    subgraph Observability["Observability"]
-        FEX["CDC Freshness Exporter"]
-        PRM["Prometheus<br/>15s Scrape"]
-        GRF["Grafana<br/>CDC Pipeline Dashboard"]
-    end
-
-    %% =========================================================
-    %% ORCHESTRATION / CI-CD
-    %% =========================================================
-
-    subgraph Ops["Orchestration & CI/CD"]
-        AF["Apache Airflow<br/>16 DAGs"]
-        GH["GitHub Actions<br/>462 Automated Tests"]
-    end
-
-    %% =========================================================
-    %% BATCH FLOW
-    %% =========================================================
-
-    PG --> JDBC
-    JDBC --> BB
-    BB --> BST
-    BST --> SA
-    SA --> GST
-    GST --> GA
-
-    %% =========================================================
-    %% CDC FLOW
-    %% =========================================================
-
-    PG --> WAL
-    WAL --> DEB
-    DEB --> KAF
-    KAF --> SSS
-    SSS --> VAL
-
-    VAL -->|valid| BC
-    VAL -.->|invalid| DLQ
-
-    BC --> CON
-    CON --> SC
-
-    %% =========================================================
-    %% SERVING
-    %% =========================================================
-
-    GA --> DBT
-    DBT -->|dbt build --select tag:serving, via Trino| SV
-    SV --> TRINO
-    GA -.->|ad-hoc / historical queries| TRINO
-    TRINO --> SUP
-
-    %% =========================================================
-    %% ORCHESTRATION
-    %% =========================================================
-
-    AF -.-> JDBC
-    AF -.-> BST
-    AF -.-> GST
-    AF -.-> DBT
-    AF -.-> CON
-    AF -.-> DQ
-
-    GH -.-> AF
-
-    %% =========================================================
-    %% GOVERNANCE
-    %% =========================================================
-
-    CTR -.-> BB
-    CTR -.-> BC
-    CTR -.-> SA
-    CTR -.-> SC
-
-    DQ -.-> SA
-    DQ -.-> SC
-    DQ -.-> GA
-
-    OM -.-> BB
-    OM -.-> BC
-    OM -.-> SA
-    OM -.-> SC
-    OM -.-> GA
-
-    SEC -.-> TRINO
-    SEC -.-> SA
-    SEC -.-> GA
-
-    %% =========================================================
-    %% OBSERVABILITY
-    %% =========================================================
-
-    SC -.-> TRINO
-    TRINO -.-> FEX
-    FEX --> PRM
-    PRM --> GRF
-
-    %% =========================================================
-    %% STYLES
-    %% =========================================================
-
-    classDef source fill:#e0e0e0,stroke:#616161,color:#000
-    classDef batch fill:#bbdefb,stroke:#1565c0,color:#000
-    classDef cdc fill:#ffe0b2,stroke:#ef6c00,color:#000
-    classDef bronze fill:#d7ccc8,stroke:#5d4037,color:#000
-    classDef silver fill:#f5f5f5,stroke:#9e9e9e,color:#000
-    classDef gold fill:#fff9c4,stroke:#f9a825,color:#000
-    classDef serving fill:#e1bee7,stroke:#7b1fa2,color:#000
-    classDef governance fill:#b2dfdb,stroke:#00796b,color:#000
-    classDef observability fill:#c8e6c9,stroke:#2e7d32,color:#000
-    classDef dlq fill:#ffcdd2,stroke:#c62828,color:#000
-    classDef cicd fill:#c5cae9,stroke:#283593,color:#000
-
-    class PG source
-    class JDBC,BST,GST,AF batch
-    class WAL,DEB,KAF,SSS,VAL,CON cdc
-    class DLQ dlq
-    class BB,BC bronze
-    class SA,SC silver
-    class GA gold
-    class TRINO,DBT,SUP serving
-    class CTR,DQ,OM,SEC governance
-    class FEX,PRM,GRF observability
-    class GH cicd
-```
-
-For a deeper technical walkthrough, see:
-
-**[docs/architecture/architecture.md](docs/architecture/architecture.md)**
+For implementation detail — orchestration, CDC semantics, serving mechanics and
+time semantics — see
+**[docs/architecture/architecture.md](docs/architecture/architecture.md)**.
 
 ---
 
@@ -391,7 +206,6 @@ For a deeper technical walkthrough, see:
 | Data contracts and Data Quality        | ✅ Implemented |
 | OpenMetadata catalog and lineage       | ✅ Implemented |
 | Trino + dbt serving layer              | ✅ Implemented |
-| Apache Superset analytics              | ✅ Implemented |
 | Prometheus + Grafana monitoring        | ✅ Implemented |
 | GitHub Actions CI/CD                   | ✅ Implemented |
 
@@ -422,7 +236,8 @@ counts are ambiguous without them.
 | Data contracts             |             33 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              8 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             16 | Files defining at least one DAG (17 DAG objects — one file defines two)         |
-| Automated tests            |            462 | Python `def test_*` functions                                                   |
+| Automated tests            |            472 | Python `def test_*` functions                                                   |
+| Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             24 | 20 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
@@ -462,6 +277,125 @@ for why it is not comparable to the figure published in `v1.0`.
 
 ---
 
+# Engineering Decisions & Failures Found
+
+The numbers above are only worth reading because of how they were arrived at.
+Each item below is a defect that existed while the pipeline reported success,
+the reason it stayed invisible, and the check that now prevents its return.
+
+Two of them were found in the verification tooling itself.
+
+---
+
+### Join fan-out silently inflated aggregate amounts
+
+Two Gold models joined two raw fact tables at the wrong grain. `COUNT(DISTINCT)`
+stayed correct, so the tables looked plausible; only `SUM()` was multiplied.
+
+*Why it stayed hidden:* a fan-out corrupts sums while leaving distinct counts
+intact, and nothing compared the two.
+
+*Fix:* each source aggregates to `customer_id` in its own CTE before joining.
+
+*Evidence:* the RFM regression fixture asserts a monetary value of `1500.00` —
+ten account transactions and five card transactions at 100 each, with the refund
+excluded from monetary value but retained in frequency. The test protects the
+corrected join-grain semantics from regression.
+
+---
+
+### The same transaction was counted once per snapshot
+
+The published transaction figure summed `COUNT(*)` across several `cob_dt`
+partitions of full-snapshot fact tables, so one logical transaction contributed
+once per physical snapshot it appeared in.
+
+*Why it stayed hidden:* every individual query was correct. The error was in
+what "a transaction" meant.
+
+*Fix:* count distinct `(domain, transaction_id)` within one snapshot — domain
+included, because an id is only unique inside its own namespace.
+
+*Evidence:* the corrected figure is in [Verified Portfolio Snapshot](#verified-portfolio-snapshot);
+the retired claim is kept in the evidence manifest under `superseded_claim`
+rather than deleted.
+
+---
+
+### Three passing tests protected a wrong assumption
+
+Bronze uniqueness tests compared whole-table `COUNT(*)` against whole-table
+`COUNT(DISTINCT key)`. That encodes "Bronze holds exactly one snapshot", which
+contradicts a full-snapshot-per-day architecture.
+
+*Why it stayed hidden:* they passed. The fixture had a single day, so the wrong
+invariant and the right one gave the same answer.
+
+*Fix:* assert the real invariant — a key appears at most once *within* each
+snapshot — by finding duplicate groups directly, so a failure names the offending
+key and snapshot.
+
+*Evidence:* they now pass while two snapshots exist, which the previous version
+could not have done. This is the clearest case in the project of a green test
+that was not a correct test.
+
+---
+
+### A child exit code was swallowed seven times
+
+Across the repository, failures were converted into success by `$?` read after a
+pipe, `|| true` on a critical path, an `sh -c` string ending in `echo`, and a
+fallback that turned a parse failure into a confident zero.
+
+*Why it stayed hidden:* the shapes look like defensive programming. A fallback
+value reads as caution, not as a fabricated measurement.
+
+*Fix, and what it uncovered:* removing these patterns exposed four real defects
+that had been running silently — schemas that were never created while the
+container exited zero, a Gold bootstrap that ran no jobs, a benchmark query that
+recorded a timing for a query that never executed, and a seed generator
+colliding with its own primary key.
+
+*Evidence:* recorded as its own debt item with every instance listed, because
+the durable fix is a static check for the pattern rather than another one-off
+patch.
+
+---
+
+### Readiness measured a proxy instead of the contract
+
+CI waited for a TCP port to open, then for an HTTP endpoint to answer. The
+property that actually matters is that Trino can *use* the Iceberg catalog.
+
+*Why it stayed hidden:* the workflow failed as a bare timeout that named no
+service, so four consecutive scheduled runs produced no usable signal.
+
+*Fix:* one semantic gate — `SHOW SCHEMAS FROM iceberg` executed through Trino —
+plus per-service readiness timings separated from image pull and build time.
+
+*Evidence:* the measurements disproved the original hypothesis. Image
+acquisition and PostgreSQL readiness were both far inside the budget that was
+being blamed, so raising the timeout would have fixed nothing.
+
+---
+
+### The verifier could falsify its own provenance
+
+The evidence generator recorded `git_dirty: false` whenever `--allow-dirty` was
+passed. The flag gated nothing else; falsifying the record was its only effect.
+
+*Why it stayed hidden:* it lived in the script whose purpose is to make claims
+trustworthy, and it was written to make a local run convenient.
+
+*Fix:* provenance always reports the truth; the flag decides whether the run may
+promote the canonical manifest, not what the record says.
+
+*Evidence:* a manifest built from a dirty tree pins a commit that does not
+describe what was measured — the one fact that makes it irreproducible, and
+exactly the fact the flag was erasing.
+
+---
+
 # Batch Pipeline
 
 ## Data Flow
@@ -481,7 +415,7 @@ Spark Business Transformations
     ↓
 Gold Analytics
     ↓
-Trino / dbt / Superset
+Trino / dbt
 ```
 
 Batch ingestion is driven by reusable YAML configuration and Spark ETL jobs.
@@ -1183,9 +1117,7 @@ Spark
 Current Serving Layer (9 materialized Iceberg tables)
           │
           ├── Trino
-          ├── Superset
-          ├── Streamlit
-          └── downstream SQL consumers
+          └── SQL consumers
 ```
 
 This boundary matters because objects created by one engine are not
@@ -1196,8 +1128,8 @@ actually serves them.
 
 ## Trino
 
-Interactive SQL access to Iceberg. Trino is the serving engine: dbt, Superset,
-Streamlit and the SQL examples in this README all go through it.
+Interactive SQL access to Iceberg. Trino is the query engine: dbt and the SQL
+examples in this README go through it.
 
 The Trino catalog is named `iceberg` (Trino derives the catalog name from
 `docker/init_trino/catalog/iceberg.properties`). Spark addresses the same
@@ -1240,12 +1172,6 @@ SERVING_COMPLETE(cob_dt)
 `dbt build` — not `dbt run` — so model creation and tests are one gate. Tests
 assert one row per customer, exactly one `cob_dt` per serving table, and that
 the served `cob_dt` equals the requested one.
-
----
-
-## Apache Superset
-
-Superset provides analytical dashboards over `iceberg.serving.*` through Trino.
 
 ---
 
@@ -1565,7 +1491,7 @@ Airflow
     ↓
 OpenMetadata
     ↓
-Superset / Analytics
+SQL consumers
 ```
 
 Runtime evidence:
@@ -1679,8 +1605,7 @@ Then open Airflow and run the required workflows according to their dependencies
 | Trino                    | http://localhost:8085         | SQL query engine                 |
 | Iceberg REST Catalog     | http://localhost:8181         | Iceberg catalog                  |
 | OpenMetadata             | http://localhost:8585         | Catalog / lineage                |
-| Apache Superset          | http://localhost:8088         | BI dashboards                    |
-| Streamlit                | http://localhost:8501         | Additional analytics application |
+| Streamlit                | http://localhost:8501         | Dashboard code, not runtime-verified — see TD-7 |
 | Prometheus               | http://localhost:9095         | Metrics                          |
 | Grafana                  | http://localhost:3000         | Monitoring dashboard             |
 | Freshness Exporter       | http://localhost:9119/metrics | Prometheus metrics               |
@@ -1798,7 +1723,6 @@ FEATURE FREEZE
 | Trino                | 443                    | Interactive SQL query engine |
 | dbt Core             | Repository-pinned      | Gold models and tests        |
 | OpenMetadata         | 1.5.6                  | Catalog, lineage, governance |
-| Apache Superset      | Repository-pinned      | Analytics dashboards         |
 | Prometheus           | Repository-pinned      | Metrics collection           |
 | Grafana              | Repository-pinned      | Metrics visualization        |
 | Docker Compose       | —                      | Local platform deployment    |
@@ -1812,10 +1736,7 @@ FEATURE FREEZE
 | Document                                                                   | Purpose                            |
 | -------------------------------------------------------------------------- | ---------------------------------- |
 | [Architecture](docs/architecture/architecture.md)                          | Detailed technical architecture    |
-| [Architecture Image](docs/images/banking_data_platform_architecture_3.png) | Portfolio architecture overview    |
 | [Demo](docs/demo/demo.md)                                                  | 5-minute project walkthrough       |
-| [Interview Talking Points](docs/interview/talking-points.md)               | Architecture and design discussion |
-| [P1 Interview Prep](docs/interview/p1-interview-prep.md)                   | CDC deep-dive questions            |
 | [Evidence](docs/evidence/)                                                 | Runtime screenshots                |
 | [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation/)                     | CDC consolidation verification     |
 | [P2 Observability Evidence](docs/evidence/p2-observability/)               | Observability verification         |
@@ -1906,7 +1827,7 @@ They do not replace the physical processing flow.
 
 # Interview-Ready Summary
 
-> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt/Superset analytical serving, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
+> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt analytical publication, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
 
 ---
 

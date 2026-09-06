@@ -102,7 +102,7 @@ Silver ──Spark SQL──▶ Gold (Marts)
 ### 4. Serving Flow
 
 ```
-Historical Gold ──dbt via Trino──▶ iceberg.serving.* ──▶ Trino / Superset / SQL
+Historical Gold ──dbt via Trino──▶ iceberg.serving.* ──▶ Trino / SQL consumers
 ```
 
 Spark owns Bronze, Silver and historical Gold. dbt, executed through Trino,

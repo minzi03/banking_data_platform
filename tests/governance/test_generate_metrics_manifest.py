@@ -640,3 +640,32 @@ class TestProvenanceIsNeverFalsified:
         assert gen.promote_canonical_if_verified(
             self._manifest(False), ["some blocking error"]
         ) is False
+
+
+class TestIntegrationTestsCollector:
+    """
+    `34 Trino-backed integration tests` là headline claim ở đầu README, nên nó
+    phải được ĐO chứ không gõ tay. Collector dùng cùng semantic đếm với
+    test_functions, nhưng scope đúng hai module mà gate PR-blocking chạy.
+    """
+
+    def test_counts_only_the_two_gated_modules(self, contract):
+        expected = sum(
+            len([
+                line for line in (gen.REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()
+                if line.strip().startswith("def test_")
+            ])
+            for rel in gen.INTEGRATION_TEST_MODULES
+        )
+        assert gen._integration_tests(contract) == expected
+
+    def test_is_smaller_than_the_whole_suite(self, contract):
+        """Nếu hai con số bằng nhau thì scope đã sai ở đâu đó."""
+        assert 0 < gen._integration_tests(contract) < gen._test_functions(contract)
+
+    def test_modules_named_in_the_collector_exist(self):
+        missing = [
+            rel for rel in gen.INTEGRATION_TEST_MODULES
+            if not (gen.REPO_ROOT / rel).exists()
+        ]
+        assert not missing, f"collector trỏ tới module không tồn tại: {missing}"
