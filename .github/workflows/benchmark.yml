@@ -292,66 +292,98 @@ jobs:
           echo "✅ Seed data generated"
 
       - name: Run full ETL pipeline
+        env:
+          COB_DT: "2026-01-01"
         run: |
-          echo "=== Running Bronze ETL ==="
-          for config in /opt/project/code_etl/bronze/configs/*.yml; do
-            table=$(basename "$config" .yml)
-            echo "  Ingesting $table..."
-            docker exec ci-spark-master /opt/spark/bin/spark-submit \
-              --master spark://spark-master:7077 \
-              --executor-memory 2g \
-              --executor-cores 2 \
-              /opt/project/code_etl/bronze/ingest.py \
-              --config "$config" \
-              --cob_dt 2026-01-01 || true
-          done
+          set -euo pipefail
+
+          # Ba layer đều gọi ĐÚNG entrypoint bootstrap canonical mà clean
+          # rebuild v1.1 đã chạy. Trước đây Bronze tự loop
+          # `code_etl/bronze/configs/*.yml` gọi `code_etl/bronze/ingest.py` —
+          # cả hai đường dẫn đều KHÔNG tồn tại (thực tế là
+          # code_etl/bronze/{core_banking,card_crm,digital_banking}/*.yml chạy
+          # qua code_etl/bronze/bootstrap/initial_load.py). Glob không khớp nên
+          # $config là chuỗi literal, và `|| true` nuốt lỗi: benchmark đo trên
+          # một Bronze layer rỗng mà vẫn báo thành công.
+          #
+          # -w /opt/project là bắt buộc: BRONZE_CONFIGS/SILVER/GOLD dùng đường
+          # dẫn tương đối và WORKDIR của image Spark là /opt/spark/work-dir,
+          # nơi code_etl/ không resolve được (đã kiểm bằng
+          # `docker compose exec spark-worker-1 pwd`).
+          #
+          # KHÔNG có `|| true` ở đây. Bronze fail thì benchmark vô nghĩa, nên
+          # workflow phải đỏ.
+          SPARK_SUBMIT="docker exec -w /opt/project ci-spark-worker-1 \
+            /opt/spark/bin/spark-submit \
+            --master spark://spark-master:7077 --deploy-mode client \
+            --executor-memory 2g"
+
+          echo "=== Running Bronze ETL (canonical bootstrap) ==="
+          $SPARK_SUBMIT /opt/project/code_etl/bronze/bootstrap/initial_load.py \
+            --jdbc_url "jdbc:postgresql://postgres:5432/${POSTGRES_DB}" \
+            --db_user "${POSTGRES_USER}" \
+            --db_password "${POSTGRES_PASSWORD}" \
+            --cob_dt "${COB_DT}"
 
           echo "=== Running Silver ETL ==="
-          docker exec ci-spark-master /opt/spark/bin/spark-submit \
-            --master spark://spark-master:7077 \
-            --executor-memory 2g \
-            /opt/project/code_etl/silver/bootstrap/initial_load.py \
-            --cob_dt 2026-01-01
+          $SPARK_SUBMIT /opt/project/code_etl/silver/bootstrap/initial_load.py \
+            --cob_dt "${COB_DT}"
 
           echo "=== Running Gold ETL ==="
-          docker exec ci-spark-master /opt/spark/bin/spark-submit \
-            --master spark://spark-master:7077 \
-            --executor-memory 2g \
-            /opt/project/code_etl/gold/bootstrap/initial_load.py \
-            --cob_dt 2026-01-01
+          $SPARK_SUBMIT /opt/project/code_etl/gold/bootstrap/initial_load.py \
+            --cob_dt "${COB_DT}"
 
           echo "✅ ETL pipeline complete"
 
       - name: Run benchmark queries
         run: |
+          set -euo pipefail
           echo "=== Running Performance Benchmark ==="
           echo "Duration: ${{ github.event.inputs.duration || 'medium' }}"
 
           # Create results file
           echo "query,execution_time_ms,rows_returned" > benchmark-results.csv
 
-          # Benchmark queries
+          # `lakehouse` là tên catalog của SPARK. Trong Trino catalog tên là
+          # `iceberg` — docker/init_trino/catalog/ chỉ có iceberg.properties.
+          # Query cũ dùng lakehouse.gold.* nên luôn CATALOG_NOT_FOUND.
           queries=(
-            "simple_count:SELECT COUNT(*) FROM lakehouse.gold.mart_customer_360:gold"
-            "rfm_segments:SELECT rfm_segment, COUNT(*) FROM lakehouse.gold.rfm_segment GROUP BY rfm_segment:gold"
-            "churn_analysis:SELECT churn_risk, COUNT(*) FROM lakehouse.gold.churn_prediction GROUP BY churn_risk:gold"
-            "customer_lookup:SELECT * FROM lakehouse.gold.mart_customer_360 WHERE customer_id = 1000:gold"
-            "branch_performance:SELECT branch_code, COUNT(*) FROM lakehouse.gold.mart_customer_360 GROUP BY branch_code:gold"
+            "simple_count|SELECT COUNT(*) FROM iceberg.gold.mart_customer_360"
+            "rfm_segments|SELECT rfm_segment, COUNT(*) FROM iceberg.gold.rfm_segment GROUP BY rfm_segment"
+            "churn_analysis|SELECT churn_risk, COUNT(*) FROM iceberg.gold.churn_prediction GROUP BY churn_risk"
+            "customer_lookup|SELECT * FROM iceberg.gold.mart_customer_360 WHERE customer_id = 1000"
+            "branch_performance|SELECT branch_code, COUNT(*) FROM iceberg.gold.mart_customer_360 GROUP BY branch_code"
           )
 
           for query_info in "${queries[@]}"; do
-            IFS=':' read -r name query schema <<< "$query_info"
+            IFS='|' read -r name query <<< "$query_info"
             echo "Running: $name"
 
+            out=$(mktemp)
+            err=$(mktemp)
+
+            # Exit code của Trino CLI là thẩm quyền cuối cùng. Pattern cũ —
+            # `result=$(docker exec ... 2>/dev/null | grep -v WARNING)` — trả về
+            # exit status của `grep`, nên một query hỏng vẫn cho benchmark một
+            # chuỗi rỗng trông hợp lệ. Tách stdout/stderr thì cũng không cần
+            # grep lọc WARNING nữa: cảnh báo terminal đi ra stderr.
             start_time=$(date +%s%N)
-            result=$(docker exec ci-trino trino --catalog iceberg --schema "$schema" --execute "$query" 2>/dev/null | grep -v WARNING | grep -v "^Aug")
+            if ! docker exec ci-trino trino \
+                  --catalog iceberg --schema gold \
+                  --output-format CSV \
+                  --execute "$query" >"$out" 2>"$err"; then
+              echo "::error::benchmark query '$name' thất bại"
+              cat "$err"
+              exit 1
+            fi
             end_time=$(date +%s%N)
 
             duration=$(( (end_time - start_time) / 1000000 ))
-            rows=$(echo "$result" | wc -l)
+            rows=$(wc -l < "$out")
 
             echo "$name,$duration,$rows" >> benchmark-results.csv
             echo "  $name: ${duration}ms, ${rows} rows"
+            rm -f "$out" "$err"
           done
 
           echo ""
