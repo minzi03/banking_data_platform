@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: d0442ac754bae7e71cff8c906f42bea1f2989674
+    git_commit: 0608191e69e8a4026909b1ea0d7405dbf13cde2e
     git_branch: main
     git_dirty: false
     portfolio_release: null
   runtime:
-    generated_at_utc: '2026-09-06T07:24:57Z'
+    generated_at_utc: '2026-09-06T09:15:28Z'
     requested_cob_dt: '2026-09-06'
     verification_scope: full
   environment:
@@ -453,9 +453,8 @@ metrics:
     metric_type: manual
     benchmark_type: local_source_to_silver
     sla: false
-    provenance: 'scripts/measure_cdc_freshness.py — UPDATE PostgreSQL → poll
-      silver.dim_customer_current qua Trino. Không query được từ catalog, nên
-      generator PRESERVE nguyên khối này.
+    provenance: 'scripts/measure_cdc_freshness.py — UPDATE PostgreSQL → poll silver.dim_customer_current
+      qua Trino. Không query được từ catalog, nên generator PRESERVE nguyên khối này.
 
       '
     methodology: postgres_commit_to_trino_silver_current
@@ -491,10 +490,15 @@ metrics:
     superseded_claim:
       release: portfolio-v1.0
       median_seconds: 49.8
-      trials_seconds: [28.2, 54.0, 51.1, 22.4, 49.8]
+      trials_seconds:
+      - 28.2
+      - 54.0
+      - 51.1
+      - 22.4
+      - 49.8
       why_not_comparable: 'Số v1.0 đo khi consolidation được chạy tay ngay sau khi
-        UPDATE, nên nó đo thời gian XỬ LÝ chứ không gồm thời gian chờ lịch. Ngoài ra
-        DAG cdc_consolidation_pipeline khi đó submit Spark từ container Airflow
+        UPDATE, nên nó đo thời gian XỬ LÝ chứ không gồm thời gian chờ lịch. Ngoài
+        ra DAG cdc_consolidation_pipeline khi đó submit Spark từ container Airflow
         (không có Iceberg jar) nên chưa từng chạy thành công qua Airflow — cadence
         thực tế chưa bao giờ nằm trong phép đo. Hai con số trả lời hai câu hỏi khác
         nhau và không được so sánh trực tiếp.
@@ -524,7 +528,7 @@ metrics:
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 444
+        value: 502
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
