@@ -517,6 +517,66 @@ jobs:
 
           echo "✅ ETL pipeline complete"
 
+      # =====================================================================
+      # TẠM THỜI — baseline evidence cho TD-1. Sẽ được THAY bằng job
+      # `Trino Integration` riêng, không phải xoá đi lặng lẽ.
+      #
+      # Mục đích: biết CHÍNH XÁC 34 test integration hiện tại gặp gì trên
+      # platform hiện tại, với đúng fixture TD-2 (một snapshot 2026-01-01).
+      # Chưa sửa catalog, chưa sửa uniqueness, chưa tạo snapshot thứ hai —
+      # nếu sửa trước thì fixture problem và test-semantics problem trộn vào
+      # nhau trong cùng một run và không phân loại được.
+      #
+      # Step này ĐƯỢC PHÉP đỏ. Không `continue-on-error`: exit code của pytest
+      # vẫn quyết định trạng thái workflow; log đi ra artifact qua một step
+      # `if: always()` riêng.
+      # =====================================================================
+      - name: 'BASELINE (TD-1): 34 Trino integration tests, unmodified'
+        run: |
+          set -euo pipefail
+          TESTS="tests/integration/test_data_quality.py tests/integration/test_etl_validation.py"
+
+          # Collection kiểm riêng: nếu số test đổi thì baseline không còn so
+          # sánh được với inventory đã chốt. Không pipe qua grep — capture rồi
+          # parse, đúng TD-5.
+          set +e
+          python -m pytest $TESTS -m integration --collect-only -q \
+            > /tmp/collect.log 2>&1
+          collect_rc=$?
+          set -e
+          cat /tmp/collect.log
+          if [ "$collect_rc" -ne 0 ]; then
+            echo "::error::collection thất bại (exit=${collect_rc})"
+            exit "$collect_rc"
+          fi
+          collected=$(grep -oE '^[0-9]+ tests collected' /tmp/collect.log | grep -oE '^[0-9]+' || echo 0)
+          echo "collected=${collected}"
+          if [ "$collected" -ne 34 ]; then
+            echo "::error::mong đợi 34 test, collect được ${collected}"
+            exit 1
+          fi
+
+          # Không --maxfail: baseline cần FULL pass/fail matrix trong một vòng.
+          set +e
+          python -m pytest $TESTS -m integration -vv --tb=short \
+            > /tmp/trino-integration-baseline.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/trino-integration-baseline.log
+
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Trino integration baseline failed (exit=${rc})"
+            exit "$rc"
+          fi
+
+      - name: Upload integration baseline log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trino-integration-baseline
+          path: /tmp/trino-integration-baseline.log
+          if-no-files-found: warn
+
       - name: Run benchmark queries
         run: |
           set -euo pipefail
