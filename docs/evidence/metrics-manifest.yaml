@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 004592201303570b441f539589e9200b14bf1f31
+    git_commit: 73e29290197d3321d87b20bca652d957bb137483
     git_branch: hardening/ci-trino-readiness
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T16:16:04Z'
+    generated_at_utc: '2026-09-06T16:16:52Z'
     requested_cob_dt: '2026-09-06'
     verification_scope: full
   environment:
@@ -62,12 +62,11 @@ manifest:
       skips: []
       rationale: Batch + CDC + serving + governance, tất cả đều bắt buộc.
   verification:
-    status: warning
+    status: verified
     generated_by: scripts/generate_metrics_manifest.py
     source_of_truth: trino
     errors: []
-    warnings:
-    - 'README drift: platform.automated_tests.test_functions value=461 declared=456'
+    warnings: []
     skipped: []
 metrics:
   source:
