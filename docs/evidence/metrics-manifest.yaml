@@ -523,7 +523,7 @@ metrics:
     automated_tests:
       test_functions:
         value: 461
-        declared: 461
+        declared: 462
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.

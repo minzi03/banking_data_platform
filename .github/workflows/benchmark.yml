@@ -22,9 +22,18 @@ on:
           - medium
           - long
 
+# Đo và báo cáo, KHÔNG sửa source of truth.
+#
+# Trước đây workflow này có `contents: write` và tự `git push` baseline lên
+# `main` mỗi lần chạy theo lịch. Đó là hai trách nhiệm khác nhau bị gộp làm một,
+# và nhánh ghi đó chưa từng chạy thành công lần nào (nó nằm sau bước dựng stack
+# vốn fail suốt), nên nó chưa bao giờ được kiểm chứng — lại còn kết thúc bằng
+# `git push || true`, nuốt luôn lỗi nếu có.
+#
+# Baseline nếu cần cập nhật tự động thì phải đi đường của mọi thay đổi source
+# khác: bot branch → PR → CI → review. Không phải schedule → push thẳng main.
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 env:
   POSTGRES_USER: banking_admin
@@ -596,13 +605,6 @@ jobs:
             cp benchmark-results.csv benchmark-baseline.csv
           fi
 
-      - name: Update baseline
-        if: github.event_name == 'schedule'
-        run: |
-          echo "=== Updating baseline ==="
-          cp benchmark-results.csv benchmark-baseline.csv
-          echo "Baseline updated"
-
       - name: Create benchmark report
         run: |
           echo "=== Creating benchmark report ==="
@@ -635,6 +637,8 @@ jobs:
 
           cat benchmark-report.md
 
+      # Baseline candidate đi ra artifact, không đi vào repo. Muốn nó thành
+      # baseline thật thì phải qua PR như mọi thay đổi source khác.
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
@@ -643,15 +647,6 @@ jobs:
             benchmark-results.csv
             benchmark-baseline.csv
             benchmark-report.md
-
-      - name: Commit baseline update
-        if: github.event_name == 'schedule'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add benchmark-baseline.csv
-          git commit -m "chore: Update benchmark baseline [skip ci]" || true
-          git push || true
 
       - name: Cleanup
         if: always()
