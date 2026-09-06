@@ -236,8 +236,19 @@ def generate_mcc_codes(config: dict) -> list[tuple]:
         groups = ["RETAIL", "FOOD", "TRAVEL", "SERVICES", "UTILITIES"]
         descs = ["General Retail", "Restaurant", "Gas Station", "Hotel",
                  "Airline", "Telecom", "Healthcare", "Education", "Entertainment"]
-        for i in range(existing + 1, 110):
-            code = f"{random.randint(1000, 9999)}"
+        # mcc_code là PRIMARY KEY. Trước đây mỗi mã lấy bằng
+        # random.randint(1000, 9999) độc lập, không kiểm trùng: với ~50 mã bốc
+        # từ 9000 giá trị, xác suất đụng nhau khoảng 13% MỖI LẦN CHẠY. Seed
+        # thất bại không đều đặn kiểu đó rất khó truy, và CI đã dính:
+        # `duplicate key value violates unique constraint "pk_mcc_code",
+        # Key (mcc_code)=(5967) already exists` sau hai lần chạy trước đó xanh.
+        #
+        # Bốc mẫu KHÔNG hoàn lại từ phần còn lại của không gian mã, loại sẵn
+        # những mã đã có trong config — hết trùng theo cấu trúc, không phải nhờ
+        # may mắn.
+        used = {row[0] for row in rows}
+        pool = [str(code) for code in range(1000, 10000) if str(code) not in used]
+        for code in random.sample(pool, 109 - existing):
             rows.append((
                 code,
                 random.choice(descs),
