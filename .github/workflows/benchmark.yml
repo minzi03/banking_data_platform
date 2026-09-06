@@ -422,36 +422,71 @@ jobs:
           #
           # KHÔNG có `|| true` ở đây. Bronze fail thì benchmark vô nghĩa, nên
           # workflow phải đỏ.
-          SPARK_SUBMIT="docker exec -w /opt/project ci-spark-worker-1 \
-            /opt/spark/bin/spark-submit \
-            --master spark://spark-master:7077 --deploy-mode client \
-            --executor-memory 2g"
+          # Mảng, không phải chuỗi: giữ đúng ranh giới argv và tránh
+          # word-splitting/globbing ngoài ý muốn. Chuỗi nhiều từ chỉ chạy được
+          # nhờ word-splitting cố ý, và khi bọc vào `if ! "$VAR"` thì quote lại
+          # biến cả chuỗi thành MỘT tên lệnh → command not found.
+          SPARK_SUBMIT=(
+            docker exec
+            -w /opt/project
+            ci-spark-worker-1
+            /opt/spark/bin/spark-submit
+            --master spark://spark-master:7077
+            --deploy-mode client
+            --executor-memory 2g
+          )
 
-          echo "=== Running Bronze ETL (canonical bootstrap) ==="
-          $SPARK_SUBMIT /opt/project/code_etl/bronze/bootstrap/initial_load.py \
+          # Wrapper chỉ làm ĐÚNG hai việc: phát annotation và propagate failure.
+          # Không tee, không grep, không pipeline mới — thêm một lớp quan sát
+          # quanh exit code chính là cách TD-5 sinh ra lần thứ sáu.
+          #
+          # `set +e ... rc=$? ... set -e` thay vì `if ! cmd; then rc=$?`: trong
+          # nhánh then của `if !`, $? là status của phép phủ định (0), không còn
+          # là exit code gốc. Ở đây ta muốn giữ nguyên rc thật để in ra.
+          run_stage() {
+            local label="$1"; shift
+            echo "::group::${label}"
+            set +e
+            "$@"
+            local rc=$?
+            set -e
+            echo "::endgroup::"
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::${label} — process thất bại (exit=${rc})"
+              exit "$rc"
+            fi
+          }
+
+          run_stage "C — Bronze process" "${SPARK_SUBMIT[@]}" \
+            /opt/project/code_etl/bronze/bootstrap/initial_load.py \
             --jdbc_url "jdbc:postgresql://postgres:5432/${POSTGRES_DB}" \
             --db_user "${POSTGRES_USER}" \
             --db_password "${POSTGRES_PASSWORD}" \
             --cob_dt "${COB_DT}"
 
+          echo "::group::D — Bronze state"
           assert_rows "bronze.core_customer" \
             "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
+          echo "::endgroup::"
 
-          echo "=== Running Silver ETL ==="
-          $SPARK_SUBMIT /opt/project/code_etl/silver/bootstrap/initial_load.py \
+          run_stage "E — Silver process" "${SPARK_SUBMIT[@]}" \
+            /opt/project/code_etl/silver/bootstrap/initial_load.py \
             --cob_dt "${COB_DT}"
 
           # fact_txn_account, không phải dim_customer: chỉ các bảng fact_* trong
           # Silver mang cob_dt (đã kiểm information_schema), và đây đúng là fact
           # nuôi mart_customer_360 — cũng là nơi hai bug P0 fan-out /
           # multi-snapshot từng nằm.
+          echo "::group::F — Silver state"
           assert_rows "silver.fact_txn_account" \
             "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account WHERE cob_dt = DATE '${COB_DT}'"
+          echo "::endgroup::"
 
-          echo "=== Running Gold ETL ==="
-          $SPARK_SUBMIT /opt/project/code_etl/gold/bootstrap/initial_load.py \
+          run_stage "G — Gold process" "${SPARK_SUBMIT[@]}" \
+            /opt/project/code_etl/gold/bootstrap/initial_load.py \
             --cob_dt "${COB_DT}"
 
+          echo "::group::H — Gold state + grain"
           assert_rows "gold.mart_customer_360" \
             "SELECT COUNT(*) FROM iceberg.gold.mart_customer_360 WHERE cob_dt = DATE '${COB_DT}'"
 
@@ -469,6 +504,7 @@ jobs:
             echo "::error::grain sai: ${rows} dòng cho ${distinct} khách hàng — fan-out"
             exit 1
           fi
+          echo "::endgroup::"
 
           echo "✅ ETL pipeline complete"
 
