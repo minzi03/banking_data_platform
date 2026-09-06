@@ -38,3 +38,24 @@ if [ "$RESULT" = "iceberg_catalog" ]; then
 else
     echo "❌ WARNING: iceberg_catalog database may not exist!"
 fi
+
+# =============================================================================
+# Airflow metadata database — BẮT BUỘC để Airflow khởi động
+# =============================================================================
+# docker-compose trỏ AIRFLOW__DATABASE__SQL_ALCHEMY_CONN vào postgres/airflow,
+# nhưng trước đây không script nào tạo database đó. Trên môi trường SẠCH,
+# airflow-init exit 0 (không báo lỗi) rồi scheduler và webserver chết ngay:
+#     OperationalError: database "airflow" does not exist
+# Đã runtime-proven trong lần clean rebuild.
+# =============================================================================
+echo "📦 Creating airflow metadata database..."
+AIRFLOW_DB_EXISTS=$(psql -v ON_ERROR_STOP=0 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -tAc "SELECT 1 FROM pg_database WHERE datname='airflow'" 2>/dev/null || echo "")
+if [ "$AIRFLOW_DB_EXISTS" = "1" ]; then
+    echo "  Database airflow already exists"
+else
+    if ! psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "CREATE DATABASE airflow;"; then
+        echo "  ❌ FAILED to create airflow database — Airflow sẽ không khởi động được!"
+        exit 1
+    fi
+    echo "  ✅ Database airflow created"
+fi

@@ -24,6 +24,19 @@ upstream_flags:
   - gold.cross_sell_segment
   - gold.mart_customer_360
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+  # Snapshot-backed source: phải tồn tại partition cob_dt đang xử lý.
+  # Thiếu partition mà vẫn chạy sẽ ghi Gold sai: model neo dim_customer (LEFT JOIN)
+  # cho ra đủ số dòng nhưng metric toàn 0; model neo fact cho ra rỗng. Cả hai đều
+  # là silent corruption nên phải fail trước khi transform.
+  require_snapshots:
+    - gold.rfm_segment
+    - gold.churn_prediction
+    - gold.cross_sell_segment
+    - gold.mart_customer_360
+
 sql: |
   SELECT
       r.customer_id, r.customer_sk,
@@ -49,3 +62,6 @@ sql: |
   LEFT JOIN lakehouse.gold.mart_customer_360 m
       ON r.customer_id = m.customer_id
       AND r.cob_dt = m.cob_dt
+  -- Chốt đúng snapshot đang xử lý: rfm_segment cũng là bảng nhiều cob_dt,
+  -- thiếu điều kiện này sẽ kéo toàn bộ lịch sử vào 1 partition cob_dt hôm nay.
+  WHERE r.cob_dt = DATE '{{ cob_dt }}'

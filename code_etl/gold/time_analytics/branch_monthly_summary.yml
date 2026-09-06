@@ -1,4 +1,18 @@
 # Gold: mart_branch_monthly_summary — Branch performance by month
+#
+# ─── Business-date semantics (timezone migration) ────────────────────────────
+# storage/instant = UTC   |   business timezone = Asia/Ho_Chi_Minh
+#
+# Timestamp KHÔNG được convert sang ICT; nó vẫn là instant UTC. Chỉ khi cần
+# NGÀY/THÁNG nghiệp vụ mới derive tường minh:
+#     CAST(from_utc_timestamp(<ts>, 'Asia/Ho_Chi_Minh') AS DATE)
+#
+# `CAST(<ts> AS DATE)` trần bucket theo session timezone của engine — Spark và
+# Trino từng lệch 29,2% số dòng vì việc đó. Biểu thức trên chỉ đúng dưới
+# session=UTC, và điều kiện đó được enforce bởi assert_utc_session().
+#
+# cob_dt KHÔNG đổi nghĩa: nó là orchestration/snapshot date, không phải hàm
+# của event timestamp.
 job:
   type: time_analytics
 
@@ -18,12 +32,22 @@ upstream_flags:
   - silver.dim_account
   - silver.fact_txn_account
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+  # Snapshot-backed source: phải tồn tại partition cob_dt đang xử lý.
+  # Thiếu partition mà vẫn chạy sẽ ghi Gold sai: model neo dim_customer (LEFT JOIN)
+  # cho ra đủ số dòng nhưng metric toàn 0; model neo fact cho ra rỗng. Cả hai đều
+  # là silent corruption nên phải fail trước khi transform.
+  require_snapshots:
+    - silver.fact_txn_account
+
 sql: |
   WITH txn_monthly AS (
       SELECT
           da.branch_code,
-          YEAR(CAST(t.txn_date AS DATE)) AS txn_year,
-          MONTH(CAST(t.txn_date AS DATE)) AS txn_month,
+          YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_year,
+          MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_month,
           COUNT(DISTINCT t.customer_id) AS active_customers,
           COUNT(t.txn_id) AS txn_count,
           COALESCE(SUM(ABS(t.txn_amount)), 0) AS total_txn_amount,
@@ -32,22 +56,24 @@ sql: |
           COALESCE(SUM(CASE WHEN t.debit_credit = 'D' THEN t.txn_amount ELSE 0 END), 0) AS total_debit_amount
       FROM lakehouse.silver.fact_txn_account t
       JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND da.is_current = 1
-      GROUP BY da.branch_code, YEAR(CAST(t.txn_date AS DATE)), MONTH(CAST(t.txn_date AS DATE))
+      WHERE t.cob_dt = DATE '{{ cob_dt }}'
+      GROUP BY da.branch_code, YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE))
   ),
   channel_ranked AS (
       SELECT
           da.branch_code,
-          YEAR(CAST(t.txn_date AS DATE)) AS txn_year,
-          MONTH(CAST(t.txn_date AS DATE)) AS txn_month,
+          YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_year,
+          MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_month,
           t.channel,
           COUNT(*) AS channel_cnt,
           ROW_NUMBER() OVER (
-              PARTITION BY da.branch_code, YEAR(CAST(t.txn_date AS DATE)), MONTH(CAST(t.txn_date AS DATE))
+              PARTITION BY da.branch_code, YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE))
               ORDER BY COUNT(*) DESC
           ) AS rn
       FROM lakehouse.silver.fact_txn_account t
       JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND da.is_current = 1
-      GROUP BY da.branch_code, YEAR(CAST(t.txn_date AS DATE)), MONTH(CAST(t.txn_date AS DATE)), t.channel
+      WHERE t.cob_dt = DATE '{{ cob_dt }}'
+      GROUP BY da.branch_code, YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), t.channel
   ),
   top_channel AS (
       SELECT branch_code, txn_year, txn_month, channel AS top_channel

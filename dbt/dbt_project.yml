@@ -25,12 +25,14 @@ clean-targets:
 # ==========================================================================
 models:
   banking:
-    # ─── SEMANTIC LAYER ──────────────────────────────────────────────────
-    # Semantic models + Gold sources
-    semantic:
-      +materialized: ephemeral
-      +schema: semantic
-      +tags: ["semantic"]
+    # ─── SERVING LAYER ───────────────────────────────────────────────────
+    # Object phục vụ do TRINO sở hữu, không phải Spark. Consumer thật
+    # (dbt / Superset / SQL trong README) đều đi qua Trino.
+    serving:
+      # view không khả dụng: Iceberg REST catalog của Trino không hỗ trợ createView
+      +materialized: table
+      +schema: serving
+      +tags: ["serving"]
 
 # ==========================================================================
 # VARIABLES (Global)

@@ -1,4 +1,18 @@
 # Gold: customer_transaction_summary — Transaction behavior 30d
+#
+# ─── Business-date semantics (timezone migration) ────────────────────────────
+# storage/instant = UTC   |   business timezone = Asia/Ho_Chi_Minh
+#
+# Timestamp KHÔNG được convert sang ICT; nó vẫn là instant UTC. Chỉ khi cần
+# NGÀY/THÁNG nghiệp vụ mới derive tường minh:
+#     CAST(from_utc_timestamp(<ts>, 'Asia/Ho_Chi_Minh') AS DATE)
+#
+# `CAST(<ts> AS DATE)` trần bucket theo session timezone của engine — Spark và
+# Trino từng lệch 29,2% số dòng vì việc đó. Biểu thức trên chỉ đúng dưới
+# session=UTC, và điều kiện đó được enforce bởi assert_utc_session().
+#
+# cob_dt KHÔNG đổi nghĩa: nó là orchestration/snapshot date, không phải hàm
+# của event timestamp.
 job:
   type: mart360
 
@@ -18,6 +32,17 @@ upstream_flags:
   - silver.fact_txn_account
   - silver.fact_card_txn
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+  # Snapshot-backed source: phải tồn tại partition cob_dt đang xử lý.
+  # Thiếu partition mà vẫn chạy sẽ ghi Gold sai: model neo dim_customer (LEFT JOIN)
+  # cho ra đủ số dòng nhưng metric toàn 0; model neo fact cho ra rỗng. Cả hai đều
+  # là silent corruption nên phải fail trước khi transform.
+  require_snapshots:
+    - silver.fact_txn_account
+    - silver.fact_card_txn
+
 sql: |
   WITH acct_txn AS (
       SELECT
@@ -28,8 +53,9 @@ sql: |
           COUNT(CASE WHEN debit_credit = 'D' THEN txn_id END) AS acct_debit_count_30d,
           MAX(txn_date) AS last_acct_txn_date
       FROM lakehouse.silver.fact_txn_account
-      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
-        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
       GROUP BY customer_id
   ),
   card_txn AS (
@@ -39,8 +65,9 @@ sql: |
           COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS card_txn_amount_30d,
           MAX(txn_date) AS last_card_txn_date
       FROM lakehouse.silver.fact_card_txn
-      WHERE CAST(txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
-        AND CAST(txn_date AS DATE) <= DATE '{{ cob_dt }}'
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
         AND status = 'SUCCESS'
       GROUP BY customer_id
   )

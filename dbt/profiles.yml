@@ -5,6 +5,12 @@
 # Connection: Trino → Iceberg
 # =============================================================================
 
+# ⚠ catalog PHẢI là `iceberg` — đó là tên catalog của Trino, quyết định bởi
+# tên file docker/init_trino/catalog/iceberg.properties.
+# `lakehouse` là tên phía SPARK (spark-defaults.conf). Dùng nhầm tên đó khiến
+# MỌI model fail CATALOG_NOT_FOUND, trong khi `dbt debug` vẫn báo
+# "All checks passed!" vì nó chỉ test kết nối chứ không validate catalog.
+# Vì thế có thêm tests/assert_gold_source_reachable.sql làm smoke test thật.
 banking:
   target: docker
 
@@ -14,7 +20,7 @@ banking:
       method: none
       host: localhost
       port: 8085
-      catalog: lakehouse
+      catalog: iceberg
       schema: semantic
       user: admin
       password: ""
@@ -27,7 +33,7 @@ banking:
       method: none
       host: trino
       port: 8080
-      catalog: lakehouse
+      catalog: iceberg
       schema: semantic
       user: admin
       password: ""
@@ -39,7 +45,7 @@ banking:
       method: none
       host: trino
       port: 8080
-      catalog: lakehouse
+      catalog: iceberg
       schema: semantic
       user: admin
       password: ""

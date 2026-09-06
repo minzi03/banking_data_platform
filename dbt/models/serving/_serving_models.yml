@@ -1,0 +1,87 @@
+version: 2
+
+# =============================================================================
+# Serving models — grain contract
+# =============================================================================
+# Cả 9 object đều grain customer_id. Ba ràng buộc bắt buộc cho mọi model:
+#   unique(customer_id)   → grain không vỡ (chống fan-out tái phát ở serving)
+#   not_null(customer_id) → khoá nghiệp vụ đầy đủ
+#   not_null(cob_dt)      → luôn biết đang phục vụ snapshot nào
+#
+# Điều kiện "row_count > 0" và "cob_dt = var" nằm ở singular test
+# tests/assert_serving_snapshot_alignment.sql vì nó so với tham số runtime.
+# =============================================================================
+
+models:
+  - name: rfm_segment_current
+    description: "RFM segmentation — current serving, wave 1, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: churn_prediction_current
+    description: "Churn risk (rule-based) — current serving, wave 1, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: customer_transaction_summary_current
+    description: "Transaction behaviour 30d — current serving, wave 1, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: customer_balance_summary_current
+    description: "Balance / AUM — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: customer_card_summary_current
+    description: "Card holding + card txn 30d — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: customer_product_summary_current
+    description: "Product holding — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: cross_sell_segment_current
+    description: "Cross-sell opportunity — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: campaign_target_current
+    description: "Campaign targeting — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: mart_customer_360_current
+    description: "Customer 360 — current serving, wave 3, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+

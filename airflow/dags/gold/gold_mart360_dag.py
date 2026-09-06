@@ -140,5 +140,21 @@ with TaskGroup("phase2_dependent", dag=dag) as phase2_group:
 # ── 5. Cờ end ────────────────────────────────────────────────────────────────
 dag_end = make_end_flag_task("dag_end", DAG_ID, "gold", dag, cob_dt=DATA_COB_DT)
 
+# ── 6. Cờ GOLD_COMPLETE — contract cho downstream ────────────────────────────
+# Hiện tại chỉ có MỘT Gold producer DAG chạy cả 10 job (mart360 + segmentation
+# + time_analytics), nên về mặt kỹ thuật downstream có thể sensor thẳng
+# `gold_mart360_dag`. Nhưng làm vậy trói downstream vào TÊN DAG:
+# nếu sau này Gold tách thành nhiều producer, mọi consumer phải sửa theo.
+#
+# `GOLD_COMPLETE` là contract ở mức dữ liệu, không phải mức DAG:
+#     "toàn bộ Gold của cob_dt=D đã hoàn tất"
+# Khi Gold tách DAG, chỉ producer cuối cùng ghi cờ này; consumer không đổi.
+#
+# Cờ nằm SAU phase2 nên chỉ được ghi khi cả 10 Gold job đã thành công.
+GOLD_COMPLETE_FLAG = "GOLD_COMPLETE"
+gold_complete = make_end_flag_task(
+    "gold_complete", GOLD_COMPLETE_FLAG, "gold", dag, cob_dt=DATA_COB_DT
+)
+
 # ─── Dependencies ─────────────────────────────────────────────────────────────
-dag_start >> check_silver >> phase1_group >> phase2_group >> dag_end
+dag_start >> check_silver >> phase1_group >> phase2_group >> dag_end >> gold_complete

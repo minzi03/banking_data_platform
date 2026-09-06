@@ -1,0 +1,62 @@
+version: 2
+
+# =============================================================================
+# Exposures — consumer thật của tầng serving
+# =============================================================================
+# Trước đây exposures trỏ vào `ref('sm_*_current')`. Nhưng toàn bộ model
+# `sm_*` là `materialized: ephemeral` — chúng KHÔNG tạo object nào trong
+# Iceberg, nên Superset/Power BI/notebook không thể query chúng. Khai báo
+# dependency vào ephemeral model là mô tả sai consumer path.
+#
+# Audit cho thấy cả 12 model `sm_*` đều là passthrough thuần: 0 rename có
+# nghĩa nghiệp vụ, 0 derived field, 0 semantic filtering. Giữ chúng chỉ tạo một
+# tầng alias rỗng nghĩa giữa serving và consumer, nên đã gỡ bỏ.
+#
+# Exposures giờ trỏ thẳng vào `serving.*` — object VẬT LÝ mà Trino phục vụ
+# được, đúng thứ Superset thật sự đọc.
+# =============================================================================
+
+exposures:
+  - name: superset_customer_360
+    type: dashboard
+    maturity: high
+    url: http://localhost:8088
+    description: >
+      Dashboard Customer 360 trên Superset, đọc trực tiếp iceberg.serving.*
+      qua Trino.
+    depends_on:
+      - ref('mart_customer_360_current')
+      - ref('customer_balance_summary_current')
+      - ref('customer_transaction_summary_current')
+      - ref('rfm_segment_current')
+      - ref('churn_prediction_current')
+      - ref('campaign_target_current')
+    owner:
+      name: Data Engineering
+      email: data-engineering@example.com
+
+  - name: streamlit_analytics
+    type: application
+    maturity: medium
+    url: http://localhost:8501
+    description: "Ứng dụng Streamlit, truy vấn serving layer qua Trino."
+    depends_on:
+      - ref('mart_customer_360_current')
+      - ref('rfm_segment_current')
+      - ref('customer_transaction_summary_current')
+    owner:
+      name: Data Engineering
+      email: data-engineering@example.com
+
+  - name: readme_sql_examples
+    type: analysis
+    maturity: medium
+    description: >
+      Các câu SQL ví dụ trong README. Chúng chạy qua Trino nên phải trỏ vào
+      serving object, không phải vào object chỉ Spark nhìn thấy.
+    depends_on:
+      - ref('mart_customer_360_current')
+      - ref('rfm_segment_current')
+    owner:
+      name: Data Engineering
+      email: data-engineering@example.com

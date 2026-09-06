@@ -49,52 +49,6 @@ PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- Current serving view: exactly 1 row per customer (latest cob_dt)
-CREATE OR REPLACE VIEW lakehouse.gold.mart_customer_360_current AS
-SELECT
-    customer_id,
-    customer_sk,
-    full_name_masked,
-    age,
-    gender,
-    primary_branch_code,
-    customer_segment,
-    kyc_status,
-    register_date,
-    total_accounts,
-    total_cards,
-    total_loans,
-    has_credit_card,
-    has_savings,
-    has_loan,
-    total_deposit_balance,
-    total_loan_outstanding,
-    aum_total,
-    aum_bucket,
-    txn_count_30d,
-    txn_amount_30d,
-    last_txn_date,
-    days_since_last_txn,
-    primary_channel,
-    interaction_count_90d,
-    last_interaction_date,
-    rfm_recency_score,
-    rfm_frequency_score,
-    rfm_monetary_score,
-    rfm_segment,
-    churn_flag,
-    cross_sell_credit_card_flag,
-    cob_dt
-FROM (
-    SELECT
-        t.*,
-        ROW_NUMBER() OVER (
-            PARTITION BY customer_id
-            ORDER BY cob_dt DESC
-        ) AS rn
-    FROM lakehouse.gold.mart_customer_360 t
-) x
-WHERE rn = 1;
-
 -- 2. CUSTOMER_BALANCE_SUMMARY
 CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_balance_summary (
     customer_id             BIGINT,
@@ -108,14 +62,6 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_balance_summary (
 USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
-
-CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_balance_summary_current AS
-SELECT customer_id, customer_sk, total_account_balance, avg_account_balance, aum_total, aum_bucket, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.customer_balance_summary t
-) x
-WHERE rn = 1;
 
 -- 3. CUSTOMER_TRANSACTION_SUMMARY
 CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_transaction_summary (
@@ -136,14 +82,6 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
-CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_transaction_summary_current AS
-SELECT customer_id, customer_sk, acct_txn_count_30d, acct_txn_amount_30d, acct_credit_count_30d, acct_debit_count_30d, card_txn_count_30d, card_txn_amount_30d, total_txn_count_30d, total_txn_amount_30d, last_txn_date, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.customer_transaction_summary t
-) x
-WHERE rn = 1;
-
 -- 4. CUSTOMER_PRODUCT_SUMMARY
 CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_product_summary (
     customer_id         BIGINT,
@@ -163,14 +101,6 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
-CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_product_summary_current AS
-SELECT customer_id, customer_sk, total_accounts, cnt_casa_active, cnt_td_active, total_cards, cnt_credit_cards, cnt_debit_cards, has_credit_card, has_savings, has_loan, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.customer_product_summary t
-) x
-WHERE rn = 1;
-
 -- 5. CUSTOMER_CARD_SUMMARY
 CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_card_summary (
     customer_id                     BIGINT,
@@ -189,14 +119,6 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_card_summary (
 USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
-
-CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_card_summary_current AS
-SELECT customer_id, customer_sk, total_cards, cnt_credit_active, cnt_debit_active, max_credit_limit, total_card_txn_count_30d, total_card_txn_amount_30d, avg_card_txn_amount_30d, distinct_merchant_categories, last_card_txn_date, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.customer_card_summary t
-) x
-WHERE rn = 1;
 
 -- =============================================================================
 -- SEGMENTATION — Customer segmentation tables
@@ -220,14 +142,6 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
-CREATE TABLE IF NOT EXISTS lakehouse.gold.rfm_segment_current AS
-SELECT customer_id, customer_sk, recency_days, frequency, monetary, r_score, f_score, m_score, rfm_score, rfm_segment, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.rfm_segment t
-) x
-WHERE rn = 1;
-
 -- 7. CHURN_PREDICTION
 CREATE TABLE IF NOT EXISTS lakehouse.gold.churn_prediction (
     customer_id         BIGINT,
@@ -245,14 +159,6 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
-CREATE TABLE IF NOT EXISTS lakehouse.gold.churn_prediction_current AS
-SELECT customer_id, customer_sk, txn_cnt_30d, txn_cnt_90d, txn_amt_30d, txn_amt_90d, days_since_last_txn, churn_risk, is_churn_candidate, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.churn_prediction t
-) x
-WHERE rn = 1;
-
 -- 8. CROSS_SELL_SEGMENT
 CREATE TABLE IF NOT EXISTS lakehouse.gold.cross_sell_segment (
     customer_id         BIGINT,
@@ -266,14 +172,6 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.cross_sell_segment (
 USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
-
-CREATE TABLE IF NOT EXISTS lakehouse.gold.cross_sell_segment_current AS
-SELECT customer_id, customer_sk, customer_segment, no_credit_card, no_debit_card, primary_opportunity, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.cross_sell_segment t
-) x
-WHERE rn = 1;
 
 -- 9. CAMPAIGN_TARGET
 CREATE TABLE IF NOT EXISTS lakehouse.gold.campaign_target (
@@ -300,14 +198,6 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
-CREATE TABLE IF NOT EXISTS lakehouse.gold.campaign_target_current AS
-SELECT customer_id, customer_sk, rfm_segment, rfm_score, recency_days, frequency, monetary, churn_risk, is_churn_candidate, days_since_last_txn, customer_segment, aum_total, aum_bucket, primary_branch_code, primary_opportunity, no_credit_card, campaign_type, cob_dt
-FROM (
-    SELECT t.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY cob_dt DESC) AS rn
-    FROM lakehouse.gold.campaign_target t
-) x
-WHERE rn = 1;
-
 -- =============================================================================
 -- TIME ANALYTICS — Branch-level aggregated views
 -- =============================================================================
@@ -333,3 +223,23 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_branch_monthly_summary (
 USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- RETIRED: current-serving objects
+-- =============================================================================
+-- 8 bảng `gold.*_current` (CTAS) và view `gold.mart_customer_360_current` đã
+-- được GỠ khỏi file này. Lý do, có bằng chứng runtime:
+--
+--   * CTAS chỉ chạy MỘT LẦN lúc init trên bảng lịch sử còn rỗng, không có job
+--     nào refresh → đo được 0 dòng trong khi Gold lịch sử có 10.000 (issue ⑤).
+--   * VIEW do Spark tạo KHÔNG hiển thị qua Trino
+--     (SHOW TABLES FROM iceberg.gold không có nó), trong khi Trino mới là
+--     serving engine cho dbt/Superset/README SQL.
+--
+-- Tầng phục vụ giờ do dbt + Trino sở hữu: `iceberg.serving.*`, dựng bởi
+-- dbt_serving_publish DAG với var cob_dt, kèm fail-loud tests.
+-- Ownership: Spark → Bronze/Silver/historical Gold. dbt+Trino → current serving.
+--
+-- ĐỪNG thêm lại `*_current` vào file này. Nếu cần một serving object mới, thêm
+-- model vào dbt/models/serving/.
+-- =============================================================================

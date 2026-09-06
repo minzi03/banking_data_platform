@@ -17,17 +17,33 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Mock shared modules before import
-sys.modules["utils"] = MagicMock()
-sys.modules["utils.logger"] = MagicMock()
+# Mock shared modules CHỈ trong lúc exec initial_load.py, rồi khôi phục ngay.
+#
+# Trước đây hai dòng stub này chạy ở module scope và không bao giờ restore, nên
+# `sys.modules["utils"]` bị thay bằng MagicMock cho MỌI test module được collect
+# sau file này — bất kỳ test nào import module thật có `from utils.x import y`
+# đều nổ `ModuleNotFoundError: 'utils' is not a package`.
+#
+# Việc restore an toàn: initial_load.py đã bind xong tên nó cần ngay tại thời
+# điểm exec, nên nó vẫn giữ mock trong globals của chính nó sau khi restore.
+_STUBBED = {"utils": MagicMock(), "utils.logger": MagicMock()}
+_SAVED = {name: sys.modules.get(name) for name in _STUBBED}
+sys.modules.update(_STUBBED)
 
-# Import via importlib
-_spec = importlib.util.spec_from_file_location(
-    "initial_load_mod",
-    str(PROJECT_ROOT / "code_etl" / "gold" / "bootstrap" / "initial_load.py")
-)
-_ilmod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_ilmod)
+try:
+    # Import via importlib
+    _spec = importlib.util.spec_from_file_location(
+        "initial_load_mod",
+        str(PROJECT_ROOT / "code_etl" / "gold" / "bootstrap" / "initial_load.py")
+    )
+    _ilmod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_ilmod)
+finally:
+    for name, previous in _SAVED.items():
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
 
 GOLD_JOB_ORDER = _ilmod.GOLD_JOB_ORDER
 parse_arguments = _ilmod.parse_arguments

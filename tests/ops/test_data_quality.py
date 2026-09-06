@@ -27,11 +27,27 @@ _spec = importlib.util.spec_from_file_location(
     str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "data_quality.py")
 )
 _dq_mod = importlib.util.module_from_spec(_spec)
-# Mock pyspark before exec
-sys.modules["pyspark"] = MagicMock()
-sys.modules["pyspark.sql"] = MagicMock()
-sys.modules["pyspark.sql.types"] = MagicMock()
-_spec.loader.exec_module(_dq_mod)
+
+# Mock pyspark CHỈ trong lúc exec, rồi khôi phục ngay.
+# pytest import toàn bộ test module ở giai đoạn collection TRƯỚC khi chạy test
+# nào, nên stub ở module scope mà không restore sẽ để lại MagicMock trong
+# sys.modules cho mọi test chạy sau — test nào cần pyspark thật sẽ chết với
+# `ValueError: pyspark.__spec__ is not set`.
+_STUBBED = {
+    "pyspark": MagicMock(),
+    "pyspark.sql": MagicMock(),
+    "pyspark.sql.types": MagicMock(),
+}
+_SAVED = {name: sys.modules.get(name) for name in _STUBBED}
+sys.modules.update(_STUBBED)
+try:
+    _spec.loader.exec_module(_dq_mod)
+finally:
+    for _name, _previous in _SAVED.items():
+        if _previous is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _previous
 
 load_rules = _dq_mod.load_rules
 check_row_count = _dq_mod.check_row_count

@@ -18,6 +18,10 @@ upstream_flags:
   - silver.dim_account
   - silver.dim_card
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+
 sql: |
   SELECT
       c.customer_id, c.customer_sk,

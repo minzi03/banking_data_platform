@@ -1,6 +1,6 @@
 # Banking Data Platform — Architecture
 
-> **Portfolio baseline:** `portfolio-v1.0`  
+> **Portfolio baseline:** `portfolio-v1.1`  
 > **Architecture style:** production-like local data platform  
 > **Primary patterns:** Medallion Lakehouse, Batch + CDC, SCD Type 1/2, append-only CDC, current-state consolidation, governance, observability, and failure isolation.
 
@@ -34,7 +34,11 @@ Silver SCD1/SCD2 + Facts
     ↓
 Spark Business Transformations
     ↓
-Gold Analytics
+Historical Gold  (10 tables, partitioned by cob_dt)
+    ↓
+dbt build --select tag:serving   (executed through Trino)
+    ↓
+iceberg.serving  (9 tables, one cob_dt snapshot)
     ↓
 Trino
     ↓
@@ -65,7 +69,7 @@ Silver Current
 ```
 
 > **Important:** `Silver Current` does **not** currently feed Gold.  
-> Gold analytics remain batch-derived in the `portfolio-v1.0` architecture.
+> Gold analytics remain batch-derived in the `portfolio-v1.1` architecture.
 
 ---
 
@@ -98,7 +102,7 @@ flowchart LR
         KAF["Kafka<br/>12 CDC Topics"]
         SSS["Spark Structured<br/>Streaming"]
         VAL{"CDC<br/>Validation"}
-        CON["Config-Driven<br/>CDC Consolidation<br/><br/>Deduplication<br/>Per-Partition Watermarks<br/>Idempotent Iceberg MERGE"]
+        CON["Config-Driven<br/>CDC Consolidation<br/><br/>Deduplication<br/>Watermark: timestamp + batch id<br/>(not partition-aware)<br/>Idempotent Iceberg MERGE"]
         DLQ["CDC Dead Letter Queue<br/><br/>Raw Payload<br/>Error Context<br/>Kafka Metadata"]
     end
 
@@ -119,7 +123,11 @@ flowchart LR
         end
 
         subgraph Gold["Gold Layer"]
-            GA["Gold Analytics<br/>18 Analytics Tables<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
+            GA["Historical Gold<br/>10 Tables — partitioned by cob_dt<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
+        end
+
+        subgraph ServingLayer["Serving Layer"]
+            SV["iceberg.serving<br/>9 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
         end
     end
 
@@ -129,7 +137,7 @@ flowchart LR
 
     subgraph Serving["Query, Transformation & Analytics"]
         TRINO["Trino<br/>Interactive SQL Query Engine"]
-        DBT["dbt<br/>12 Gold Semantic Models<br/>Tests & Documentation"]
+        DBT["dbt<br/>Serving Publisher<br/>9 Models + Tests"]
         SUP["Apache Superset<br/>Dashboards & Analytics"]
     end
 
@@ -171,7 +179,7 @@ flowchart LR
         DEV["Developer"]
         GH["GitHub"]
         GHA["GitHub Actions"]
-        TEST["Tests / Validation<br/>312 Automated Tests"]
+        TEST["Tests / Validation<br/>451 Automated Tests"]
         DOCKER["Docker Compose"]
     end
 
@@ -206,10 +214,11 @@ flowchart LR
     %% SERVING
     %% =========================================================
 
-    GA --> TRINO
+    GA --> DBT
+    DBT -->|dbt build --select tag:serving, via Trino| SV
+    SV --> TRINO
+    GA -.->|ad-hoc / historical queries| TRINO
     TRINO --> SUP
-
-    DBT -.->|build / test Gold models via Trino| TRINO
 
     %% =========================================================
     %% ORCHESTRATION
@@ -218,6 +227,7 @@ flowchart LR
     AF -.-> JDBC
     AF -.-> BST
     AF -.-> GST
+    AF -.-> DBT
     AF -.-> CON
     AF -.-> DQ
     AF -.-> MAINT
@@ -460,7 +470,16 @@ This representation is appropriate for historical and point-in-time analytics.
 
 Gold tables are produced from the **batch Silver analytical model**.
 
-The current portfolio baseline contains **18 Gold analytics tables**.
+The current portfolio baseline contains:
+
+- **10 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
+- **9 current-serving tables** — dbt-managed in `iceberg.serving`, published
+  through Trino
+
+The 8 `gold.*_current` CTAS tables and the Spark-only
+`mart_customer_360_current` view were retired. The CTAS tables were created once
+at initialization and never refreshed; the Spark view was not visible through
+Trino, which is the serving engine.
 
 Representative analytical outputs include:
 
@@ -972,29 +991,55 @@ Neither replaces PostgreSQL as the operational source of truth.
 
 Five local runtime trials measured the elapsed time from a PostgreSQL source change until the corresponding value was observable in the Silver current-state table.
 
+### Methodology
+
+```text
+t0 = PostgreSQL COMMIT of an UPDATE to core_banking.customer
+t1 = the new value is readable in silver.dim_customer_current, queried via Trino
+```
+
+`t1` is taken at the consumer-facing table through the query engine, so the
+measurement includes the wait for the next scheduled consolidation run. That
+wait dominates the result and is the point: it is the delay a consumer sees.
+
+Consolidation runs on `*/10 * * * *`. Trials run back to back do **not** sample
+the position of the commit within that window randomly — each trial ends exactly
+when a consolidation run completes, so the next commits at offset ~0 and waits
+almost a full window (observed: 355s, 596s, 599s against a 600s cadence). Trials
+below are therefore separated by a uniform random sleep over `[0, cadence)`.
+
 |      Trial | E2E Source → Silver |
 | ---------: | ------------------: |
-|          1 |               28.2s |
-|          2 |               54.0s |
-|          3 |               51.1s |
-|          4 |               22.4s |
-|          5 |               49.8s |
-| **Median** |           **49.8s** |
+|          1 |              546.9s |
+|          2 |               65.9s |
+|          3 |              409.8s |
+|          4 |              255.0s |
+|          5 |              576.2s |
+| **Median** |          **409.8s** |
 
 ### Result
 
 ```text
-Range  : 22.4–54.0 seconds
-Median : 49.8 seconds
-Trials : 5
+Range   : 65.9–576.2 seconds
+Median  : 409.8 seconds
+Trials  : 5 (all observed)
+Cadence : 600 seconds (*/10 * * * *)
 ```
 
-All five verification trials completed in under one minute.
-
 > **Canonical claim:**  
-> Measured local source-to-Silver freshness below one minute.
+> Measured local PostgreSQL-to-Silver-Current CDC freshness: median 409.8s
+> across 5 trials (range 65.9–576.2s) at a 600s consolidation cadence.
 
-This is a local verification benchmark, not a production SLA.
+This is a local verification benchmark, not a production SLA. The latency is a
+scheduling choice, not a pipeline limit — the consolidation job itself finishes
+in roughly 30 seconds. Changing the cadence changes the number and invalidates
+this measurement.
+
+Measured on `portfolio-v1.1`. The `v1.0` figure (49.8s median) is not comparable:
+it ran consolidation manually right after the source `UPDATE`, so it timed
+processing only, and it predates the fix to `cdc_consolidation_pipeline`, which
+had been submitting Spark from the Airflow container — a container with no
+Iceberg jars — so consolidation had never run from Airflow at all.
 
 ---
 
@@ -1003,34 +1048,63 @@ This is a local verification benchmark, not a production SLA.
 Gold analytical tables are queried using Trino.
 
 ```text
-Apache Iceberg Gold
+Historical Gold (Spark, 10 tables)
         ↓
-      Trino
+   dbt via Trino
         ↓
-     Superset
+iceberg.serving.* (9 tables)
+        ↓
+Trino ──┬── Superset
+        ├── Streamlit
+        └── SQL consumers
 ```
-
-dbt operates on the curated Gold domain through Trino for:
-
-- semantic models
-- transformations
-- incremental models
-- tests
-- documentation
-
-The platform currently contains **12 dbt models**.
 
 ### Responsibility boundary
 
 ```text
 Spark
-= Bronze → Silver → Gold processing
+= Bronze → Silver → historical Gold
 
-dbt
-= downstream Gold semantic / analytical modeling
+dbt + Trino
+= current-serving layer
 ```
 
-dbt is therefore not the primary Medallion processing engine.
+dbt acts as the **serving publisher**, not the primary transformation engine.
+The platform contains **9 dbt serving models**. The previous 12 `sm_*` semantic
+models were removed: all were pure passthroughs and all were `ephemeral`, so
+they created no queryable object — declaring that consumers depended on them
+described a path that did not exist.
+
+Serving models are `materialized: table`, not views: the Trino Iceberg REST
+catalog does not support `createView`. Each model filters on an explicit
+`cob_dt` passed as a dbt var rather than `MAX(cob_dt)`, so a missing snapshot
+fails the build instead of silently serving stale data.
+
+### Catalog naming
+
+The same Iceberg warehouse has two engine-local names:
+
+```text
+Spark → lakehouse    (spark-defaults.conf, used in every ETL YAML)
+Trino → iceberg      (from init_trino/catalog/iceberg.properties)
+```
+
+### Publication contract
+
+```text
+GOLD_COMPLETE(cob_dt)
+        ↓
+serving publisher DAG   ← waits for the flag for the SAME cob_dt
+        ↓
+dbt build --select serving --vars cob_dt
+        ↓
+snapshot + grain tests
+        ↓
+SERVING_COMPLETE(cob_dt)
+```
+
+Both failure paths are enforced: without `GOLD_COMPLETE` the publisher does not
+run, and a failing `dbt build` leaves `SERVING_COMPLETE` unwritten.
 
 ---
 
@@ -1306,12 +1380,13 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | **Catalog**       | Production data tables         |             53 |
 |                   | Lineage edges                  |             22 |
 | **Orchestration** | Airflow DAGs                   |             16 |
-| **Testing**       | Automated tests                |            312 |
-| **Platform**      | Docker services                |             23 |
+| **Testing**       | Automated tests                |            451 |
+| **Platform**      | Docker services                |             24 |
 | **CDC Current**   | Customer rows                  |         10,000 |
 |                   | Account rows                   |         30,000 |
-| **CDC Freshness** | Median local E2E               |          49.8s |
-|                   | Local E2E range                |     22.4–54.0s |
+| **CDC Freshness** | Median local E2E               |         409.8s |
+|                   | Local E2E range                |    65.9–576.2s |
+|                   | Consolidation cadence          |           600s |
 
 ---
 
@@ -1495,7 +1570,7 @@ It does not currently demonstrate full production capabilities such as:
 - production SLO / incident management
 - large-scale capacity testing
 
-These are intentionally outside the `portfolio-v1.0` scope.
+These are intentionally outside the `portfolio-v1.1` scope.
 
 ---
 
@@ -1549,7 +1624,7 @@ Airflow, OpenMetadata, governance, CI/CD, and observability coordinate or inspec
 
 # 29. Interview-Ready Architecture Summary
 
-> The platform uses PostgreSQL as the operational source of truth and separates scheduled batch analytics from near-real-time CDC. The batch path uses Spark JDBC to populate an Iceberg Medallion Lakehouse, where Spark builds SCD1/SCD2 dimensions, fact tables, and Gold business marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists them as append-only Bronze CDC history, and a config-driven consolidation engine derives customer and account current-state tables using per-partition watermarks, deduplication, and idempotent Iceberg MERGE. Trino, dbt, and Superset serve analytical workloads, while Airflow, OpenMetadata, data contracts, data-quality checks, security controls, Prometheus/Grafana, and CI/CD provide cross-cutting platform capabilities.
+> The platform uses PostgreSQL as the operational source of truth and separates scheduled batch analytics from near-real-time CDC. The batch path uses Spark JDBC to populate an Iceberg Medallion Lakehouse, where Spark builds SCD1/SCD2 dimensions, fact tables, and Gold business marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists them as append-only Bronze CDC history, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. Trino, dbt, and Superset serve analytical workloads, while Airflow, OpenMetadata, data contracts, data-quality checks, security controls, Prometheus/Grafana, and CI/CD provide cross-cutting platform capabilities.
 
 ---
 
@@ -1575,3 +1650,58 @@ Future additions should only be considered when they close a clear architecture 
 ## Final Architecture Statement
 
 > **Production-like banking data platform combining batch analytics and near-real-time CDC on an Apache Iceberg Lakehouse, with historical and current-state modeling, replay-safe CDC consolidation, orchestration, governance, analytics serving, failure isolation, and data-freshness observability.**
+
+---
+
+# Time Semantics
+
+```text
+Storage / engine timezone : UTC
+Business timezone         : Asia/Ho_Chi_Minh
+Processing date           : explicit cob_dt
+Business date             : explicitly derived from UTC timestamps
+```
+
+Spark runs with a UTC session timezone, enforced at runtime by
+`assert_utc_session()` in `code_etl/shared/spark/spark_session.py`. Banking
+calendar dates are derived explicitly rather than inherited from an engine
+session:
+
+```sql
+-- Spark
+CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
+
+-- Trino
+CAST(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE)
+```
+
+Timestamps are never bulk-converted; they remain UTC instants. Only calendar
+dates and months are converted. `cob_dt` is an orchestration date and is
+independent of both.
+
+Spark and Trino therefore implement the same business-time contract
+independently, rather than agreeing by coincidence because their session
+timezones happen to match.
+
+---
+
+# Not Implemented
+
+Stated explicitly so this document is not read as claiming more than the code
+does:
+
+| Area | Status |
+| ---- | ------ |
+| CDC consolidation watermark | `(CDC timestamp, Spark batch id)` per table — **not** partition-aware |
+| Kafka topic / partition / offset in valid Bronze CDC | **not** persisted (DLQ path only) |
+| Gold from Silver Current | not wired; Gold remains batch-derived |
+| Exactly-once semantics | not claimed; processing is checkpointed, replay-safe and idempotent |
+
+---
+
+# Verified Figures
+
+Every count in this document is generated and checked against
+[`docs/evidence/metrics-manifest.yaml`](../evidence/metrics-manifest.yaml) by
+`scripts/generate_metrics_manifest.py`, and re-checked against README by
+`scripts/verify_readme_metrics.py`.

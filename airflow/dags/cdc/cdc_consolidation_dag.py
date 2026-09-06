@@ -5,6 +5,18 @@ Runs consolidation from Bronze CDC → Silver Current State.
 Executes after cdc_streaming_pipeline has ingested new events.
 
 Schedule: Every 10 minutes (or triggered manually)
+
+Submission model: `docker exec` into the Spark worker, matching every other
+Spark DAG in this repo. Airflow's own image carries only the pyspark wheel —
+no Iceberg runtime jars — so submitting from the scheduler container fails with
+`Cannot find catalog plugin class for catalog 'lakehouse'`. Running inside the
+worker also means the catalog / MinIO / timezone settings come from the image's
+spark-defaults.conf instead of being re-declared (and credentials re-pasted)
+here.
+
+This cadence is part of the published CDC freshness number: end-to-end
+freshness includes waiting for the next consolidation run. Changing the
+schedule changes that number, so re-measure if you change it.
 """
 
 from datetime import datetime, timedelta
@@ -36,28 +48,25 @@ CONSOLIDATION_CONFIGS = [
 ]
 
 
+SPARK_SUBMIT = (
+    "/usr/bin/docker exec banking-spark-worker-1 "
+    "/opt/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client "
+    "--conf spark.sql.shuffle.partitions=2 "
+    "--conf spark.driver.memory=512m "
+    "--conf spark.executor.memory=768m "
+    "--conf spark.executor.cores=1"
+)
+
+CONSOLIDATION_APP = "/opt/project/code_etl/cdc/consolidation/cdc_consolidation.py"
+
+
 def create_consolidation_task(config: dict) -> BashOperator:
     """Create a BashOperator for consolidation task."""
     return BashOperator(
         task_id=f"consolidate_{config['name']}",
-        bash_command=f"""
-            spark-submit \
-                --master spark://spark-master:7077 \
-                --deploy-mode client \
-                --conf spark.sql.shuffle.partitions=2 \
-                --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
-                --conf spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog \
-                --conf spark.sql.catalog.lakehouse.type=rest \
-                --conf spark.sql.catalog.lakehouse.uri=http://iceberg-rest:8181 \
-                --conf spark.sql.catalog.lakehouse.warehouse=s3a://lakehouse/lakehouse \
-                --conf spark.sql.catalog.lakehouse.io-impl=org.apache.iceberg.aws.s3.S3FileIO \
-                --conf spark.sql.catalog.lakehouse.s3.endpoint=http://minio:9000 \
-                --conf spark.sql.catalog.lakehouse.s3.path-style-access=true \
-                --conf spark.sql.catalog.lakehouse.s3.access-key-id=minioadmin \
-                --conf spark.sql.catalog.lakehouse.s3.secret-access-key=Minioadmin123 \
-                /opt/project/code_etl/cdc/consolidation/cdc_consolidation.py \
-                --config {config['config_path']}
-        """,
+        bash_command=(
+            f"{SPARK_SUBMIT} {CONSOLIDATION_APP} --config {config['config_path']}"
+        ),
         dag=None,  # Set by DAG definition
     )
 

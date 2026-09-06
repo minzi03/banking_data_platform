@@ -16,18 +16,31 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Import via importlib to avoid package conflicts
-sys.modules["pyspark"] = MagicMock()
-sys.modules["pyspark.sql"] = MagicMock()
-sys.modules["spark"] = MagicMock()
-sys.modules["spark.spark_session"] = MagicMock()
+# Import via importlib to avoid package conflicts.
+# Stub CHỈ trong lúc exec rồi khôi phục — xem giải thích trong
+# tests/ops/test_data_quality.py: stub không restore sẽ phá test chạy sau.
+_STUBBED = {
+    "pyspark": MagicMock(),
+    "pyspark.sql": MagicMock(),
+    "spark": MagicMock(),
+    "spark.spark_session": MagicMock(),
+}
+_SAVED = {name: sys.modules.get(name) for name in _STUBBED}
+sys.modules.update(_STUBBED)
 
 _spec = importlib.util.spec_from_file_location(
     "iceberg_maintenance_mod",
     str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "iceberg_maintenance.py")
 )
 _imod = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_imod)
+try:
+    _spec.loader.exec_module(_imod)
+finally:
+    for _name, _previous in _SAVED.items():
+        if _previous is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _previous
 
 FACT_TABLES = _imod.FACT_TABLES
 MART_TABLES = _imod.MART_TABLES

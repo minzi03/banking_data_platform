@@ -1,0 +1,828 @@
+manifest:
+  schema_version: '1.1'
+  project: banking_data_platform
+  build:
+    git_commit: d0442ac754bae7e71cff8c906f42bea1f2989674
+    git_branch: main
+    git_dirty: false
+    portfolio_release: null
+  runtime:
+    generated_at_utc: '2026-09-06T07:24:57Z'
+    requested_cob_dt: '2026-09-06'
+    verification_scope: full
+  environment:
+    execution_mode: local-docker-compose
+    trino_version: '443'
+    spark_version: 3.5.3
+    iceberg_version: 1.6.0
+    spark_catalog: lakehouse
+    trino_catalog: iceberg
+    session_timezone: UTC
+    business_timezone: Asia/Ho_Chi_Minh
+  time_semantics:
+    storage_timezone: UTC
+    business_timezone: Asia/Ho_Chi_Minh
+    business_date_derivation: explicit
+    session_timezone_dependency_allowed: false
+    canonical_spark_expression: CAST(from_utc_timestamp(<ts>, 'Asia/Ho_Chi_Minh')
+      AS DATE)
+    canonical_trino_expression: CAST(<ts> AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE)
+    note: '⚠ Biểu thức Spark chỉ ĐÚNG dưới session=UTC. Spark TIMESTAMP là LTZ: from_utc_timestamp
+      dịch instant, rồi CAST render theo SESSION timezone. Đo được: session=UTC cho
+      đúng ICT date; session=Asia/Ho_Chi_Minh dịch hai lần; session=America/New_York
+      sai hẳn. Vì thế session=UTC là precondition được ENFORCE bởi assert_utc_session()
+      trong code_etl/shared/spark/ spark_session.py, không phải giả định. cob_dt là
+      orchestration date, độc lập hoàn toàn với session timezone.
+
+      '
+  snapshot:
+    requested_cob_dt: '2026-09-06'
+    bronze_max_cob_dt: '2026-09-06'
+    silver_max_cob_dt: '2026-09-06'
+    gold_max_cob_dt: '2026-09-06'
+    bronze_partition_exists: true
+    silver_partition_exists: true
+    gold_partition_exists: true
+    layers_aligned: true
+  verification_scopes:
+    batch:
+      skips:
+      - cdc.
+      rationale: CDC path chưa chạy trong batch-only rebuild — không thu evidence
+        CDC.
+    cdc:
+      skips:
+      - bronze.
+      - silver.
+      - gold.
+      - transaction_scale.
+      - serving.
+      rationale: Chỉ verify nhánh CDC.
+    full:
+      skips: []
+      rationale: Batch + CDC + serving + governance, tất cả đều bắt buộc.
+  verification:
+    status: verified
+    generated_by: scripts/generate_metrics_manifest.py
+    source_of_truth: trino
+    errors: []
+    warnings: []
+    skipped: []
+metrics:
+  source:
+    source_datasets:
+      value: 16
+      declared: 16
+      metric_type: static
+      provenance: collector:bronze_ingestion_workloads
+      definition: 'Bronze ingestion workload configurations targeting source datasets.
+        Loại trừ template, registry và file metadata không thực thi được. Collector
+        PARSE YAML và chỉ đếm config có đủ contract shape (source + target + load
+        + sql) — templates/source_registry.yml tự bị loại bởi semantics, KHÔNG phải
+        bởi blacklist tên file.
+
+        '
+      required_keys:
+      - source
+      - target
+      - load
+      - sql
+    source_rows:
+      core_banking_customer:
+        value: null
+      core_banking_account:
+        value: null
+      core_banking_txn_account:
+        value: null
+      card_crm_card_txn:
+        value: null
+      digital_banking_online_transaction:
+        value: null
+  bronze:
+    batch_tables:
+      value: 16
+      declared: 16
+      metric_type: static
+      provenance: collector:bronze_ingestion_workloads
+      definition: Cùng definition với source.source_datasets — 1 workload = 1 bảng
+        Bronze batch.
+    cdc_tables:
+      value: 6
+      declared: 6
+      metric_type: static
+      provenance: collector:cdc_stream_configs
+      definition: CDC config có đủ kafka + target.
+    snapshot_rows:
+      core_customer:
+        cob_dt: null
+        rows: 10000
+        distinct_customer_id: 10000
+      core_account:
+        cob_dt: null
+        rows: 30000
+        distinct_account_id: 30000
+      core_txn_account:
+        cob_dt: null
+        rows: 1200000
+        distinct_txn_id: 1200000
+      core_card_txn:
+        cob_dt: null
+        rows: 600000
+        distinct_txn_id: 600000
+      core_online_transaction:
+        cob_dt: null
+        rows: 500000
+        distinct_transaction_id: 500000
+    partitions_present:
+      value: 1
+      declared: null
+      metric_type: runtime
+      provenance: query:bronze.partitions_present
+      definition: Số cob_dt partition trong bronze.core_txn_account.
+  silver:
+    dimensions:
+      total:
+        value: 8
+        declared: 8
+        metric_type: static
+        provenance: collector:silver_dimension_configs
+      scd_type_1:
+        value: 6
+        declared: 6
+        metric_type: static
+        provenance: collector:silver_dimension_configs
+        definition: YAML có job.type == scd_type1.
+      scd_type_2:
+        value: 2
+        declared: 2
+        metric_type: static
+        provenance: collector:silver_dimension_configs
+        definition: YAML có job.type == scd_type2.
+    facts:
+      total:
+        value: 5
+        declared: 5
+        metric_type: static
+        provenance: collector:silver_fact_configs
+        definition: YAML có job.type == fact_txn.
+    current_state_tables:
+      total:
+        value: 2
+        declared: 2
+        metric_type: static
+        provenance: collector:cdc_consolidation_configs
+    snapshot_rows:
+      fact_txn_account:
+        cob_dt: null
+        rows: 1200000
+        distinct_txn_id: 1200000
+      fact_card_txn:
+        cob_dt: null
+        rows: 600000
+        distinct_txn_id: 600000
+      fact_online_transaction:
+        cob_dt: null
+        rows: 500000
+        distinct_transaction_id: 500000
+      fact_crm_interaction:
+        cob_dt: null
+        rows: 50000
+        distinct_interaction_id: 50000
+      fact_support_ticket:
+        cob_dt: null
+        rows: 25000
+        distinct_ticket_id: 25000
+    scd2:
+      dim_customer:
+        total_rows: 10000
+        distinct_business_keys: 10000
+        current_rows: 10000
+        current_distinct_business_keys: 10000
+        duplicate_current_keys: 0
+        open_ended_rows: 10000
+        overlapping_intervals: 0
+      dim_account:
+        total_rows: 30000
+        distinct_business_keys: 30000
+        current_rows: 30000
+        current_distinct_business_keys: 30000
+        duplicate_current_keys: 0
+        open_ended_rows: 30000
+        overlapping_intervals: 0
+  transaction_scale:
+    account:
+      rows: null
+      distinct_transactions: null
+    card:
+      rows: null
+      distinct_transactions: null
+    online:
+      rows: null
+      distinct_transactions: null
+    curated_financial_transactions:
+      value: 2300000
+      declared: null
+      metric_type: runtime
+      provenance: query:transaction_scale.curated_financial_transactions
+      definition: 'Bản ghi giao dịch nghiệp vụ RIÊNG BIỆT trong MỘT Silver snapshot
+        (runtime.requested_cob_dt), gộp account + card + online. Uniqueness là (domain,
+        transaction_id), KHÔNG phải transaction_id đơn thuần: txn_id=123 ở account
+        và ở card là hai namespace khác nhau — UNION distinct trên id trần sẽ nuốt
+        mất giao dịch thật.
+
+        '
+      calculation:
+        mode: sum_distinct_per_fact
+        equivalent_to: COUNT(*) trên UNION ALL của (domain, id) đã distinct từng fact
+        components:
+        - silver.fact_txn_account.txn_id
+        - silver.fact_card_txn.txn_id
+        - silver.fact_online_transaction.transaction_id
+      superseded_claim:
+        value: 4600000
+        source: README portfolio-v1.0
+        suspected_cause: COUNT(*) cộng dồn qua nhiều cob_dt partition
+      account_distinct: 1200000
+      card_distinct: 600000
+      online_distinct: 500000
+  gold:
+    tables:
+      value: 10
+      declared: 10
+      metric_type: static
+      provenance: collector:gold_ddl_tables
+      definition: '10 bảng history partitioned by cob_dt + 8 bảng *_current, đếm từ
+        CREATE TABLE trong docker/init_iceberg/03_ddl_gold.sql.
+
+        '
+    legacy_gold_current_objects:
+      value: 0
+      declared: null
+      metric_type: runtime
+      provenance: query:gold.legacy_gold_current_objects
+      definition: 'Số CTAS table `gold.*_current` legacy CÒN TỒN TẠI (issue ⑤). Sau
+        migration hướng C, độ tươi là trách nhiệm của `serving.*` do dbt/Trino sở
+        hữu, nên metric này không đo stale nữa mà đo số object legacy cần retire.
+        Shadow validation lúc migrate: legacy = 0 dòng (CTAS trên bảng rỗng lúc init),
+        serving mới = 80,000 dòng. Chỉ retire SAU KHI serving_current_snapshot_alignment
+        = 0.
+
+        '
+    reconciliation:
+      churn_vs_transaction_summary_30d:
+        compared_customers: 10000
+        mismatched_customers: 0
+        max_amount_difference: '0.00'
+        definition: 'churn_prediction.txn_amt_30d phải BẰNG TUYỆT ĐỐI customer_transaction_summary.total_txn_amount_30d
+          — cùng population, cùng cửa sổ 30d, cùng định nghĩa card amount sau fix
+          P0.
+
+          '
+        tolerance: 0
+      churn_count_vs_transaction_summary_30d:
+        compared_customers: 10000
+        mismatched_customers: 0
+        tolerance: 0
+      rfm_vs_transaction_summary:
+        status: not_applicable
+        definition: 'KHÔNG so trực tiếp: RFM.monetary dùng cửa sổ 90 ngày, customer_transaction_summary
+          dùng 30 ngày. Lệch là ĐÚNG. Node này tồn tại để người sau không "sửa" thành
+          so bằng rồi làm CI đỏ vĩnh viễn. Cách reconcile RFM đúng là rfm_monetary_recompute_90d.
+
+          '
+      rfm_monetary_recompute_90d:
+        compared_customers: 10000
+        mismatched_customers: 0
+        tolerance: 0
+      branch_monthly_recompute:
+        compared_buckets: 1500
+        mismatched_buckets: 0
+        tolerance: 0
+        definition: 'Cross-engine reconciliation cho CALENDAR bucket. branch_monthly_summary
+          là model chứng minh timezone bug ảnh hưởng cả bucket tháng dương lịch, không
+          chỉ rolling 30/90 ngày. Trino recompute năm/tháng nghiệp vụ bằng business-time
+          contract rồi đối chiếu giá trị Spark đã ghi.
+
+          '
+    grain_checks:
+      mart_customer_360:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      rfm_segment:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      churn_prediction:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      cross_sell_segment:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      campaign_target:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      customer_balance_summary:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      customer_transaction_summary:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      customer_product_summary:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+      customer_card_summary:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_customer_ids: 0
+  serving:
+    gold_objects_declared:
+      value: 10
+      declared: null
+      metric_type: static
+      provenance: collector:gold_ddl_objects
+      definition: 'Số object gold khai báo trong 03_ddl_gold.sql = CREATE TABLE (18)
+        + CREATE VIEW (1) = 19.
+
+        '
+    objects_present:
+      value: 9
+      declared: 9
+      metric_type: runtime
+      provenance: query:serving.objects_present
+      definition: Số object trong schema `serving` — 9 model dbt current-serving.
+    current_snapshot_alignment:
+      value: 0
+      declared: null
+      metric_type: runtime
+      provenance: query:serving.current_snapshot_alignment
+      definition: 'Số serving object VI PHẠM hợp đồng phục vụ (kỳ vọng 0). Vi phạm
+        = rỗng, HOẶC grain vỡ (dup customer_id), HOẶC chứa nhiều hơn một cob_dt, HOẶC
+        phục vụ cob_dt khác snapshot đang verify. Đây là thay thế đúng bản chất cho
+        stale check cũ: không chỉ hỏi "có cũ không" mà hỏi "có phục vụ đúng snapshot
+        đã verify không".
+
+        '
+    trino:
+      visible_gold_objects:
+        value: 10
+        declared: null
+        metric_type: runtime
+        note: 'OBSERVATION, không còn invariant chặn. Nó ghi lại sự thật rằng DDL
+          Spark khai báo 19 object gold nhưng Trino chỉ thấy 18 — bài học "object
+          Spark tạo không tự động phục vụ được". Sau migration, hợp đồng phục vụ được
+          enforce ở serving.* chứ không ở gold.*.
+
+          '
+        provenance: query:serving.trino.visible_gold_objects
+        definition: 'Số object gold Trino nhìn thấy qua information_schema. Trino
+          là serving engine cho dbt / Superset / query ví dụ README, nên object Spark
+          tạo được mà Trino không thấy thì KHÔNG phục vụ được.
+
+          '
+      mart_customer_360_current_visible:
+        value: 0
+        declared: null
+        metric_type: runtime
+        provenance: query:serving.trino.mart_customer_360_current_visible
+        definition: 'Đo riêng object đã biết là thiếu, để finding có TÊN chứ không
+          chỉ là một con số chênh lệch. Xác minh khi rebuild: `SHOW VIEWS IN lakehouse.gold`
+          (Spark) CÓ nó, `SHOW TABLES FROM iceberg.gold` (Trino) KHÔNG. Trong khi
+          đó openmetadata/register_tables.py:159 vẫn đăng ký nó như một bảng phục
+          vụ. Đây là contract mismatch thật, không phải cosmetic.
+
+          '
+  cdc:
+    connectors:
+      value: 3
+      declared: 3
+      metric_type: static
+      provenance: collector:debezium_connectors
+    topics:
+      value: 12
+      declared: 12
+      metric_type: static
+      provenance: collector:debezium_topics
+      definition: '1 topic / bảng, đếm từ table.include.list của 3 connector (6 +
+        3 + 3). ⚠ docstring đầu register_connectors.py ghi 8/3/5 — SAI so với config
+        bên dưới nó. Collector đọc config, không đọc docstring.
+
+        '
+    bronze_cdc_tables:
+      value: 6
+      declared: 6
+      metric_type: static
+      provenance: collector:cdc_stream_configs
+    collection_status: collected
+    collection_reason: null
+    current_state:
+      dim_customer_current:
+        rows: 10000
+        distinct_customer_id: 10000
+        duplicate_keys: 0
+      dim_account_current:
+        rows: 30000
+        distinct_account_id: 30000
+        duplicate_keys: 0
+    timestamp_semantics:
+      technical_timestamps:
+      - __cdc_timestamp
+      - __cdc_timestamp_ms
+      - __ingestion_time
+      - __consolidated_at
+      technical_timestamp_timezone: UTC
+      business_date_derivation_applied: false
+      bronze_cdc_partitioning: DATE(__cdc_timestamp) — UTC day, kỹ thuật
+    consolidation_watermark:
+      implementation: timestamp_plus_spark_batch_id
+      partition_aware: false
+      kafka_offsets_persisted_in_valid_bronze: false
+      note: 'Đặt true CHỈ SAU KHI P1 persist Kafka (topic, partition, offset) vào
+        valid Bronze CDC và watermark key gồm partition. Hiện cdc_dlq.py drop kafka
+        metadata khỏi valid_df, meta.cdc_watermark chỉ có table_name. README không
+        được claim per-partition offset cho tới khi cả hai = true.
+
+        '
+  cdc_freshness:
+    metric_type: manual
+    benchmark_type: local_source_to_silver
+    sla: false
+    provenance: 'scripts/measure_cdc_freshness.py — UPDATE PostgreSQL → poll
+      silver.dim_customer_current qua Trino. Không query được từ catalog, nên
+      generator PRESERVE nguyên khối này.
+
+      '
+    methodology: postgres_commit_to_trino_silver_current
+    methodology_note: 't0 = COMMIT trên PostgreSQL, t1 = giá trị mới quan sát được
+      trong silver.dim_customer_current qua Trino. Số này BAO GỒM thời gian chờ lần
+      consolidation kế tiếp — đó là chủ ý: nó đo độ trễ mà người dùng thật sự thấy,
+      không phải microbenchmark của một component.
+
+      '
+    measured_on_release: portfolio-v1.1
+    measured_at_utc: '2026-09-06T08:50:50Z'
+    consolidation_cadence_seconds: 600
+    phase_sampling: randomised_uniform
+    phase_sampling_note: 'Chạy trial liên tiếp KHÔNG lấy mẫu ngẫu nhiên vị trí commit
+      trong chu kỳ cron: mỗi trial kết thúc đúng lúc một lần consolidation vừa xong,
+      nên trial kế tiếp commit ở offset ~0 và phải chờ gần trọn cửa sổ. Đo kiểu đó
+      cho 355s / 596s / 599s trên cadence 600s — dính trần, không phải median. Vì
+      vậy giữa các trial có sleep ngẫu nhiên đều trên [0, cadence).
+
+      '
+    trials_seconds:
+    - 546.9
+    - 65.9
+    - 409.8
+    - 255.0
+    - 576.2
+    sample_size: 5
+    observed_count: 5
+    min_seconds: 65.9
+    median_seconds: 409.8
+    max_seconds: 576.2
+    revalidate_required: false
+    superseded_claim:
+      release: portfolio-v1.0
+      median_seconds: 49.8
+      trials_seconds: [28.2, 54.0, 51.1, 22.4, 49.8]
+      why_not_comparable: 'Số v1.0 đo khi consolidation được chạy tay ngay sau khi
+        UPDATE, nên nó đo thời gian XỬ LÝ chứ không gồm thời gian chờ lịch. Ngoài ra
+        DAG cdc_consolidation_pipeline khi đó submit Spark từ container Airflow
+        (không có Iceberg jar) nên chưa từng chạy thành công qua Airflow — cadence
+        thực tế chưa bao giờ nằm trong phép đo. Hai con số trả lời hai câu hỏi khác
+        nhau và không được so sánh trực tiếp.
+
+        '
+  platform:
+    airflow_dag_files:
+      value: 16
+      declared: 16
+      metric_type: static
+      provenance: collector:airflow_dag_files
+    airflow_dag_objects:
+      value: 17
+      declared: 17
+      metric_type: static
+      provenance: collector:airflow_dag_objects
+      definition: 'cdc_streaming_dag.py định nghĩa 2 DAG. README dùng ''16 DAGs''
+        theo nghĩa số file — hợp lệ nếu đó là định nghĩa user-facing. Ghi cả hai để
+        không ai phải đoán.
+
+        '
+    automated_tests:
+      test_functions:
+        value: 451
+        declared: 451
+        metric_type: static
+        provenance: collector:test_functions
+        definition: Số hàm Python có tên khớp `def test_*`.
+      collected_pytest_nodes:
+        value: 444
+        declared: null
+        metric_type: static
+        provenance: collector:pytest_collected_nodes
+        definition: Số test case sau khi parametrize nở ra.
+      readme_primary_metric:
+        definition_binding: test_functions
+        note: 'Editorial decision, không phải technical truth duy nhất. README có
+          thể giữ ''312 automated test functions'' hoặc chuyển sang ''N collected
+          pytest test cases'' — miễn là nói rõ định nghĩa nào.
+
+          '
+    docker_services:
+      compose_defined:
+        value: 24
+        declared: null
+        metric_type: static
+        provenance: collector:compose_services
+        definition: Số key trong docker-compose.yml services:.
+      long_running:
+        value: 20
+        declared: 20
+        metric_type: static
+        provenance: collector:compose_services
+        definition: compose_defined trừ one_shot_services.
+      one_shot:
+        value: 4
+        declared: null
+        metric_type: static
+        provenance: collector:compose_services
+        definition: 'Container init/migration chạy xong là exit. Danh sách khai báo
+          tường minh bên dưới thay vì đoán theo restart policy — chỉ iceberg-init
+          có `restart: no`, nên heuristic đó không dùng được.
+
+          '
+      one_shot_services:
+      - mc
+      - iceberg-init
+      - airflow-init
+      - om-migrate
+    data_contracts:
+      value: 33
+      declared: 33
+      metric_type: static
+      provenance: collector:data_contracts
+    dq_check_types:
+      value: 8
+      declared: 8
+      metric_type: static
+      provenance: collector:dq_check_types
+      definition: Số key trong CHECK_DISPATCH của code_etl/shared/ops/data_quality.py.
+    dbt_models:
+      value: 9
+      declared: 9
+      metric_type: static
+      provenance: collector:dbt_models
+      definition: 'Tất cả materialized: ephemeral — không tạo object vật lý.'
+    business_vs_utc_date_rows:
+      total_rows: 1200000
+      divergent_date_rows: 350099
+      metric_type: runtime
+      declared: null
+      provenance: query:platform.business_vs_utc_date_rows
+      definition: 'OBSERVATION, không phải lỗi. Số dòng mà ngày nghiệp vụ ICT khác
+        ngày UTC. Trước migration metric này tên engine_timezone_consistency và đo
+        "hai engine bất đồng" (WARN). Sau migration nó ĐỔI NGHĨA: cả hai engine chạy
+        session UTC và cùng derive tường minh, nên con số ~29% (7/24) chỉ phản ánh
+        thực tế UTC+7 — bằng 0 mới đáng ngờ vì nghĩa là conversion không có tác dụng.
+        Invariant cross-engine thật nằm ở gold.reconciliation.*
+
+        '
+    openmetadata:
+      production_tables:
+        value: null
+        declared: 53
+        metric_type: runtime
+        provenance: api:openmetadata/tables
+        definition: 'Bảng đã catalog, KHÔNG phải bảng tồn tại trong Iceberg. Hai con
+          số có thể lệch nếu register_tables.py chạy thiếu.
+
+          '
+      lineage_edges:
+        value: null
+        declared: 22
+        metric_type: runtime
+        provenance: api:openmetadata/lineage
+invariants:
+  snapshot_layers_aligned:
+    metric: manifest.snapshot.layers_aligned
+    operator: eq
+    expected: true
+    severity: error
+    rationale: 'Full verified rebuild yêu cầu bronze/silver/gold cùng requested_cob_dt.
+      Partial rebuild được collect nhưng không được gắn verified.
+
+      '
+  snapshot_bronze_exists:
+    metric: manifest.snapshot.bronze_partition_exists
+    operator: eq
+    expected: true
+    severity: error
+  snapshot_silver_exists:
+    metric: manifest.snapshot.silver_partition_exists
+    operator: eq
+    expected: true
+    severity: error
+  snapshot_gold_exists:
+    metric: manifest.snapshot.gold_partition_exists
+    operator: eq
+    expected: true
+    severity: error
+  scd2_no_duplicate_current_keys:
+    metric: metrics.silver.scd2.*.duplicate_current_keys
+    operator: eq
+    expected: 0
+    severity: error
+  scd2_current_rows_match_distinct:
+    metric: metrics.silver.scd2.*.current_rows
+    compare_to: metrics.silver.scd2.*.current_distinct_business_keys
+    operator: eq
+    severity: error
+  scd2_no_overlapping_intervals:
+    metric: metrics.silver.scd2.*.overlapping_intervals
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: Invariant mà chỉ nhìn is_current không phát hiện được.
+  silver_fact_snapshot_not_duplicated:
+    metric: metrics.silver.snapshot_rows.fact_txn_account.rows
+    compare_to: metrics.silver.snapshot_rows.fact_txn_account.distinct_txn_id
+    operator: eq
+    severity: error
+    rationale: 'Trong PHẠM VI một cob_dt partition, rows phải bằng distinct business
+      key. rows > distinct nghĩa là partition tự trùng — gốc của con số 4.6M.
+
+      '
+  silver_card_snapshot_not_duplicated:
+    metric: metrics.silver.snapshot_rows.fact_card_txn.rows
+    compare_to: metrics.silver.snapshot_rows.fact_card_txn.distinct_txn_id
+    operator: eq
+    severity: error
+  silver_online_snapshot_not_duplicated:
+    metric: metrics.silver.snapshot_rows.fact_online_transaction.rows
+    compare_to: metrics.silver.snapshot_rows.fact_online_transaction.distinct_transaction_id
+    operator: eq
+    severity: error
+  gold_grain_no_duplicates:
+    metric: metrics.gold.grain_checks.*.duplicate_customer_ids
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: Grain 1 dòng/customer/cob_dt — vi phạm nghĩa là fan-out quay lại.
+  churn_reconciles_amount:
+    metric: metrics.gold.reconciliation.churn_vs_transaction_summary_30d.mismatched_customers
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: Invariant chính chống fan-out tái phát ở một trong hai model.
+  churn_reconciles_count:
+    metric: metrics.gold.reconciliation.churn_count_vs_transaction_summary_30d.mismatched_customers
+    operator: eq
+    expected: 0
+    severity: error
+  rfm_monetary_recompute_matches:
+    metric: metrics.gold.reconciliation.rfm_monetary_recompute_90d.mismatched_customers
+    operator: eq
+    expected: 0
+    severity: error
+  cdc_current_state_unique:
+    metric: metrics.cdc.current_state.*.duplicate_keys
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: Silver Current = 1 business key → 1 dòng.
+  serving_snapshot_alignment:
+    metric: metrics.serving.current_snapshot_alignment.value
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: 'Hợp đồng phục vụ: mọi serving object phải tồn tại, không rỗng, grain
+      đúng, và phục vụ ĐÚNG cob_dt đang verify. Thay cho gold_current_tables_not_stale
+      — giải quyết đúng bản chất thay vì chỉ làm manifest xanh.
+
+      '
+  serving_objects_complete:
+    metric: metrics.serving.objects_present.value
+    compare_to: metrics.serving.objects_present.declared
+    operator: eq
+    severity: error
+    rationale: Thiếu serving object nghĩa là consumer path bị hở.
+  legacy_gold_current_retired:
+    metric: metrics.gold.legacy_gold_current_objects.value
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: 'NÂNG TỪ WARN LÊN ERROR sau khi migration hoàn tất.
+
+      Trong giai đoạn chuyển tiếp đây là WARN vì legacy còn đóng vai trò fallback
+      trong lúc serving chưa có production refresh path. Giờ dbt_serving_publish DAG
+      đã được chứng minh cả positive lẫn negative path (GOLD_COMPLETE → dbt build
+      → SERVING_COMPLETE, và thiếu flag thì không chạy), nên legacy không còn vai
+      trò nào.
+
+      8 CTAS đã bị gỡ khỏi 03_ddl_gold.sql. Nếu chúng xuất hiện lại thì hoặc DDL bị
+      thêm lại, hoặc có đường bootstrap khác đang tạo chúng — cả hai đều là dual-ownership
+      và phải chặn.
+
+      '
+  worktree_clean:
+    metric: manifest.build.git_dirty
+    operator: eq
+    expected: false
+    severity: error
+    rationale: 'Canonical verified manifest chỉ promote khi worktree sạch, nếu không
+      git_commit không mô tả đúng code đã sinh ra số liệu. Chạy local có thể bỏ qua
+      bằng --allow-dirty (chỉ ghi run artifact).
+
+      '
+  legacy_spark_view_retired:
+    metric: metrics.serving.trino.mart_customer_360_current_visible.value
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: 'ĐẢO CHIỀU CÓ CHỦ Ý so với invariant trước đó.
+
+      Trước migration, câu hỏi đúng là "Spark view mart_customer_360_current có hiển
+      thị trên Trino không?" — trả lời KHÔNG, và đó là ERROR vì Trino là serving engine.
+
+      Sau migration hướng C, nhu cầu phục vụ đã do serving.mart_customer_360_current
+      (dbt/Trino sở hữu, reconcile 1:1) đáp ứng. Nên câu hỏi đúng bây giờ là "Spark
+      view đã được retire chưa?" — kỳ vọng value = 0, tức Trino KHÔNG còn thấy nó
+      vì nó đã bị xoá.
+
+      Sau retirement, CREATE OR REPLACE VIEW đã bị gỡ khỏi 03_ddl_gold.sql nên value
+      = 0 có nghĩa ĐÚNG: object không còn tồn tại, không phải "tồn tại nhưng Trino
+      không thấy". Vì thế nâng lên ERROR — nếu Trino lại thấy nó, nghĩa là có ai đó
+      tạo lại object legacy.
+
+      '
+  branch_monthly_cross_engine_reconciles:
+    metric: metrics.gold.reconciliation.branch_monthly_recompute.mismatched_buckets
+    operator: eq
+    expected: 0
+    severity: error
+    rationale: 'NÂNG LÊN ERROR sau timezone migration.
+
+      Trước migration, lệch date-bucket giữa hai engine là accepted debt (WARN) vì
+      kiến trúc chưa tuyên bố business timezone. Giờ contract đã tuyên bố tường minh:
+      instant = UTC, business date = derive explicit. Nên Spark và Trino ĐỘC LẬP implement
+      cùng một contract phải ra cùng kết quả — lệch là lỗi, không còn là debt.
+
+      Chọn branch_monthly vì nó phủ CALENDAR bucket; rolling window đã được phủ bởi
+      churn/rfm reconciliation.
+
+      '
+  static_metrics_match_declared:
+    metric: __all_static__
+    compare_to: __declared__
+    operator: eq
+    severity: warn
+    rationale: 'Khi lệch, việc cần làm là sửa README + declared, không phải chặn sinh
+      manifest. Đã biết lệch sẵn: docker_services, source_datasets, automated_tests.
+
+      '
+readme_bindings:
+- readme_claim: '| Source workloads           |             16 |'
+  manifest_path: metrics.source.source_datasets.value
+- readme_claim: '| Bronze CDC tables          |              6 |'
+  manifest_path: metrics.bronze.cdc_tables.value
+- readme_claim: '| Historical Gold tables     |             10 |'
+  manifest_path: metrics.gold.tables.value
+- readme_claim: '| Current-serving tables     |              9 |'
+  manifest_path: metrics.serving.objects_present.value
+- readme_claim: '| Curated transactions       |      2,300,000 |'
+  manifest_path: metrics.transaction_scale.curated_financial_transactions.value
+- readme_claim: '| Debezium connectors        |              3 |'
+  manifest_path: metrics.cdc.connectors.value
+- readme_claim: '| Kafka CDC topics           |             12 |'
+  manifest_path: metrics.cdc.topics.value
+- readme_claim: '| Data contracts             |             33 |'
+  manifest_path: metrics.platform.data_contracts.value
+- readme_claim: '| Data-quality check types   |              8 |'
+  manifest_path: metrics.platform.dq_check_types.value
+- readme_claim: '| Airflow DAG files          |             16 |'
+  manifest_path: metrics.platform.airflow_dag_files.value
+- readme_claim: '| Automated tests            |            451 |'
+  manifest_path: metrics.platform.automated_tests.test_functions.value
+- readme_claim: '| Docker Compose services    |             24 |'
+  manifest_path: metrics.platform.docker_services.compose_defined.value
+- readme_claim: 20 long-running + 4 one-shot initialization/migration jobs
+  manifest_path: metrics.platform.docker_services.long_running.value
+- readme_claim: '| CDC current-state rows     | 10,000 / 30,000 |'
+  manifest_path: metrics.cdc.current_state
+- readme_claim: '| Median local source→Silver | 409.8s |'
+  manifest_path: metrics.cdc_freshness.median_seconds
+  status: manual_benchmark
+- readme_claim: '| Range | 65.9–576.2s |'
+  manifest_path: metrics.cdc_freshness.min_seconds
+  status: manual_benchmark
+- readme_claim: '| Consolidation cadence | 600s (`*/10 * * * *`) |'
+  manifest_path: metrics.cdc_freshness.consolidation_cadence_seconds
+  status: manual_benchmark

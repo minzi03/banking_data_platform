@@ -1,4 +1,30 @@
-# Gold: customer_card_summary — Card stats + txn 30d
+# Gold: customer_card_summary — Card holding + card txn 30d
+# Note:
+#   - This table is a daily snapshot partitioned by cob_dt.
+#
+# Temporal semantics:
+#   cob_dt   = physical snapshot của fact table → chốt đúng 1 partition.
+#   txn_date = business event date, định nghĩa cửa sổ 30 ngày.
+#
+# Grain rule:
+#   dim_card (1 dòng / card) và fact_card_txn (1 dòng / txn) là hai grain khác
+#   nhau. Join thẳng cả hai vào dim_customer rồi GROUP BY sẽ nhân số dòng
+#   (n_cards × n_txns) và thổi phồng SUM(). Mỗi nguồn phải tự aggregate về
+#   grain customer_id trước.
+#
+# ─── Business-date semantics (timezone migration) ────────────────────────────
+# storage/instant = UTC   |   business timezone = Asia/Ho_Chi_Minh
+#
+# Timestamp KHÔNG được convert sang ICT; nó vẫn là instant UTC. Chỉ khi cần
+# NGÀY/THÁNG nghiệp vụ mới derive tường minh:
+#     CAST(from_utc_timestamp(<ts>, 'Asia/Ho_Chi_Minh') AS DATE)
+#
+# `CAST(<ts> AS DATE)` trần bucket theo session timezone của engine — Spark và
+# Trino từng lệch 29,2% số dòng vì việc đó. Biểu thức trên chỉ đúng dưới
+# session=UTC, và điều kiện đó được enforce bởi assert_utc_session().
+#
+# cob_dt KHÔNG đổi nghĩa: nó là orchestration/snapshot date, không phải hàm
+# của event timestamp.
 job:
   type: mart360
 
@@ -18,25 +44,64 @@ upstream_flags:
   - silver.dim_card
   - silver.fact_card_txn
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+  # Snapshot-backed source: phải tồn tại partition cob_dt đang xử lý.
+  # Thiếu partition mà vẫn chạy sẽ ghi Gold sai: model neo dim_customer (LEFT JOIN)
+  # cho ra đủ số dòng nhưng metric toàn 0; model neo fact cho ra rỗng. Cả hai đều
+  # là silent corruption nên phải fail trước khi transform.
+  require_snapshots:
+    - silver.fact_card_txn
+
 sql: |
+  WITH customers AS (
+      SELECT
+          customer_id,
+          customer_sk
+      FROM lakehouse.silver.dim_customer
+      WHERE is_current = 1
+  ),
+  -- Card holding — grain: customer_id
+  card_holding AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT card_id) AS total_cards,
+          COUNT(DISTINCT CASE WHEN card_type = 'CREDIT' AND status = 'ACTIVE' THEN card_id END) AS cnt_credit_active,
+          COUNT(DISTINCT CASE WHEN card_type = 'DEBIT' AND status = 'ACTIVE' THEN card_id END) AS cnt_debit_active,
+          MAX(CASE WHEN card_type = 'CREDIT' THEN credit_limit END) AS max_credit_limit
+      FROM lakehouse.silver.dim_card
+      GROUP BY customer_id
+  ),
+  -- Card transactions 30d — grain: customer_id
+  card_txn AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT txn_id) AS total_card_txn_count_30d,
+          COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS total_card_txn_amount_30d,
+          COALESCE(AVG(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount END), 0) AS avg_card_txn_amount_30d,
+          COUNT(DISTINCT merchant_category) AS distinct_merchant_categories,
+          MAX(txn_date) AS last_card_txn_date
+      FROM lakehouse.silver.fact_card_txn
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND status = 'SUCCESS'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  )
   SELECT
-      c.customer_id, c.customer_sk,
-      COUNT(DISTINCT cd.card_id) AS total_cards,
-      COUNT(DISTINCT CASE WHEN cd.card_type = 'CREDIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) AS cnt_credit_active,
-      COUNT(DISTINCT CASE WHEN cd.card_type = 'DEBIT' AND cd.status = 'ACTIVE' THEN cd.card_id END) AS cnt_debit_active,
-      MAX(CASE WHEN cd.card_type = 'CREDIT' THEN cd.credit_limit END) AS max_credit_limit,
-      COUNT(DISTINCT t.txn_id) AS total_card_txn_count_30d,
-      COALESCE(SUM(CASE WHEN t.txn_type NOT IN ('REFUND','REVERSAL') THEN t.txn_amount ELSE 0 END), 0) AS total_card_txn_amount_30d,
-      COALESCE(AVG(CASE WHEN t.txn_type NOT IN ('REFUND','REVERSAL') THEN t.txn_amount END), 0) AS avg_card_txn_amount_30d,
-      COUNT(DISTINCT t.merchant_category) AS distinct_merchant_categories,
-      MAX(t.txn_date) AS last_card_txn_date,
+      c.customer_id,
+      c.customer_sk,
+      COALESCE(h.total_cards, 0) AS total_cards,
+      COALESCE(h.cnt_credit_active, 0) AS cnt_credit_active,
+      COALESCE(h.cnt_debit_active, 0) AS cnt_debit_active,
+      h.max_credit_limit,
+      COALESCE(t.total_card_txn_count_30d, 0) AS total_card_txn_count_30d,
+      COALESCE(t.total_card_txn_amount_30d, 0) AS total_card_txn_amount_30d,
+      COALESCE(t.avg_card_txn_amount_30d, 0) AS avg_card_txn_amount_30d,
+      COALESCE(t.distinct_merchant_categories, 0) AS distinct_merchant_categories,
+      t.last_card_txn_date,
       DATE '{{ cob_dt }}' AS cob_dt
-  FROM lakehouse.silver.dim_customer c
-  LEFT JOIN lakehouse.silver.dim_card cd ON c.customer_id = cd.customer_id
-  LEFT JOIN lakehouse.silver.fact_card_txn t
-      ON c.customer_id = t.customer_id
-      AND t.txn_date >= DATE_ADD(DATE '{{ cob_dt }}', -30)
-      AND t.txn_date <= DATE '{{ cob_dt }}'
-      AND t.status = 'SUCCESS'
-  WHERE c.is_current = 1
-  GROUP BY c.customer_id, c.customer_sk
+  FROM customers c
+  LEFT JOIN card_holding h ON c.customer_id = h.customer_id
+  LEFT JOIN card_txn t ON c.customer_id = t.customer_id

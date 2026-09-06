@@ -155,10 +155,14 @@ def main():
         logger.info("LOAD SUMMARY")
         logger.info("=" * 60)
 
-        total_rows = 0
-        for name, count in results["success"]:
-            logger.info(f"  ✓ {name}: {count:,} rows")
-            total_rows += count
+        for name, _count in results["success"]:
+            # KHÔNG log "0 rows": row_count được hard-code 0 để tránh count()
+            # gây OOM trên bảng lớn, nên nó chưa bao giờ là số đo. Log số 0 như
+            # một measurement khiến người đọc kết luận sai — lần clean rebuild
+            # đã có tình huống Bronze báo "16/16 loaded, 0 rows" trong khi thực
+            # tế 2.3M dòng đã vào. Số dòng thật đo bằng
+            # docs/evidence/metrics-manifest.sql, không đọc từ log job.
+            logger.info(f"  ✓ {name}: loaded (row_count=not_measured)")
 
         if results["failed"]:
             logger.info("")
@@ -167,7 +171,7 @@ def main():
 
         logger.info("")
         logger.info(f"Total: {len(results['success'])}/{len(BRONZE_CONFIGS)} tables loaded")
-        logger.info(f"Total rows: {total_rows:,}")
+        logger.info("Total rows: not_measured (xem metrics-manifest để lấy số thật)")
         logger.info(f"Failed: {len(results['failed'])}")
 
     except Exception:
@@ -176,6 +180,17 @@ def main():
     finally:
         if spark:
             spark.stop()
+
+    # Failure propagation: bất kỳ bảng nào fail thì process phải exit != 0.
+    # Trước đây hàm này kết thúc bình thường sau `finally`, nên Bronze báo
+    # "16/16 tables loaded, Failed: 16" mà vẫn exit 0 — Make/Airflow/CI đều
+    # tưởng thành công. Silver và Gold bootstrap đã có sys.exit(1); Bronze thì
+    # chưa. Đã đo trực tiếp: BRONZE_EXIT=0 khi toàn bộ bảng fail.
+    if results["failed"]:
+        logger.error(
+            f"Bronze bootstrap FAILED: {len(results['failed'])}/{len(BRONZE_CONFIGS)} bảng lỗi"
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

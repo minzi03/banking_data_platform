@@ -78,6 +78,70 @@ def _run_zorder_if_needed(spark, target: str, job_type: str, logger):
         logger.warning(f"[{job_type}] Z-Order failed for {target}: {e}")
 
 
+def _qualify(ref: str, catalog: str) -> str:
+    """
+    `silver.fact_txn_account` → `lakehouse.silver.fact_txn_account`.
+    Tên đã đủ 3 phần thì giữ nguyên; tên 1 phần (temp view trong test) cũng giữ nguyên.
+    """
+    return f"{catalog}.{ref}" if ref.count(".") == 1 else ref
+
+
+def assert_source_snapshots(spark, config: dict, cob_dt: str, logger) -> None:
+    """
+    Guard chính cho fail-loud: mọi snapshot-backed source khai báo trong
+    validation.require_snapshots PHẢI có partition cob_dt đang xử lý.
+
+    Vì sao guard này cần thiết, và vì sao require_non_empty KHÔNG thay thế được:
+    các model grain customer neo vào dim_customer rồi LEFT JOIN fact. Nếu
+    partition fact của cob_dt không tồn tại, query vẫn trả về đủ 1 dòng/khách
+    với mọi metric = 0. Output KHÔNG rỗng, require_non_empty vẫn PASS, và Gold
+    bị ghi đè bằng số 0 trông rất hợp lý. Đó là silent corruption, tệ hơn rỗng.
+    """
+    validation = config.get("validation") or {}
+    required = validation.get("require_snapshots") or []
+    if not required:
+        return
+
+    catalog = config["target"]["catalog"]
+    missing = []
+    for ref in required:
+        table = _qualify(ref, catalog)
+        found = spark.sql(
+            f"SELECT 1 FROM {table} WHERE cob_dt = DATE '{cob_dt}' LIMIT 1"
+        ).take(1)
+        if not found:
+            missing.append(table)
+        else:
+            logger.info(f"Snapshot OK: {table} @ cob_dt={cob_dt}")
+
+    if missing:
+        raise RuntimeError(
+            f"Thiếu snapshot nguồn cho cob_dt={cob_dt}: {', '.join(missing)}. "
+            "Upstream chưa chạy hoặc partition đã bị xoá — dừng job thay vì "
+            "ghi Gold bằng dữ liệu rỗng/toàn 0."
+        )
+
+
+def assert_non_empty(result_df, config: dict, cob_dt: str, logger) -> None:
+    """
+    Guard phụ: chặn ghi đè partition Gold bằng kết quả rỗng.
+    Chỉ áp dụng khi validation.require_non_empty = true, vì có model
+    hoàn toàn có thể rỗng một cách hợp lệ.
+    """
+    validation = config.get("validation") or {}
+    if not validation.get("require_non_empty"):
+        return
+
+    if not result_df.take(1):
+        target = config["target"]["table"]
+        raise RuntimeError(
+            f"Gold job '{target}' không sinh dòng nào cho cob_dt={cob_dt}. "
+            "overwritePartitions() với DataFrame rỗng là no-op và sẽ để lại "
+            "partition cũ mà không ai biết."
+        )
+    logger.info(f"Non-empty check OK cho cob_dt={cob_dt}")
+
+
 def validate_config(config: dict):
     """
     Kiểm tra file YAML có đủ các section bắt buộc không.
@@ -102,11 +166,18 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
 
     Sau khi ghi, thực hiện Z-Ordering cho các cột thường xuyên query
     để cải thiện performance khi đọc dữ liệu.
+
+    Trước khi transform: assert snapshot nguồn tồn tại (fail loud).
+    Trước khi ghi: assert kết quả không rỗng (nếu config yêu cầu).
     """
     target   = get_target_table(config)
     job_type = config["job"]["type"]
 
+    assert_source_snapshots(spark, config, cob_dt, logger)
+
     result_df = load_source_df(spark, config, cob_dt)
+
+    assert_non_empty(result_df, config, cob_dt, logger)
 
     # Check table exists — if not, create with initial load
     if not table_exists(spark, target):

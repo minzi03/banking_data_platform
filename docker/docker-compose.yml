@@ -465,7 +465,32 @@ services:
           --conn-port '5432' \
           --conn-schema "${POSTGRES_DB}" \
           --conn-login "${POSTGRES_USER}" \
-          --conn-password "${POSTGRES_PASSWORD}"
+          --conn-password "${POSTGRES_PASSWORD}" || true
+        # postgres-etl: conn_id mà MỌI DAG dùng (etl_flag + các SqlSensor).
+        # Trước đây init chỉ tạo 'postgres-banking', nên trên môi trường sạch
+        # mọi sensor/flag task chết: "The conn_id `postgres-etl` isn't defined".
+        # Đã runtime-proven trong lần clean rebuild.
+        airflow connections add 'postgres-etl' \
+          --conn-type 'postgres' \
+          --conn-host 'postgres' \
+          --conn-port '5432' \
+          --conn-schema "${POSTGRES_DB}" \
+          --conn-login "${POSTGRES_USER}" \
+          --conn-password "${POSTGRES_PASSWORD}" || true
+        # Ba conn_id per-source mà 3 DAG Bronze JDBC dùng. Thiếu chúng thì DAG
+        # KHÔNG chỉ fail lúc chạy — nó fail ngay lúc import (conn được đọc ở
+        # top-level để sinh task), nên DAG biến mất khỏi UI thay vì hiện màu đỏ.
+        # Cả ba trỏ cùng một PostgreSQL; tách theo source domain để phân quyền
+        # sau này không phải sửa DAG.
+        for src in core-banking card-crm digital-banking; do
+          airflow connections add "postgres-$${src}" \
+            --conn-type 'postgres' \
+            --conn-host 'postgres' \
+            --conn-port '5432' \
+            --conn-schema "${POSTGRES_DB}" \
+            --conn-login "${POSTGRES_USER}" \
+            --conn-password "${POSTGRES_PASSWORD}" || true
+        done
         echo "Airflow initialization complete"
     environment:
       _AIRFLOW_DB_MIGRATE: "true"
@@ -683,12 +708,16 @@ services:
     mem_limit: 1g
     networks:
       - lakehouse_net
-    profiles:
-      - tools
 
 # =============================================================================
 # MONITORING LAYER (Prometheus + Grafana + Freshness Exporter)
 # =============================================================================
+    # Chạy thường trực để Airflow `docker exec` vào, cùng pattern với
+    # spark-worker mà DAG Silver/Gold đang dùng. Trước đây service này là
+    # one-shot (CMD dbt run rồi exit) và nằm sau profile `tools`, nên DAG dbt
+    # không thể gọi được — cộng thêm việc image Airflow KHÔNG cài dbt, tức là
+    # DAG dbt cũ chưa từng chạy được.
+    command: ["tail", "-f", "/dev/null"]
 
   prometheus:
     image: prom/prometheus:v2.51.0

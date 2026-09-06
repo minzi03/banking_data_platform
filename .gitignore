@@ -67,3 +67,9 @@ htmlcov/
 # ── Personal (interview prep, session logs) ──────────────────────────────────
 docs/interview/
 docs/session-report-*.md
+
+# ── Evidence run artifacts ────────────────────────────────────────────────────
+# Output của scripts/generate_metrics_manifest.py cho từng lần chạy. Bằng chứng
+# đã được chốt nằm trong docs/evidence/metrics-manifest.yaml (kèm build.git_commit
+# và kết quả invariant); các file dưới đây tái tạo được nên không commit.
+docs/evidence/generated/

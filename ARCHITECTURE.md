@@ -32,12 +32,21 @@
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    GOLD LAYER (Analytics)                            │   │
+│  │           HISTORICAL GOLD LAYER — 10 tables (Spark)                  │   │
 │  │  5 Mart360: mart_customer_360, customer_*_summary, ...             │   │
-│  │  3 Segments: rfm_segment, churn_prediction, cross_sell_segment     │   │
-│  │  2 Analytics: branch_monthly_summary, campaign_target              │   │
-│  │  Strategy: Aggregated marts                                         │   │
+│  │  4 Segments: rfm, churn, cross_sell, campaign_target               │   │
+│  │  1 Time analytics: branch_monthly_summary                          │   │
+│  │  Strategy: overwritePartitions by cob_dt                            │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │  GOLD_COMPLETE(cob_dt)
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              CURRENT-SERVING LAYER — 9 tables (dbt via Trino)               │
+│  iceberg.serving.*  —  one row per customer, one cob_dt                    │
+│  Owned by dbt, materialized as Iceberg tables, published per cob_dt         │
+│  SERVING_COMPLETE(cob_dt) written only after dbt build + tests pass         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -90,10 +99,41 @@ Silver ──Spark SQL──▶ Gold (Marts)
                        └── Config: YAML files in code_etl/gold/
 ```
 
-### 4. Query Flow
+### 4. Serving Flow
+
 ```
-Gold ──Trino──▶ SQL Query ──▶ Results
+Historical Gold ──dbt via Trino──▶ iceberg.serving.* ──▶ Trino / Superset / SQL
 ```
+
+Spark owns Bronze, Silver and historical Gold. dbt, executed through Trino,
+publishes the current-serving layer. Serving objects are created by the engine
+that serves them — a Spark-created view is not visible through Trino.
+
+Note the catalog naming: Spark addresses the warehouse as `lakehouse`, Trino as
+`iceberg` (the catalog name comes from
+`docker/init_trino/catalog/iceberg.properties`). Same data, two engine-local
+names.
+
+### 5. Time Semantics
+
+```
+Storage / engine timezone : UTC
+Business timezone         : Asia/Ho_Chi_Minh
+Processing date           : explicit cob_dt
+Business date             : explicitly derived from UTC timestamps
+```
+
+Spark runs with a UTC session timezone, enforced at runtime by
+`assert_utc_session()`. Banking calendar dates are derived explicitly:
+
+```sql
+-- Spark
+CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
+-- Trino
+CAST(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE)
+```
+
+Timestamps stay UTC instants; only calendar dates and months are converted.
 
 ## 🛡️ Governance Flow
 
@@ -174,11 +214,36 @@ Pipeline Run ──▶ LineageTracker ──▶ PostgreSQL (lineage_log)
 |-------|--------|---------------|
 | Source | 16 | ~2.6M |
 | Bronze | 16 (batch) + 6 (CDC) | ~2.6M + CDC events |
-| Silver | 13 (batch) + 2 (CDC current) | ~2.5M + 40K |
-| Gold | 10 | ~100K |
+| Silver | 13 (batch) + 2 (CDC current) | 2.3M distinct txns + 40K |
+| Historical Gold | 10 | ~100K |
+| Current serving | 9 (dbt/Trino) | ~90K |
+
+Transaction counts are distinct `(domain, transaction_id)` within one verified
+snapshot. Silver facts are full snapshots per `cob_dt`, so `COUNT(*)` across
+partitions counts the same transaction more than once.
 
 ## 🔗 Related
 
 - [README.md](README.md) — Quick start
 - [RUNBOOK.md](RUNBOOK.md) — Operations guide
 - [DEMO_GUIDE.md](DEMO_GUIDE.md) — Demo walkthrough
+
+---
+
+## 📐 Verified figures
+
+Every count in this document is generated and checked against
+[`docs/evidence/metrics-manifest.yaml`](docs/evidence/metrics-manifest.yaml).
+See [README.md](README.md#verified-portfolio-snapshot) for the full table with
+metric definitions — counts are ambiguous without them.
+
+## ⚠️ Not implemented
+
+Stated explicitly so the architecture is not read as claiming more than it does:
+
+- CDC consolidation watermark is `(CDC timestamp, Spark batch id)` per table.
+  It is **not** partition-aware, and Kafka topic/partition/offset are **not**
+  persisted on the valid Bronze CDC path (only on the DLQ path).
+- Gold analytics remain batch-derived; Silver Current does not feed Gold.
+- The platform does not claim end-to-end exactly-once semantics; it provides
+  checkpointed, replay-safe, idempotent processing.

@@ -110,12 +110,19 @@ Silver SCD1/SCD2 + Facts
     ↓
 Spark Business Transformations
     ↓
-Gold Analytics
+Historical Gold  (10 tables, partitioned by cob_dt)
+    ↓
+dbt build --select tag:serving   (executed through Trino)
+    ↓
+iceberg.serving  (9 tables, one cob_dt snapshot)
     ↓
 Trino
-   /     \
- dbt    Superset
+    ↓
+Superset
 ```
+
+Spark owns history; dbt owns what is served. A consumer reads
+`iceberg.serving.*` and never has to pick a `cob_dt`.
 
 ### Near-Real-Time CDC Path
 
@@ -143,7 +150,7 @@ Silver Current
 
 > **Architecture boundary:**  
 > `Silver Current` does **not** currently feed Gold.  
-> Gold analytics remain batch-derived in `portfolio-v1.0`.
+> Gold analytics remain batch-derived in `portfolio-v1.1`.
 
 ---
 
@@ -180,7 +187,7 @@ flowchart LR
         KAF["Kafka<br/>12 CDC Topics"]
         SSS["Spark Structured<br/>Streaming"]
         VAL{"CDC<br/>Validation"}
-        CON["Config-Driven CDC Consolidation<br/><br/>Deduplication<br/>Per-Partition Watermarks<br/>Idempotent Iceberg MERGE"]
+        CON["Config-Driven CDC Consolidation<br/><br/>Deduplication<br/>Watermark: timestamp + batch id<br/>(not partition-aware)<br/>Idempotent Iceberg MERGE"]
         DLQ["CDC Dead Letter Queue<br/><br/>Raw Payload<br/>Error Context<br/>Kafka Metadata"]
     end
 
@@ -201,7 +208,11 @@ flowchart LR
         end
 
         subgraph Gold["Gold Layer"]
-            GA["Gold Analytics<br/>18 Tables<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
+            GA["Historical Gold<br/>10 Tables — partitioned by cob_dt<br/><br/>Customer 360<br/>RFM<br/>Rule-Based Churn Risk<br/>Cross-Sell<br/>Campaign Analytics<br/>Customer Balance / AUM"]
+        end
+
+        subgraph ServingLayer["Serving Layer"]
+            SV["iceberg.serving<br/>9 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
         end
     end
 
@@ -211,7 +222,7 @@ flowchart LR
 
     subgraph Serving["Serving & Analytics"]
         TRINO["Trino<br/>SQL Query Engine"]
-        DBT["dbt<br/>12 Gold Models"]
+        DBT["dbt<br/>Serving Publisher<br/>9 Models + Tests"]
         SUP["Apache Superset<br/>Dashboards"]
     end
 
@@ -242,7 +253,7 @@ flowchart LR
 
     subgraph Ops["Orchestration & CI/CD"]
         AF["Apache Airflow<br/>16 DAGs"]
-        GH["GitHub Actions<br/>312 Automated Tests"]
+        GH["GitHub Actions<br/>451 Automated Tests"]
     end
 
     %% =========================================================
@@ -276,9 +287,11 @@ flowchart LR
     %% SERVING
     %% =========================================================
 
-    GA --> TRINO
+    GA --> DBT
+    DBT -->|dbt build --select tag:serving, via Trino| SV
+    SV --> TRINO
+    GA -.->|ad-hoc / historical queries| TRINO
     TRINO --> SUP
-    DBT -.->|build / test Gold models via Trino| TRINO
 
     %% =========================================================
     %% ORCHESTRATION
@@ -287,6 +300,7 @@ flowchart LR
     AF -.-> JDBC
     AF -.-> BST
     AF -.-> GST
+    AF -.-> DBT
     AF -.-> CON
     AF -.-> DQ
 
@@ -371,7 +385,7 @@ For a deeper technical walkthrough, see:
 | Spark Structured Streaming             | ✅ Implemented |
 | Append-only Bronze CDC                 | ✅ Implemented |
 | CDC consolidation into Silver Current  | ✅ Implemented |
-| Persisted CDC watermarks               | ✅ Implemented |
+| Persisted CDC watermarks               | ✅ Implemented (timestamp + batch id) |
 | Idempotent Iceberg MERGE               | ✅ Implemented |
 | Dead Letter Queue for malformed events | ✅ Implemented |
 | Data contracts and Data Quality        | ✅ Implemented |
@@ -385,31 +399,66 @@ For a deeper technical walkthrough, see:
 
 # Verified Portfolio Snapshot
 
-| Category          | Metric                         | Verified Value |
-| ----------------- | ------------------------------ | -------------: |
-| **Source**        | Source datasets                |             16 |
-| **Bronze**        | Batch tables                   |             16 |
-|                   | Append-only CDC tables         |              6 |
-| **Silver**        | SCD Type 2 dimensions          |              2 |
-|                   | SCD Type 1 dimensions          |              6 |
-|                   | Fact tables                    |              5 |
-|                   | CDC current-state tables       |              2 |
-| **Gold**          | Analytics tables               |             18 |
-| **Scale**         | Curated financial transactions |          4.6M+ |
-| **CDC**           | Debezium connectors            |              3 |
-|                   | Kafka CDC topics               |             12 |
-| **Serving**       | dbt models                     |             12 |
-| **Governance**    | Data contracts                 |             33 |
-|                   | Data-quality checks            |              8 |
-| **Catalog**       | Production data tables         |             53 |
-|                   | Lineage edges                  |             22 |
-| **Orchestration** | Airflow DAGs                   |             16 |
-| **Testing**       | Automated tests                |            312 |
-| **Platform**      | Docker services                |             23 |
-| **CDC Current**   | Customer rows                  |         10,000 |
-|                   | Account rows                   |         30,000 |
-| **CDC Freshness** | Median local E2E               |          49.8s |
-|                   | Local E2E range                |     22.4–54.0s |
+Every runtime value below is generated and checked against
+[`docs/evidence/metrics-manifest.yaml`](docs/evidence/metrics-manifest.yaml) by
+`scripts/generate_metrics_manifest.py`, then re-checked against this table by
+`scripts/verify_readme_metrics.py`. Definitions are part of the contract —
+counts are ambiguous without them.
+
+| Metric                     | Verified value | Definition                                                                     |
+| -------------------------- | -------------: | ------------------------------------------------------------------------------ |
+| Source workloads           |             16 | Executable Bronze ingestion configurations; templates and registries excluded   |
+| Bronze batch tables        |             16 | One per ingestion workload                                                      |
+| Bronze CDC tables          |              6 | Append-only change-history tables                                               |
+| Silver SCD Type 2 dims     |              2 | `dim_customer`, `dim_account`                                                   |
+| Silver SCD Type 1 dims     |              6 | Branch, product, card, employee, device, location                               |
+| Silver fact tables         |              5 | Transactional and interaction facts                                             |
+| Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
+| Historical Gold tables     |             10 | Spark-managed Gold history, partitioned by `cob_dt`                             |
+| Current-serving tables     |              9 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
+| Debezium connectors        |              3 | Runtime connector definitions                                                   |
+| Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
+| Data contracts             |             33 | Governance contract YAMLs                                                       |
+| Data-quality check types   |              8 | Supported DQ rule categories                                                    |
+| Airflow DAG files          |             16 | Files defining at least one DAG (17 DAG objects — one file defines two)         |
+| Automated tests            |            451 | Python `def test_*` functions                                                   |
+| Docker Compose services    |             24 | 20 long-running + 4 one-shot initialization/migration jobs                      |
+| CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
+
+**Curated transactions** replaces the previous `4.6M+` claim. That figure counted
+`COUNT(*)` across accumulated full-snapshot fact partitions, so the same
+transactions were counted once per `cob_dt`. The verified figure counts distinct
+`(domain, transaction_id)` pairs within a single snapshot:
+
+```text
+account  1,200,000
+card       600,000
+online     500,000
+─────────────────
+total    2,300,000  distinct curated transaction records
+```
+
+**Automated tests** counts source-level test functions. The pytest node count
+after parametrization is larger and is tracked separately in the evidence
+manifest, so the two never have to be reconciled by hand.
+
+## CDC freshness
+
+| Measure | Value |
+| ------- | ----: |
+| Median local source→Silver | 409.8s |
+| Range | 65.9–576.2s |
+| Trials | 5 |
+| Consolidation cadence | 600s (`*/10 * * * *`) |
+
+Measured end to end: `t0` is the PostgreSQL `COMMIT`, `t1` is the moment the new
+value is readable in `silver.dim_customer_current` **through Trino**. The number
+therefore includes waiting for the next scheduled consolidation run, which
+dominates it — that is deliberate, because it is the delay a consumer actually
+experiences. Re-measured on `portfolio-v1.1`; see
+[CDC Freshness Verification](#cdc-freshness-verification) for methodology and
+for why it is not comparable to the figure published in `v1.0`.
 
 ---
 
@@ -492,11 +541,17 @@ The batch Silver layer contains:
 - `fact_crm_interaction`
 - `fact_support_ticket`
 
-The main transaction facts contain more than:
+Within one verified Silver snapshot the transaction facts hold:
 
 ```text
-4.6M+ curated financial transaction records
+2,300,000 distinct curated transaction records
+account 1,200,000 · card 600,000 · online 500,000
 ```
+
+Counted as distinct `(domain, transaction_id)` pairs. Silver facts are full
+snapshots per `cob_dt`, so a plain `COUNT(*)` across all partitions counts the
+same transaction once per snapshot — that is what the retired `4.6M+` figure
+was measuring.
 
 ---
 
@@ -540,8 +595,14 @@ Gold is produced from the **batch Silver analytical model**.
 Current portfolio baseline:
 
 ```text
-18 Gold analytics tables
+10 historical Gold tables   (Spark, partitioned by cob_dt)
+ 9 current-serving tables   (dbt via Trino, iceberg.serving.*)
 ```
+
+The 8 `gold.*_current` CTAS tables and the Spark-only
+`mart_customer_360_current` view were retired: the CTAS tables were created once
+at initialization and never refreshed, and the Spark view was not visible to
+Trino at all. Both are replaced by dbt-managed serving tables.
 
 Representative outputs include:
 
@@ -614,15 +675,17 @@ Representative datasets:
 - `card_transaction_cdc`
 - `online_transaction_cdc`
 
-CDC records retain metadata including:
+CDC records retain:
 
-- normalized CDC operation
-- event timestamp
-- Kafka topic
-- Kafka partition
-- Kafka offset
+- normalized CDC operation (`INSERT` / `UPDATE` / `DELETE` / `SNAPSHOT`)
+- event timestamp (epoch ms and derived timestamp)
 - Spark batch ID
-- ingestion metadata
+- ingestion timestamp
+
+Kafka topic, partition and offset are **not** persisted on the valid-event path.
+They are captured only for events routed to the dead-letter queue, where they
+are needed for triage. Replay of valid events is therefore driven by event
+timestamp and batch id, not by Kafka offsets.
 
 ### Change Operations
 
@@ -679,7 +742,7 @@ The engine performs:
 
 - incremental CDC reads
 - business-key deduplication
-- per-partition persisted progress tracking
+- persisted progress tracking per target table (timestamp + batch id)
 - INSERT handling
 - UPDATE handling
 - DELETE handling
@@ -754,34 +817,46 @@ PostgreSQL remains the operational source of truth.
 
 # Watermark & Restart Recovery
 
-CDC consolidation stores processing progress per:
+CDC consolidation stores processing progress per target table:
 
 ```text
 table_name
-+ kafka_topic
-+ kafka_partition
++ last_cdc_timestamp_ms
++ last_spark_batch_id
 ```
 
-Conceptually:
-
-```text
-customer / topic / partition 0 → offset 1500
-customer / topic / partition 1 → offset 921
-```
-
-Kafka offsets are meaningful only **within the same partition**.
-
-Therefore the consolidation process tracks progress independently per partition.
+Incremental reads select events after that pair, ordered by
+`(__cdc_timestamp_ms, __spark_batch_id)`.
 
 ### Watermark Benefits
 
 - incremental processing
 - restart recovery
 - reduced rescanning
-- partition-specific progress
 - replay-safe failure handling
 
-The watermark does **not** create global ordering across Kafka partitions.
+### Current limitation — stated plainly
+
+The watermark is **not** partition-aware, and Kafka offsets are not persisted on
+the valid-event path. Progress is tracked per table, not per
+`(topic, partition)`:
+
+```text
+implemented today   : watermark = CDC timestamp + Spark batch id
+not implemented yet : per-partition Kafka offset watermark
+```
+
+This is sufficient for restart-safe, idempotent replay — reprocessing the same
+events produces the same Silver state — but it does not provide per-partition
+progress or offset-level replay. Those require persisting Kafka metadata into
+the valid Bronze CDC path first. The evidence manifest tracks this explicitly:
+
+```yaml
+consolidation_watermark:
+  implementation: timestamp_plus_spark_batch_id
+  partition_aware: false
+  kafka_offsets_persisted_in_valid_bronze: false
+```
 
 ---
 
@@ -837,28 +912,61 @@ It does **not** claim end-to-end exactly-once semantics.
 
 Five local runtime trials measured the time from a PostgreSQL source change until the resulting state became visible in Silver Current.
 
+**Methodology**
+
+```text
+t0 = PostgreSQL COMMIT of an UPDATE to core_banking.customer
+t1 = the new value is readable in silver.dim_customer_current, queried via Trino
+freshness = t1 - t0
+```
+
+`t1` is deliberately taken at the consumer-facing table through the query
+engine, not at Kafka or Bronze arrival. The measurement therefore includes the
+wait for the next scheduled consolidation run.
+
+**Phase sampling.** Consolidation runs on `*/10 * * * *`, so freshness is
+dominated by *where in the 600s window the commit lands*. Running trials
+back to back does not sample that offset randomly: each trial finishes the
+instant a consolidation run completes, so the next trial commits at offset ~0
+and waits nearly a full window. Measured that way the series locks onto the
+ceiling — observed directly as 355s, 596s, 599s against a 600s cadence. Trials
+below are therefore separated by a uniform random sleep over `[0, cadence)`,
+which restores the offset distribution a real source change would see.
+
 |      Trial | Source → Silver |
 | ---------: | --------------: |
-|          1 |           28.2s |
-|          2 |           54.0s |
-|          3 |           51.1s |
-|          4 |           22.4s |
-|          5 |           49.8s |
-| **Median** |       **49.8s** |
+|          1 |          546.9s |
+|          2 |           65.9s |
+|          3 |          409.8s |
+|          4 |          255.0s |
+|          5 |          576.2s |
+| **Median** |      **409.8s** |
 
 Summary:
 
 ```text
-Trials : 5
-Range  : 22.4–54.0 seconds
-Median : 49.8 seconds
+Trials  : 5 (all observed, none timed out)
+Range   : 65.9–576.2 seconds
+Median  : 409.8 seconds
+Cadence : 600 seconds (*/10 * * * *)
 ```
 
-All five local trials completed in under one minute.
+> **Measured local PostgreSQL-to-Silver-Current CDC freshness: median 409.8s
+> across 5 trials (range 65.9–576.2s) at a 600s consolidation cadence.**
 
-> **Measured local source-to-Silver freshness: < 1 minute**
+This is a local verification benchmark, not a production SLA. Latency here is a
+scheduling choice, not a pipeline limit: the consolidation job itself completes
+in roughly 30 seconds, so a shorter cadence — or event-driven triggering —
+moves the number, and the measurement would have to be repeated.
 
-This is a local verification benchmark, not a production SLA.
+**Why this is not comparable to the `v1.0` figure.** `v1.0` reported a 49.8s
+median. That measurement ran consolidation by hand immediately after the source
+`UPDATE`, so it timed *processing* and excluded scheduling entirely. It also
+predates the discovery that `cdc_consolidation_pipeline` submitted Spark from
+inside the Airflow container, which carries no Iceberg jars — consolidation had
+never actually run from Airflow, so the deployed cadence was never part of the
+number. The two figures answer different questions; the older one is retained in
+the evidence manifest under `superseded_claim`.
 
 Evidence:
 
@@ -952,9 +1060,10 @@ Unknown __op = x
 
 ## Gold
 
-| Type             | Count | Description                      |
-| ---------------- | ----: | -------------------------------- |
-| Analytics Tables |    18 | Business-facing analytical marts |
+| Type                   | Count | Description                                        |
+| ---------------------- | ----: | -------------------------------------------------- |
+| Historical Gold tables |    10 | Spark-managed marts, partitioned by `cob_dt`       |
+| Current-serving tables |     9 | dbt-managed, in `serving` schema, served via Trino |
 
 ---
 
@@ -1054,45 +1163,89 @@ Supports analytics such as:
 
 # Serving & Analytics
 
-Gold analytical data is queried through Trino.
+## Ownership boundary
+
+Spark owns the Bronze, Silver, and historical Gold transformation layers. dbt,
+executed through Trino, publishes the current-serving layer as materialized
+Iceberg tables for downstream consumers.
 
 ```text
-Gold Iceberg
-     ↓
-   Trino
-   /   \
- dbt   Superset
+Spark
+│
+├── Bronze
+├── Silver
+└── Historical Gold (10 tables, partitioned by cob_dt)
+          │
+          ▼
+      dbt via Trino
+          │
+          ▼
+Current Serving Layer (9 materialized Iceberg tables)
+          │
+          ├── Trino
+          ├── Superset
+          ├── Streamlit
+          └── downstream SQL consumers
 ```
+
+This boundary matters because objects created by one engine are not
+automatically usable by another. Serving objects are created by the engine that
+actually serves them.
+
+---
 
 ## Trino
 
-Provides interactive SQL access to Iceberg tables.
+Interactive SQL access to Iceberg. Trino is the serving engine: dbt, Superset,
+Streamlit and the SQL examples in this README all go through it.
+
+The Trino catalog is named `iceberg` (Trino derives the catalog name from
+`docker/init_trino/catalog/iceberg.properties`). Spark addresses the same
+warehouse as `lakehouse`. Same data, two engine-local names.
 
 ---
 
 ## dbt
 
-dbt is used downstream of the curated Gold layer for:
-
-- analytical models
-- incremental models
-- tests
-- documentation
-- semantic transformations
-
-Current baseline:
+dbt acts as the **serving publisher**, not the primary transformation engine.
+Historical analytical transformations remain in Spark Gold, while dbt
+materializes 9 current-serving tables through Trino for a requested `cob_dt`.
 
 ```text
-12 dbt models
+9 dbt models  →  iceberg.serving.*
 ```
 
-> Spark remains the primary Bronze → Silver → Gold processing engine.
+Serving models are `materialized: table`, not views: the Trino Iceberg REST
+catalog does not support `createView`. Freshness therefore comes from the
+orchestration schedule, not from view semantics — the serving DAG rebuilds them
+per `cob_dt` alongside Gold.
+
+Each model filters on an explicit `cob_dt` passed as a dbt var rather than
+`MAX(cob_dt)`. `MAX` would silently serve yesterday's snapshot whenever today's
+pipeline failed; an explicit date makes a missing snapshot a build failure
+instead of stale data.
+
+```text
+GOLD_COMPLETE(cob_dt)
+        ↓
+Airflow serving DAG
+        ↓
+dbt build --select serving --vars cob_dt
+        ↓
+snapshot + grain tests
+        ↓
+SERVING_COMPLETE(cob_dt)
+```
+
+`dbt build` — not `dbt run` — so model creation and tests are one gate. Tests
+assert one row per customer, exactly one `cob_dt` per serving table, and that
+the served `cob_dt` equals the requested one.
 
 ---
 
 ## Apache Superset
 
-Superset provides analytical dashboards over curated data exposed through the serving layer.
+Superset provides analytical dashboards over `iceberg.serving.*` through Trino.
 
 ---
 
@@ -1200,8 +1353,74 @@ Example batch schedule:
 | 08:00        | Ops         | Data Quality / governance workflows   |
 | Sunday 03:00 | Maintenance | Iceberg cleanup and optimization      |
 
+## Cross-DAG contract
+
+Downstream DAGs depend on a **data-level completion flag**, not on a producer
+DAG name:
+
+```text
+Gold producer DAG(s)
+        ↓
+GOLD_COMPLETE(cob_dt)        ← written only after every Gold job succeeds
+        ↓
+serving publisher DAG        ← waits for the flag for the SAME cob_dt
+        ↓
+dbt build --select serving --vars cob_dt
+        ↓
+serving snapshot + grain tests
+        ↓
+SERVING_COMPLETE(cob_dt)
+```
+
+The serving DAG waits for a `GOLD_COMPLETE` flag for the same `cob_dt`. Only
+after `dbt build` and the serving tests succeed is `SERVING_COMPLETE` recorded.
+Both failure paths are enforced rather than assumed:
+
+```text
+no GOLD_COMPLETE for cob_dt   → serving publisher does not run
+dbt serving build fails       → no SERVING_COMPLETE
+```
+
+Using a flag rather than a sensor on `gold_mart360_dag` keeps consumers
+decoupled from producer topology: if Gold is later split across several DAGs,
+only the final producer writes the flag and no consumer changes.
+
 > Airflow orchestrates jobs.  
 > Spark Structured Streaming processes the continuous Kafka stream.
+
+---
+
+# Time Semantics
+
+```text
+Storage / engine timezone : UTC
+Business timezone         : Asia/Ho_Chi_Minh
+Processing date           : explicit cob_dt
+Business date             : explicitly derived from UTC timestamps
+```
+
+Spark is enforced to run with a UTC session timezone. Banking calendar dates are
+explicitly derived in `Asia/Ho_Chi_Minh`; they do not rely on an implicit local
+Spark session.
+
+```sql
+-- Spark
+CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
+
+-- Trino
+CAST(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE)
+```
+
+Timestamps are never bulk-converted to local time — they stay UTC instants.
+Only calendar dates and months are derived. `cob_dt` is an orchestration date
+and is independent of both.
+
+Because Spark `TIMESTAMP` is an instant and `CAST(... AS DATE)` renders it in the
+session timezone, the derivation above is only correct under a UTC session.
+That precondition is enforced at runtime by `assert_utc_session()` rather than
+assumed, so a misconfigured session fails loudly instead of silently shifting
+every daily metric. Details and measurements:
+[`docs/evidence/`](docs/evidence/).
 
 ---
 
@@ -1494,6 +1713,7 @@ Current boundaries include:
 - Customer Balance / AUM analytics use a simplified portfolio representation.
 - Observability is intentionally lightweight.
 - The freshness metric primarily measures data age rather than complete source-to-target processing lag.
+- CDC current-state freshness is bounded by the consolidation cron (`*/10`), not by processing time; there is no event-driven trigger from streaming ingestion to consolidation.
 - The platform does not claim end-to-end exactly-once semantics.
 - Enterprise mTLS, KMS, Kubernetes, multi-region DR, and production on-call/SLO systems are outside the current portfolio scope.
 
@@ -1531,12 +1751,12 @@ FEATURE FREEZE
 
 - Bronze CDC → Silver Current for customer and account
 - generic YAML-configured consolidation engine
-- persisted per-partition watermarks
+- persisted watermarks (timestamp + Spark batch id)
 - business-key deduplication
 - INSERT / UPDATE / DELETE handling
 - restart-safe processing
 - idempotent Iceberg MERGE
-- measured local source-to-Silver freshness below one minute
+- measured local source-to-Silver freshness: median 409.8s at a 600s cadence
 
 ---
 
@@ -1686,7 +1906,7 @@ They do not replace the physical processing flow.
 
 # Interview-Ready Summary
 
-> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using per-partition watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt/Superset analytical serving, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
+> I built a production-like banking data platform with separate scheduled batch and near-real-time CDC paths. The batch pipeline uses Spark, Iceberg, and MinIO to build SCD1/SCD2 dimensions, fact tables, and Gold analytical marts. In parallel, Debezium captures PostgreSQL WAL changes into Kafka, Spark Structured Streaming validates and persists append-only Bronze CDC events, and a config-driven consolidation engine derives customer and account current-state tables using timestamp+batch-id watermarks, deduplication, and idempotent Iceberg MERGE. The platform also includes Airflow orchestration, Trino/dbt/Superset analytical serving, OpenMetadata governance, Data Quality, DLQ-based error isolation, CI/CD, and lightweight CDC freshness observability.
 
 ---
 

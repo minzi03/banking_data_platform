@@ -53,7 +53,7 @@ def get_spark_session(app_name: str = "banking-lakehouse-job") -> SparkSession:
             .config("spark.sql.catalog.lakehouse.s3.path-style-access", "true")
             .config("spark.sql.catalog.lakehouse.s3.access-key-id", minio_access_key)
             .config("spark.sql.catalog.lakehouse.s3.secret-access-key", minio_secret_key)
-            .config("spark.sql.session.timeZone", "Asia/Ho_Chi_Minh")
+            .config("spark.sql.session.timeZone", "UTC")
             .config("spark.hadoop.fs.s3a.endpoint", minio_endpoint)
             .config("spark.hadoop.fs.s3a.access.key", minio_access_key)
             .config("spark.hadoop.fs.s3a.secret.key", minio_secret_key)
@@ -66,4 +66,38 @@ def get_spark_session(app_name: str = "banking-lakehouse-job") -> SparkSession:
 
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
+    assert_utc_session(spark)
     return spark
+
+
+# Business timezone của platform. Chỉ dùng để DERIVE ngày nghiệp vụ, không bao
+# giờ dùng làm session timezone.
+BUSINESS_TIMEZONE = "Asia/Ho_Chi_Minh"
+
+
+def assert_utc_session(spark) -> None:
+    """
+    Enforce session timezone = UTC.
+
+    Vì sao phải fail-fast thay vì chỉ cấu hình:
+    biểu thức chuẩn để lấy ngày nghiệp vụ là
+        CAST(from_utc_timestamp(ts, 'Asia/Ho_Chi_Minh') AS DATE)
+    Spark TIMESTAMP là LTZ (instant): from_utc_timestamp dịch instant, rồi CAST
+    render instant đó theo SESSION timezone. Đo thực tế trên cùng dữ liệu:
+
+        session=UTC              → 2026-02-14, 2026-02-15   ĐÚNG
+        session=Asia/Ho_Chi_Minh → 2026-02-15, 2026-02-15   SAI (dịch 2 lần)
+        session=America/New_York → 2026-02-14, 2026-02-14   SAI
+
+    Tức mọi Gold metric theo ngày phụ thuộc thầm lặng vào một cấu hình engine.
+    Guard này biến giả định ngầm thành lỗi ồn ào.
+    """
+    session_tz = spark.conf.get("spark.sql.session.timeZone")
+    if session_tz != "UTC":
+        raise RuntimeError(
+            f"spark.sql.session.timeZone = {session_tz!r}, phải là 'UTC'. "
+            "Business date được derive tường minh bằng "
+            f"from_utc_timestamp(ts, '{BUSINESS_TIMEZONE}'), và biểu thức đó chỉ "
+            "đúng dưới session UTC. Đừng đặt business timezone làm session "
+            "timezone — đó chính là bug đã làm Spark và Trino lệch 29,2% bucket ngày."
+        )

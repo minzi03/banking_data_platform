@@ -1,7 +1,36 @@
-# Gold: churn_prediction — Churn risk scoring
+# Gold: churn_prediction — Churn risk scoring (rule-based)
 # Note:
 #   - This table is a daily snapshot partitioned by cob_dt.
 #   - Use lakehouse.gold.churn_prediction_current for current-only serving (1 row/customer).
+#
+# Temporal semantics — hai loại thời gian, không được lẫn:
+#   cob_dt   = physical snapshot của fact table (processing date).
+#              Silver fact là full snapshot mỗi cob_dt → phải chốt đúng 1 partition.
+#   txn_date = business event date, định nghĩa các cửa sổ 30d / 90d / 365d.
+#
+# Grain rule:
+#   Mỗi fact tự aggregate về grain customer_id trong CTE riêng (kể cả các
+#   conditional aggregate 30d/90d) rồi mới join — loại bỏ Cartesian amplification.
+#
+# BREAKING (semantics): txn_amt_30d / txn_amt_90d trước đây chỉ tính account
+#   transaction; nay = account + card, khớp với customer_transaction_summary
+#   total_txn_amount_30d để reconciliation test có nghĩa. Card amount dùng đúng
+#   định nghĩa của customer_transaction_summary (status = SUCCESS, loại
+#   REFUND/REVERSAL).
+#
+# ─── Business-date semantics (timezone migration) ────────────────────────────
+# storage/instant = UTC   |   business timezone = Asia/Ho_Chi_Minh
+#
+# Timestamp KHÔNG được convert sang ICT; nó vẫn là instant UTC. Chỉ khi cần
+# NGÀY/THÁNG nghiệp vụ mới derive tường minh:
+#     CAST(from_utc_timestamp(<ts>, 'Asia/Ho_Chi_Minh') AS DATE)
+#
+# `CAST(<ts> AS DATE)` trần bucket theo session timezone của engine — Spark và
+# Trino từng lệch 29,2% số dòng vì việc đó. Biểu thức trên chỉ đúng dưới
+# session=UTC, và điều kiện đó được enforce bởi assert_utc_session().
+#
+# cob_dt KHÔNG đổi nghĩa: nó là orchestration/snapshot date, không phải hàm
+# của event timestamp.
 job:
   type: segment
 
@@ -21,39 +50,81 @@ upstream_flags:
   - silver.fact_txn_account
   - silver.fact_card_txn
 
+validation:
+  # Chặn ghi Gold khi query không sinh dòng nào.
+  require_non_empty: true
+  # Snapshot-backed source: phải tồn tại partition cob_dt đang xử lý.
+  # Thiếu partition mà vẫn chạy sẽ ghi Gold sai: model neo dim_customer (LEFT JOIN)
+  # cho ra đủ số dòng nhưng metric toàn 0; model neo fact cho ra rỗng. Cả hai đều
+  # là silent corruption nên phải fail trước khi transform.
+  require_snapshots:
+    - silver.fact_txn_account
+    - silver.fact_card_txn
+
 sql: |
-  WITH activity AS (
+  WITH customers AS (
       SELECT
-          c.customer_id, c.customer_sk,
-          COUNT(DISTINCT CASE WHEN CAST(t.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN t.txn_id END) AS acct_cnt_30d,
-          COUNT(DISTINCT CASE WHEN CAST(t.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN t.txn_id END) AS acct_cnt_90d,
-          COUNT(DISTINCT CASE WHEN CAST(ct.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN ct.txn_id END) AS card_cnt_30d,
-          COUNT(DISTINCT CASE WHEN CAST(ct.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN ct.txn_id END) AS card_cnt_90d,
-          COALESCE(SUM(CASE WHEN CAST(t.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN ABS(t.txn_amount) END), 0) AS acct_amt_30d,
-          COALESCE(SUM(CASE WHEN CAST(t.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN ABS(t.txn_amount) END), 0) AS acct_amt_90d,
+          customer_id,
+          customer_sk
+      FROM lakehouse.silver.dim_customer
+      WHERE is_current = 1
+  ),
+  -- Account transactions — 365d lookback, conditional aggregate 30d/90d tại chỗ
+  acct_txn AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN txn_id END) AS acct_cnt_30d,
+          COUNT(DISTINCT CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN txn_id END) AS acct_cnt_90d,
+          COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN ABS(txn_amount) END), 0) AS acct_amt_30d,
+          COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN ABS(txn_amount) END), 0) AS acct_amt_90d,
+          MAX(txn_date) AS acct_last_txn_date
+      FROM lakehouse.silver.fact_txn_account
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  -- Card transactions — 365d lookback, conditional aggregate 30d/90d tại chỗ
+  card_txn AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN txn_id END) AS card_cnt_30d,
+          COUNT(DISTINCT CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN txn_id END) AS card_cnt_90d,
+          COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+                             AND txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount END), 0) AS card_amt_30d,
+          COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
+                             AND txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount END), 0) AS card_amt_90d,
+          MAX(txn_date) AS card_last_txn_date
+      FROM lakehouse.silver.fact_card_txn
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND status = 'SUCCESS'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  activity AS (
+      SELECT
+          c.customer_id,
+          c.customer_sk,
+          COALESCE(a.acct_cnt_30d, 0) + COALESCE(k.card_cnt_30d, 0) AS txn_cnt_30d,
+          COALESCE(a.acct_cnt_90d, 0) + COALESCE(k.card_cnt_90d, 0) AS txn_cnt_90d,
+          COALESCE(a.acct_amt_30d, 0) + COALESCE(k.card_amt_30d, 0) AS txn_amt_30d,
+          COALESCE(a.acct_amt_90d, 0) + COALESCE(k.card_amt_90d, 0) AS txn_amt_90d,
+          -- Sentinel giữ nguyên semantics cũ cho khách không có giao dịch nào
           GREATEST(
-              COALESCE(MAX(t.txn_date), TIMESTAMP '1900-01-01 00:00:00'),
-              COALESCE(MAX(ct.txn_date), TIMESTAMP '1900-01-01 00:00:00')
+              COALESCE(a.acct_last_txn_date, TIMESTAMP '1900-01-01 00:00:00'),
+              COALESCE(k.card_last_txn_date, TIMESTAMP '1900-01-01 00:00:00')
           ) AS last_txn_ts
-      FROM lakehouse.silver.dim_customer c
-      LEFT JOIN lakehouse.silver.fact_txn_account t
-          ON c.customer_id = t.customer_id
-          AND CAST(t.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
-          AND CAST(t.txn_date AS DATE) <= DATE '{{ cob_dt }}'
-      LEFT JOIN lakehouse.silver.fact_card_txn ct
-          ON c.customer_id = ct.customer_id
-          AND CAST(ct.txn_date AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
-          AND CAST(ct.txn_date AS DATE) <= DATE '{{ cob_dt }}'
-          AND ct.status = 'SUCCESS'
-      WHERE c.is_current = 1
-      GROUP BY c.customer_id, c.customer_sk
+      FROM customers c
+      LEFT JOIN acct_txn a ON c.customer_id = a.customer_id
+      LEFT JOIN card_txn k ON c.customer_id = k.customer_id
   )
   SELECT
       customer_id, customer_sk,
-      acct_cnt_30d + card_cnt_30d AS txn_cnt_30d,
-      acct_cnt_90d + card_cnt_90d AS txn_cnt_90d,
-      acct_amt_30d AS txn_amt_30d,
-      acct_amt_90d AS txn_amt_90d,
+      txn_cnt_30d,
+      txn_cnt_90d,
+      txn_amt_30d,
+      txn_amt_90d,
       DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) AS days_since_last_txn,
       CASE
           WHEN last_txn_ts = TIMESTAMP '1900-01-01 00:00:00'
