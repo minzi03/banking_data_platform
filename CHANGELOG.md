@@ -106,6 +106,21 @@ their own dependencies and were passing on the leak:
 The Gold regression CI job also gained `jinja2`, a real dependency of
 `gold_job.py` through `utils/yaml_loader.py`, which the job had never installed.
 
+### CI coverage
+
+The Gold Spark Regression job now runs the business-date semantics suite
+alongside the fan-out regression — 32 CI-executed Gold tests (23 fan-out and
+snapshot, 9 business-date). The business-date tests guard the UTC engine and
+explicit `Asia/Ho_Chi_Minh` derivation, the largest architectural change in this
+release, and need only pyspark, which the job already installs. The job's
+change-gate was widened to `code_etl/shared/spark/` and `docker/spark/conf/` so
+a PR touching only the timezone configuration cannot skip the job that checks it.
+
+34 Trino-backed integration tests remain outside the main CI pipeline because
+they require the separate `ci-trino` topology; wiring them into CI is tracked
+separately in [docs/technical-debt.md](docs/technical-debt.md). They are a known
+CI coverage gap and are **not** claimed as passing.
+
 ### Evidence
 
 - Added `docs/evidence/metrics-manifest.yaml` — an evidence contract that fixes

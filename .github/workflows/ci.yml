@@ -241,7 +241,11 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
           echo "$CHANGED"
-          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|tests/gold/|\.github/workflows/)'; then
+          # spark_session.py và spark-defaults.conf nằm trong gate vì
+          # test_business_date_semantics.py assert trực tiếp lên chúng: guard
+          # assert_utc_session() và dòng spark.sql.session.timeZone=UTC. Nếu
+          # không liệt kê, một PR chỉ sửa timezone sẽ bỏ qua đúng job canh nó.
+          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -274,8 +278,14 @@ jobs:
       - name: Run Gold regression (executable)
         if: steps.gate.outputs.run == 'true'
         run: |
-          echo "=== Gold Spark regression — fan-out + snapshot invariants ==="
-          python -m pytest tests/gold/test_gold_fanout_regression.py \
+          echo "=== Gold Spark regression — fan-out, snapshot, business-date ==="
+          # 23 fan-out/snapshot + 9 business-date semantics = 32 test.
+          # Nhóm business-date canh thay đổi kiến trúc lớn nhất của v1.1 (engine
+          # chạy UTC, business date derive tường minh sang ICT) và chỉ cần
+          # pyspark — job này đã có sẵn, nên đưa vào đây thay vì dựng job mới.
+          python -m pytest \
+            tests/gold/test_gold_fanout_regression.py \
+            tests/gold/test_business_date_semantics.py \
             -v --tb=short -m integration \
             --junitxml=gold-regression-results.xml
 
