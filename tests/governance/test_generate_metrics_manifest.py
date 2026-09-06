@@ -588,3 +588,55 @@ class TestServingVisibility:
         m = _verified_manifest(contract)
         errors, _, _ = gen.evaluate_invariants(m)
         assert not any("legacy_spark_view" in e for e in errors)
+
+
+class TestProvenanceIsNeverFalsified:
+    """
+    `git_dirty` là một khẳng định về nguồn gốc của chính manifest, nên không cờ
+    CLI nào được phép viết lại nó.
+
+    Bug đã có thật trong script này:
+
+        "git_dirty": False if (dirty and allow_dirty) else dirty
+
+    Tác dụng DUY NHẤT của `--allow-dirty` là làm manifest nói dối — trong đúng
+    script chịu trách nhiệm promote canonical. Không hề có cổng chặn nào để cờ
+    đó nới ra cả. Cờ được phép quyết định CÓ CHẠY hay không; nó không được phép
+    quyết định SỰ THẬT là gì.
+    """
+
+    @staticmethod
+    def _manifest(dirty: bool) -> dict:
+        return {"manifest": {"build": {"git_dirty": dirty, "git_commit": "abc1234"}}}
+
+    def test_build_metadata_takes_no_override_flag(self):
+        """Không còn tham số nào cho phép bẻ cong provenance."""
+        import inspect
+
+        params = inspect.signature(gen.collect_build_metadata).parameters
+        assert not params, (
+            f"collect_build_metadata nhận tham số {list(params)} — provenance "
+            "phải được đo, không phải được truyền vào"
+        )
+
+    def test_dirty_tree_blocks_promotion(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
+        assert gen.promote_canonical_if_verified(self._manifest(True), []) is False, (
+            "cây bẩn thì số đo không quy được về một commit — không được promote"
+        )
+
+    def test_dirty_tree_can_be_overridden_explicitly(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
+        assert gen.promote_canonical_if_verified(
+            self._manifest(True), [], allow_dirty=True
+        ) is True
+
+    def test_clean_tree_promotes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
+        assert gen.promote_canonical_if_verified(self._manifest(False), []) is True
+
+    def test_errors_still_block_even_on_a_clean_tree(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
+        assert gen.promote_canonical_if_verified(
+            self._manifest(False), ["some blocking error"]
+        ) is False

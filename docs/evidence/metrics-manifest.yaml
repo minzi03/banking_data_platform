@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 1b6a1425a4492052ec50267e0e7537a383b8a00d
-    git_branch: main
+    git_commit: 3804a183788928a7e1f14ab6f26f7f5d338742d8
+    git_branch: hardening/ci-trino-readiness
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T10:27:07Z'
+    generated_at_utc: '2026-09-06T16:12:29Z'
     requested_cob_dt: '2026-09-06'
     verification_scope: full
   environment:
@@ -522,13 +522,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 451
-        declared: 451
+        value: 456
+        declared: 456
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 502
+        value: 547
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -813,7 +813,7 @@ readme_bindings:
   manifest_path: metrics.platform.dq_check_types.value
 - readme_claim: '| Airflow DAG files          |             16 |'
   manifest_path: metrics.platform.airflow_dag_files.value
-- readme_claim: '| Automated tests            |            451 |'
+- readme_claim: '| Automated tests            |            456 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             24 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value
