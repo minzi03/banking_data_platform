@@ -178,6 +178,15 @@ class TestUniqueConstraints:
         """core_customer.customer_id unique trong từng cob_dt."""
         assert_unique_grain("core_customer", "customer_id")
 
+        # === NEGATIVE PROOF — SẼ ĐƯỢC REVERT NGAY SAU KHI CI ĐỎ ===
+        # Cố ý sai để chứng minh gate thật sự chặn PR. Chọn một assertion phải
+        # QUERY ĐƯỢC dữ liệu thật rồi mới sai, chứ không phải `assert False`:
+        # như vậy CI đỏ chứng minh cả chuỗi stack → seed → ETL → Trino →
+        # assertion đều đã chạy, không phải chỉ chứng minh pytest biết fail.
+        # Không sửa số test (vẫn 34) vì harness kiểm đúng con số đó.
+        rows = get_row_count("core_customer", schema="bronze")
+        assert rows == -1, f"INTENTIONAL REGRESSION (negative proof): rows={rows}"
+
     @pytest.mark.integration
     def test_bronze_account_id_unique_within_each_snapshot(self):
         """core_account.account_id unique trong từng cob_dt."""
