@@ -1737,8 +1737,6 @@ FEATURE FREEZE
 | -------------------------------------------------------------------------- | ---------------------------------- |
 | [Architecture](docs/architecture/architecture.md)                          | Detailed technical architecture    |
 | [Demo](docs/demo/demo.md)                                                  | 5-minute project walkthrough       |
-| [Interview Talking Points](docs/interview/talking-points.md)               | Architecture and design discussion |
-| [P1 Interview Prep](docs/interview/p1-interview-prep.md)                   | CDC deep-dive questions            |
 | [Evidence](docs/evidence/)                                                 | Runtime screenshots                |
 | [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation/)                     | CDC consolidation verification     |
 | [P2 Observability Evidence](docs/evidence/p2-observability/)               | Observability verification         |
