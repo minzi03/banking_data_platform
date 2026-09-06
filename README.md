@@ -273,6 +273,126 @@ for why it is not comparable to the figure published in `v1.0`.
 
 ---
 
+# Engineering Decisions & Failures Found
+
+The numbers above are only worth reading because of how they were arrived at.
+Each item below is a defect that existed while the pipeline reported success,
+the reason it stayed invisible, and the check that now prevents its return.
+
+Two of them were found in the verification tooling itself.
+
+---
+
+### Join fan-out silently inflated aggregate amounts
+
+Two Gold models joined two raw fact tables at the wrong grain. `COUNT(DISTINCT)`
+stayed correct, so the tables looked plausible; only `SUM()` was multiplied.
+
+*Why it stayed hidden:* a fan-out corrupts sums while leaving distinct counts
+intact, and nothing compared the two.
+
+*Fix:* each source aggregates to `customer_id` in its own CTE before joining.
+
+*Evidence:* a regression fixture with a hand-computed expected total. The RFM
+case asserts a monetary value of `1500.00` — ten account transactions and five
+card transactions at 100 each, with the refund excluded from the amount but not
+from the frequency. The fixture fails against the pre-fix SQL and passes against
+the corrected one.
+
+---
+
+### The same transaction was counted once per snapshot
+
+The published transaction figure summed `COUNT(*)` across several `cob_dt`
+partitions of full-snapshot fact tables, so one logical transaction contributed
+once per physical snapshot it appeared in.
+
+*Why it stayed hidden:* every individual query was correct. The error was in
+what "a transaction" meant.
+
+*Fix:* count distinct `(domain, transaction_id)` within one snapshot — domain
+included, because an id is only unique inside its own namespace.
+
+*Evidence:* the corrected figure is in [Verified Portfolio Snapshot](#verified-portfolio-snapshot);
+the retired claim is kept in the evidence manifest under `superseded_claim`
+rather than deleted.
+
+---
+
+### Three passing tests protected a wrong assumption
+
+Bronze uniqueness tests compared whole-table `COUNT(*)` against whole-table
+`COUNT(DISTINCT key)`. That encodes "Bronze holds exactly one snapshot", which
+contradicts a full-snapshot-per-day architecture.
+
+*Why it stayed hidden:* they passed. The fixture had a single day, so the wrong
+invariant and the right one gave the same answer.
+
+*Fix:* assert the real invariant — a key appears at most once *within* each
+snapshot — by finding duplicate groups directly, so a failure names the offending
+key and snapshot.
+
+*Evidence:* they now pass while two snapshots exist, which the previous version
+could not have done. This is the clearest case in the project of a green test
+that was not a correct test.
+
+---
+
+### A child exit code was swallowed seven times
+
+Across the repository, failures were converted into success by `$?` read after a
+pipe, `|| true` on a critical path, an `sh -c` string ending in `echo`, and a
+fallback that turned a parse failure into a confident zero.
+
+*Why it stayed hidden:* the shapes look like defensive programming. A fallback
+value reads as caution, not as a fabricated measurement.
+
+*Fix, and what it uncovered:* removing these patterns exposed four real defects
+that had been running silently — schemas that were never created while the
+container exited zero, a Gold bootstrap that ran no jobs, a benchmark query that
+recorded a timing for a query that never executed, and a seed generator
+colliding with its own primary key.
+
+*Evidence:* recorded as its own debt item with every instance listed, because
+the durable fix is a static check for the pattern rather than another one-off
+patch.
+
+---
+
+### Readiness measured a proxy instead of the contract
+
+CI waited for a TCP port to open, then for an HTTP endpoint to answer. The
+property that actually matters is that Trino can *use* the Iceberg catalog.
+
+*Why it stayed hidden:* the workflow failed as a bare timeout that named no
+service, so four consecutive scheduled runs produced no usable signal.
+
+*Fix:* one semantic gate — `SHOW SCHEMAS FROM iceberg` executed through Trino —
+plus per-service readiness timings separated from image pull and build time.
+
+*Evidence:* the measurements disproved the original hypothesis. Image
+acquisition and PostgreSQL readiness were both far inside the budget that was
+being blamed, so raising the timeout would have fixed nothing.
+
+---
+
+### The verifier could falsify its own provenance
+
+The evidence generator recorded `git_dirty: false` whenever `--allow-dirty` was
+passed. The flag gated nothing else; falsifying the record was its only effect.
+
+*Why it stayed hidden:* it lived in the script whose purpose is to make claims
+trustworthy, and it was written to make a local run convenient.
+
+*Fix:* provenance always reports the truth; the flag decides whether the run may
+promote the canonical manifest, not what the record says.
+
+*Evidence:* a manifest built from a dirty tree pins a commit that does not
+describe what was measured — the one fact that makes it irreproducible, and
+exactly the fact the flag was erasing.
+
+---
+
 # Batch Pipeline
 
 ## Data Flow
