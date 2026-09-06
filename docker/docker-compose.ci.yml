@@ -96,6 +96,16 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # CỐ Ý không có healthcheck. Image tabulario/iceberg-rest:1.6.0 không có
+    # curl/wget/nc (đã đo), nên mọi healthcheck kiểu HTTP trong container này
+    # đều unhealthy vĩnh viễn dù server chạy tốt — và nếu `trino` chờ
+    # `service_healthy` thì cả stack deadlock.
+    #
+    # Readiness ngữ nghĩa của catalog do WORKFLOW sở hữu, bằng một gate duy
+    # nhất: `SHOW SCHEMAS FROM iceberg` chạy được qua Trino. Đó mới là contract
+    # thật (Trino DÙNG được catalog), chứ không phải port mở hay HTTP 200.
+    # Không đặt thêm healthcheck ở đây: hai định nghĩa readiness song song
+    # chính là loại drift đang muốn loại bỏ.
     networks:
       - ci_net
 
@@ -201,13 +211,22 @@ services:
     depends_on:
       trino:
         condition: service_healthy
+    # --server trino:8080 là BẮT BUỘC. CLI Trino mặc định nối localhost:8080,
+    # mà container này KHÔNG chạy Trino server — nó chỉ mượn image để lấy CLI.
+    # Thiếu cờ đó thì cả 5 lệnh đều `ConnectException: Failed to connect to
+    # localhost:8080`, và vì lệnh cuối của `sh -c` là `echo` nên container vẫn
+    # exit 0: không schema nào được tạo mà mọi thứ báo thành công.
+    #
+    # `set -e` để một CREATE SCHEMA hỏng là container hỏng. Đây là lần thứ năm
+    # trong repo này một exit code bị nuốt; xem docs/technical-debt.md.
     entrypoint: >
-      /bin/sh -c "
+      /bin/sh -ec "
         echo 'Creating schemas...';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
         echo 'Schemas created successfully';
       "
     networks:

@@ -89,7 +89,12 @@ JOB_TYPE_MAP = {
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Gold Bootstrap Initial Load")
     parser.add_argument("--cob_dt", required=True, help="Business date YYYY-MM-DD")
-    parser.add_argument("--spark_submit", default="spark-submit",
+    # Đường dẫn TUYỆT ĐỐI, khớp với silver/bootstrap/initial_load.py. Tên trần
+    # "spark-submit" phụ thuộc PATH của tiến trình con, mà /opt/spark/bin không
+    # có trong PATH khi vào container qua `docker exec` — CI đo được:
+    # `[Errno 2] No such file or directory: 'spark-submit'`, 0/10 Gold job chạy,
+    # trong khi Silver (vốn đã dùng đường dẫn tuyệt đối) chạy 13/13.
+    parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit",
                         help="Path to spark-submit command")
     return parser.parse_args()
 

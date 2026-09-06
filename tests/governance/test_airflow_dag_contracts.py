@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DAGS_DIR = REPO_ROOT / "airflow" / "dags"
@@ -128,3 +129,66 @@ class TestEveryConnIdIsProvisioned:
             f"init đang tạo: {sorted(provisioned)}\n"
             "Trên môi trường sạch, thiếu conn_id ở top-level làm DAG lỗi import."
         )
+
+
+# ---------------------------------------------------------------------------
+# Quyền của workflow benchmark
+# ---------------------------------------------------------------------------
+
+BENCHMARK_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "benchmark.yml"
+
+
+def _benchmark_policy_violations() -> dict[str, str | None]:
+    """
+    Trả về {tên luật: mô tả vi phạm hoặc None}.
+
+    `Performance Benchmark` chạy theo lịch. Trước đây nó xin `contents: write`
+    và `git push` baseline thẳng lên `main` — đo lường và sửa source of truth
+    gộp vào một workflow. Nhánh ghi đó nằm sau bước dựng stack vốn fail suốt
+    nhiều tuần nên chưa từng chạy, và nó kết thúc bằng `git push || true`, nuốt
+    luôn lỗi. Cập nhật baseline nếu cần phải đi đường bot branch → PR → CI →
+    review như mọi thay đổi source khác.
+
+    Gộp ba luật vào một hàm test có parametrize: mỗi luật vẫn là một test case
+    riêng để đọc được khi hỏng, nhưng `automated_tests` (đếm `def test_*`) chỉ
+    tăng một.
+    """
+    raw = BENCHMARK_WORKFLOW.read_text(encoding="utf-8")
+    workflow = yaml.safe_load(raw)
+    # Bỏ comment: phần giải thích ở đầu file có nhắc `git push` và
+    # `contents: write` như mô tả lịch sử, không phải cấu hình.
+    code = "\n".join(
+        line for line in raw.splitlines() if not line.lstrip().startswith("#")
+    )
+
+    permissions = workflow.get("permissions") or {}
+    write_scopes = sorted(k for k, v in permissions.items() if v == "write")
+
+    pushes = [
+        line.strip()
+        for line in code.splitlines()
+        if re.search(r"\bgit\s+(push|commit)\b", line)
+    ]
+
+    steps = workflow["jobs"]["benchmark"]["steps"]
+    uploads = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact")]
+
+    return {
+        "no_write_permission": (
+            f"workflow xin quyền ghi: {write_scopes}" if write_scopes else None
+        ),
+        "no_repository_mutation": (
+            "workflow còn lệnh ghi vào repo:\n  " + "\n  ".join(pushes) if pushes else None
+        ),
+        "publishes_artifact": (
+            None if uploads else "workflow không upload artifact nào — đo mà không báo cáo"
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "rule", ["no_write_permission", "no_repository_mutation", "publishes_artifact"]
+)
+def test_scheduled_benchmark_measures_without_mutating_the_repository(rule):
+    violation = _benchmark_policy_violations()[rule]
+    assert violation is None, violation

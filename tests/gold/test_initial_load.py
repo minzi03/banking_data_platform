@@ -117,10 +117,25 @@ class TestParseArguments:
             assert args.cob_dt == "2025-01-15"
 
     def test_default_spark_submit(self):
-        """Should have default spark-submit path."""
+        """
+        Default phải là đường dẫn TUYỆT ĐỐI.
+
+        Test này trước đây ghim `"spark-submit"` — tên trần — nên nó khoá đúng
+        cái bug: PATH của tiến trình con khi vào container bằng `docker exec`
+        không có /opt/spark/bin, và Gold bootstrap chết
+        `[Errno 2] No such file or directory: 'spark-submit'` với 0/10 job,
+        trong khi Silver (dùng đường dẫn tuyệt đối) chạy 13/13.
+
+        Ràng buộc thật là "phân giải được mà không cần PATH", không phải một
+        chuỗi cụ thể, nên assert theo tính chất đó. Contract giữa Silver và
+        Gold nằm ở tests/governance/test_bootstrap_contracts.py.
+        """
         with patch("sys.argv", ["initial_load.py", "--cob_dt", "2025-01-15"]):
             args = parse_arguments()
-            assert args.spark_submit == "spark-submit"
+            assert args.spark_submit.startswith("/"), (
+                f"default {args.spark_submit!r} phụ thuộc PATH"
+            )
+            assert args.spark_submit.endswith("/spark-submit")
 
 
 class TestRunGoldJob:

@@ -71,6 +71,107 @@ Leaving it red is not an outcome.
 
 ---
 
+## TD-4 — Makefile bootstrap targets depend on an invalid container working directory
+
+**Status:** open (recorded at `portfolio-v1.1`)
+
+**Not runtime-proven.** A configuration defect with clear evidence, not an
+observed failure — `make bronze-bootstrap` has not been run to watch it fail.
+
+`bronze-bootstrap`, `silver-bootstrap` and `gold-bootstrap` invoke
+`docker compose exec spark-worker-1 spark-submit ...` without `-w`. Measured:
+
+```text
+docker compose exec spark-worker-1 pwd    → /opt/spark/work-dir
+ls code_etl from that directory           → does not resolve
+working_dir in either compose file        → not set
+```
+
+`BRONZE_CONFIGS` and the Silver/Gold job lists hold repo-root-relative paths
+(`code_etl/bronze/core_banking/branch.yml`), and `load_config()` opens the path
+as given, so the first call should raise `FileNotFoundError`. The benchmark
+workflow now passes `-w /opt/project`; the Makefile does not.
+
+The v1.1 clean rebuild did load Bronze — 2,300,000 rows verified through Trino —
+so it ran by some path other than these targets. A `make` target that cannot
+work is a trap for whoever tries it next.
+
+### Acceptance
+
+```text
+[ ] bronze-bootstrap uses /opt/project as working directory
+[ ] silver-bootstrap uses /opt/project as working directory
+[ ] gold-bootstrap uses /opt/project as working directory
+[ ] relative config/module paths resolve inside spark-worker-1
+[ ] make targets propagate child exit codes
+[ ] one smoke test proves the Makefile path from host works end-to-end
+```
+
+The exit-code item is not filler. Losing a child exit code has now happened
+four times in this repository: `$?` read after `grep`/`tail`, `|| true` around
+the Bronze ETL loop, `git push || true` in the benchmark workflow, and Bronze
+bootstrap returning 0 with every table failed. Audit the Makefile for the same
+pattern rather than assuming it is absent.
+
+---
+
+## TD-5 — Shell failure propagation and false-success patterns
+
+**Status:** open (recorded at `portfolio-v1.1`)
+
+A swallowed child exit code has now been found five separate times in this
+repository. That is a pattern, not a run of bad luck, and each instance produced
+the same outcome: something reported success while doing nothing.
+
+| # | Where | Shape |
+| --- | --- | --- |
+| 1 | Bronze bootstrap | returned `0` with all 16 tables failed |
+| 2 | `benchmark.yml` Bronze ETL loop | `\|\| true` around every ingest |
+| 3 | `benchmark.yml` query runner | `$(cmd \| grep …)` takes `grep`'s status |
+| 4 | `benchmark.yml` baseline commit | `git push \|\| true` |
+| 5 | `ci-trino-init` | `sh -c` ending in `echo`, so five failed `CREATE SCHEMA` calls still exited `0` |
+| 6 | `benchmark.yml` benchmark queries | `branch_performance` queried a column that does not exist; the failure was hidden by instance 3, so a query that never ran still recorded a timing in every published benchmark |
+| 7 | CI `Lint & Format` job | `ruff check … \|\| true` and `ruff format --check … \|\| true` |
+
+Instance 7 in the format used for triage:
+
+```text
+Instance:       CI Lint & Format
+Pattern:        ruff ... || true
+Effect:         lint/format violations cannot fail the job
+Classification: false-green / non-blocking gate
+Status:         recorded, not fixed in TD-2
+```
+
+It is named as a gate and reports as green while enforcing nothing — the job has
+been surfacing `BLE001`, `EXE001` and `DTZ005` findings as annotations for
+months. Removing `|| true` would immediately turn a body of pre-existing debt
+into a merge blocker, so it is a scope decision rather than a bug fix.
+
+Instances 1–7 were each found by accident or by adding a verification step, never
+by a check that looks for the pattern itself.
+
+### Acceptance
+
+```text
+[ ] critical shell steps use set -euo pipefail or equivalent
+[ ] no critical command is masked by || true
+[ ] one-shot containers fail non-zero when any required command fails
+[ ] pipeline exit status comes from the producer being verified
+[ ] success logs are emitted only after post-condition verification
+[ ] CI has a static contract test for known false-success patterns
+```
+
+The last item is the one that closes the loop. `tests/governance/` already hosts
+static contract tests of this kind (`test_airflow_dag_contracts.py`), so the
+pattern check belongs there rather than in review habit.
+
+Related: the fifth instance is why the benchmark workflow verifies schemas after
+`trino-init` exits `0`. Exit code is necessary, not sufficient — the post-condition
+has to be queried from the platform.
+
+---
+
 ## TD-3 — Secrets committed in the repository
 
 **Status:** open (recorded at `portfolio-v1.1`, deliberately deferred to its own PR)

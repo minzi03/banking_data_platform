@@ -1,0 +1,16 @@
+# Dependencies for running data_generator/ on the CI runner.
+#
+# Seed generation is bootstrap tooling, not a Spark workload: it is plain Python
+# talking to PostgreSQL over psycopg2. Keeping these here rather than in
+# docker/Dockerfile.spark means a generator dependency change rebuilds nothing,
+# and the Spark image carries no package the ETL does not use.
+#
+#     runner   → data_generator → localhost:5432 → ci-postgres
+#     Spark    → Bronze JDBC / Silver / Gold
+#
+# Derived from the actual imports under data_generator/ (third-party only:
+# psycopg2, yaml). Add here if that set grows; do not inline packages into a
+# workflow command.
+
+psycopg2-binary==2.9.10
+PyYAML==6.0.2
