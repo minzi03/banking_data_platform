@@ -64,7 +64,11 @@ def normalise_number(value: Any) -> set[str]:
         return {str(value)}
     forms = {str(value), f"{value:,}"}
     if value >= 1_000_000 and value % 100_000 == 0:
-        forms.add(f"{value / 1_000_000:.1f}M".replace(".0M", "M"))
+        millions = f"{value / 1_000_000:.1f}".rstrip("0").rstrip(".")
+        # "2.3M" hợp cho ô bảng; câu văn thì đọc là "2.3 million". Cả hai chiếu
+        # cùng một giá trị đã verify, nên cả hai đều hợp lệ.
+        forms.add(f"{millions}M")
+        forms.add(f"{millions} million")
     return forms
 
 
@@ -82,40 +86,75 @@ def verify(manifest: dict, readme: str) -> tuple[list[str], list[str]]:
         return errors, checked
 
     for binding in manifest.get("readme_bindings", []):
-        claim = binding["readme_claim"]
         path = binding["manifest_path"]
         note = binding.get("status")
 
-        if claim not in readme:
-            errors.append(f"claim không có trong README: {claim!r} (binding {path})")
-            continue
-
-        value = get_path(manifest, path)
-        if value is MISSING:
-            errors.append(f"manifest_path không tồn tại: {path}")
-            continue
-
-        # Binding trỏ vào một nhánh (nhiều số) → chỉ kiểm claim có mặt.
-        if isinstance(value, dict):
-            checked.append(f"{claim}  →  {path} (nhóm metric, kiểm sự hiện diện)")
-            continue
-
-        if value is None:
-            errors.append(f"{path} chưa có giá trị nhưng README đang claim: {claim!r}")
-            continue
-
-        forms = normalise_number(value)
-        if not any(f in claim for f in forms):
-            errors.append(
-                f"README drift: claim {claim!r} không chứa giá trị đã verify "
-                f"{value!r} (chấp nhận: {sorted(forms)}) từ {path}"
-            )
-            continue
-
-        suffix = f"  [{note}]" if note else ""
-        checked.append(f"{claim}  →  {path} = {value}{suffix}")
+        for location, claim in iter_projections(binding):
+            _verify_one(manifest, readme, path, location, claim, note, errors, checked)
 
     return errors, checked
+
+
+def iter_projections(binding: dict) -> list[tuple[str, str]]:
+    """
+    Một metric có thể được CHIẾU vào README ở nhiều chỗ.
+
+    Bảng metric không còn là nơi duy nhất publish một con số: executive summary
+    cũng nêu chúng, và một câu văn không được kiểm sẽ trôi khỏi bảng ngay lần
+    manifest đổi tiếp theo — đúng cách diagram mermaid từng trôi khỏi prose.
+
+        readme_claims:
+          - location: metrics_table
+            claim: "| Historical Gold tables     |             10 |"
+          - location: executive_summary
+            claim: "10 historical Gold models"
+
+    Dạng cũ `readme_claim: "..."` vẫn đọc được và được coi là projection
+    `metrics_table`, nên contract không phải viết lại một lượt.
+    """
+    projections: list[tuple[str, str]] = []
+    if "readme_claim" in binding:
+        projections.append(("metrics_table", binding["readme_claim"]))
+    for entry in binding.get("readme_claims", []) or []:
+        if isinstance(entry, dict):
+            projections.append((entry.get("location", "unspecified"), entry["claim"]))
+        else:
+            projections.append(("unspecified", entry))
+    return projections
+
+
+def _verify_one(manifest, readme, path, location, claim, note, errors, checked) -> None:
+    """Kiểm một projection: claim có trong README và mang đúng giá trị đã verify."""
+    if claim not in readme:
+        errors.append(
+            f"claim không có trong README [{location}]: {claim!r} (binding {path})"
+        )
+        return
+
+    value = get_path(manifest, path)
+    if value is MISSING:
+        errors.append(f"manifest_path không tồn tại: {path}")
+        return
+
+    # Binding tro vao mot nhanh (nhieu so) -> chi kiem claim co mat.
+    if isinstance(value, dict):
+        checked.append(f"[{location}] {claim}  ->  {path} (nhóm metric, kiểm sự hiện diện)")
+        return
+
+    if value is None:
+        errors.append(f"{path} chưa có giá trị nhưng README đang claim: {claim!r}")
+        return
+
+    forms = normalise_number(value)
+    if not any(f in claim for f in forms):
+        errors.append(
+            f"README drift [{location}]: claim {claim!r} không chứa giá trị đã verify "
+            f"{value!r} (chấp nhận: {sorted(forms)}) từ {path}"
+        )
+        return
+
+    suffix = f"  [{note}]" if note else ""
+    checked.append(f"[{location}] {claim}  ->  {path} = {value}{suffix}")
 
 
 def main(argv: list[str] | None = None) -> int:

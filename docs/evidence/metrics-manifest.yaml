@@ -520,10 +520,23 @@ metrics:
         không ai phải đoán.
 
         '
+    integration_tests:
+      value: 34
+      declared: 34
+      metric_type: static
+      provenance: collector:integration_tests
+      definition: 'Số hàm `def test_*` trong hai module integration mà gate
+        PR-blocking `trino-integration` thực sự chạy: tests/integration/
+        test_data_quality.py và test_etl_validation.py. Cùng semantic đếm với
+        automated_tests.test_functions, nhưng scope đúng các test chạy qua Trino
+        trên dữ liệu pipeline thật. Tách riêng vì đây là headline claim ở đầu
+        README — một con số được publish thì phải đo được.
+
+        '
     automated_tests:
       test_functions:
         value: 462
-        declared: 462
+        declared: 472
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
@@ -797,12 +810,24 @@ readme_bindings:
   manifest_path: metrics.source.source_datasets.value
 - readme_claim: '| Bronze CDC tables          |              6 |'
   manifest_path: metrics.bronze.cdc_tables.value
-- readme_claim: '| Historical Gold tables     |             10 |'
-  manifest_path: metrics.gold.tables.value
-- readme_claim: '| Current-serving tables     |              9 |'
-  manifest_path: metrics.serving.objects_present.value
-- readme_claim: '| Curated transactions       |      2,300,000 |'
-  manifest_path: metrics.transaction_scale.curated_financial_transactions.value
+- manifest_path: metrics.gold.tables.value
+  readme_claims:
+  - location: metrics_table
+    claim: '| Historical Gold tables     |             10 |'
+  - location: executive_summary
+    claim: 10 historical Gold models
+- manifest_path: metrics.serving.objects_present.value
+  readme_claims:
+  - location: metrics_table
+    claim: '| Current-serving tables     |              9 |'
+  - location: executive_summary
+    claim: 9 dbt-managed current-serving tables
+- manifest_path: metrics.transaction_scale.curated_financial_transactions.value
+  readme_claims:
+  - location: metrics_table
+    claim: '| Curated transactions       |      2,300,000 |'
+  - location: executive_summary
+    claim: 2.3 million distinct financial transactions per verified snapshot
 - readme_claim: '| Debezium connectors        |              3 |'
   manifest_path: metrics.cdc.connectors.value
 - readme_claim: '| Kafka CDC topics           |             12 |'
@@ -813,6 +838,12 @@ readme_bindings:
   manifest_path: metrics.platform.dq_check_types.value
 - readme_claim: '| Airflow DAG files          |             16 |'
   manifest_path: metrics.platform.airflow_dag_files.value
+- manifest_path: metrics.platform.integration_tests.value
+  readme_claims:
+  - location: metrics_table
+    claim: '| Trino integration tests    |             34 |'
+  - location: executive_summary
+    claim: 34 Trino-backed integration tests
 - readme_claim: '| Automated tests            |            462 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             24 |'

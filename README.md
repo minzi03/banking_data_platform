@@ -39,6 +39,28 @@
 
 ---
 
+## Executive summary
+
+An end-to-end, production-like banking lakehouse built to show how batch, CDC, data quality, governance, analytical serving and CI/CD fit together as **one platform** rather than a collection of isolated pipelines.
+
+Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and served through Trino and dbt.
+
+The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains. The analytical layer is **10 historical Gold models** plus **9 dbt-managed current-serving tables**.
+
+Correctness is treated as a property of the platform rather than of a successful job log. Gold transformations are protected against join fan-out and multi-snapshot double counting; CDC current state is checked for idempotency and duplicate keys; business-date semantics are separated explicitly from UTC storage semantics; and every number published here is generated from a versioned evidence manifest and drift-checked in CI.
+
+CI goes past unit tests. A reproducible Docker-based Trino/Iceberg topology runs **34 Trino-backed integration tests** against real pipeline output, including a real SCD Type 2 transition. The gate is path-aware, blocks the pull request when it is relevant, and was deliberately negative-tested: an intentional data assertion failure was pushed, the pull request went red, and the revert restored it.
+
+Two principles shaped that work.
+
+> **A green test is only valuable if the invariant itself is correct.**
+>
+> **A fallback that looks defensive can be a fabricated measurement.**
+
+Several defects surfaced not because a job crashed, but because a previously green path was validating the wrong thing or suppressing the real failure signal. They are written up in [Engineering Decisions & Failures Found](#engineering-decisions--failures-found).
+
+---
+
 ## What is this project?
 
 **Banking Data Platform** is a production-like data engineering project that implements two complementary ingestion paths for banking workloads:
@@ -423,6 +445,7 @@ counts are ambiguous without them.
 | Data-quality check types   |              8 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             16 | Files defining at least one DAG (17 DAG objects — one file defines two)         |
 | Automated tests            |            462 | Python `def test_*` functions                                                   |
+| Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             24 | 20 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
