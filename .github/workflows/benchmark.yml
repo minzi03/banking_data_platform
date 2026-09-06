@@ -30,6 +30,10 @@ env:
   POSTGRES_USER: banking_admin
   POSTGRES_PASSWORD: BankingAdmin123
   POSTGRES_DB: banking_db
+  # Một nguồn duy nhất cho ngày nghiệp vụ của benchmark. Seed, ETL, platform
+  # assertion và benchmark query đều đọc từ đây; trước đây ngày này bị hard-code
+  # rải rác ở nhiều bước.
+  BENCHMARK_COB_DT: "2026-01-01"
 
 jobs:
   # ===========================================================================
@@ -336,20 +340,71 @@ jobs:
 
           echo "✅ Tables created"
 
+      # Sinh seed data chạy TRÊN RUNNER, không phải trong container Spark.
+      # Nó là bootstrap tooling bằng Python thuần nói chuyện psycopg2 — không
+      # dùng Spark chút nào. Chạy nó qua spark-submit vừa sai về mặt kiến trúc
+      # vừa buộc image ETL phải mang psycopg2 chỉ để phục vụ CI (đã thấy:
+      # ModuleNotFoundError: No module named 'psycopg2').
+      #
+      #   runner → data_generator → localhost:5432 → ci-postgres
+      #   Spark  → Bronze JDBC / Silver / Gold
+      #
+      # Không sửa default của generator: nó đã đọc POSTGRES_HOST/PORT từ env,
+      # nên CI chỉ cần inject localhost thay vì hostname nội bộ `postgres`.
       - name: Generate seed data
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
         run: |
+          set -euo pipefail
+          echo "=== Installing seed dependencies ==="
+          python -m pip install -r requirements-ci-seed.txt
+
           echo "=== Generating seed data ==="
-          docker exec ci-spark-master /opt/spark/bin/spark-submit \
-            --master spark://spark-master:7077 \
-            /opt/project/data_generator/generate_all.py \
-            --host postgres --port 5432
+          python data_generator/generate_all.py
+
+          # Post-condition trên chính source, không tin generator tự báo.
+          # `> 0` chứ không ghim số: khối lượng do seed_config.yaml quyết định,
+          # ghim ở đây sẽ tạo ra hai nơi định nghĩa cùng một con số.
+          echo "=== Xác nhận PostgreSQL source có dữ liệu ==="
+          for table in core_banking.customer core_banking.txn_account; do
+            count=$(docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+              -tAc "SELECT COUNT(*) FROM ${table}")
+            echo "  ${table}: ${count} rows"
+            if [ "$count" -le 0 ]; then
+              echo "::error::seed generator kết thúc thành công nhưng ${table} rỗng"
+              exit 1
+            fi
+          done
           echo "✅ Seed data generated"
 
       - name: Run full ETL pipeline
-        env:
-          COB_DT: "2026-01-01"
         run: |
           set -euo pipefail
+          COB_DT="$BENCHMARK_COB_DT"
+
+          # Mỗi ranh giới layer có HAI kiểm tra: process (exit code) và data
+          # (query từ platform). Exit code 0 chỉ là điều kiện cần — bài học
+          # v1.1 là Bronze bootstrap từng báo "16/16 loaded" với 16 bảng fail,
+          # và trino-init vừa exit 0 mà không tạo schema nào.
+          #
+          # Không có assertion Silver/Gold thì hai failure mode này lọt lưới:
+          #   Bronze>0, Silver=0 → Gold query vẫn chạy nhưng vô nghĩa
+          #   Silver>0, Gold=0   → benchmark ghi timing trên kết quả rỗng
+          assert_rows() {
+            local label="$1" query="$2" count
+            count=$(docker exec ci-trino trino --output-format CSV_UNQUOTED \
+              --execute "$query" | tr -d ' \r')
+            if ! [ "$count" -ge 0 ] 2>/dev/null; then
+              echo "::error::${label}: không đọc được số dòng; Trino trả về: [${count}]"
+              exit 1
+            fi
+            echo "  ${label}: ${count} rows (cob_dt=${COB_DT})"
+            if [ "$count" -le 0 ]; then
+              echo "::error::${label} rỗng ở cob_dt=${COB_DT} — bootstrap exit 0 nhưng không ghi dữ liệu"
+              exit 1
+            fi
+          }
 
           # Ba layer đều gọi ĐÚNG entrypoint bootstrap canonical mà clean
           # rebuild v1.1 đã chạy. Trước đây Bronze tự loop
@@ -379,13 +434,41 @@ jobs:
             --db_password "${POSTGRES_PASSWORD}" \
             --cob_dt "${COB_DT}"
 
+          assert_rows "bronze.core_customer" \
+            "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
+
           echo "=== Running Silver ETL ==="
           $SPARK_SUBMIT /opt/project/code_etl/silver/bootstrap/initial_load.py \
             --cob_dt "${COB_DT}"
 
+          # fact_txn_account, không phải dim_customer: chỉ các bảng fact_* trong
+          # Silver mang cob_dt (đã kiểm information_schema), và đây đúng là fact
+          # nuôi mart_customer_360 — cũng là nơi hai bug P0 fan-out /
+          # multi-snapshot từng nằm.
+          assert_rows "silver.fact_txn_account" \
+            "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account WHERE cob_dt = DATE '${COB_DT}'"
+
           echo "=== Running Gold ETL ==="
           $SPARK_SUBMIT /opt/project/code_etl/gold/bootstrap/initial_load.py \
             --cob_dt "${COB_DT}"
+
+          assert_rows "gold.mart_customer_360" \
+            "SELECT COUNT(*) FROM iceberg.gold.mart_customer_360 WHERE cob_dt = DATE '${COB_DT}'"
+
+          # Grain check: mart_customer_360 phải là một dòng cho mỗi khách hàng.
+          # rows > distinct_customers chính là hình dạng của bug fan-out P0 —
+          # rẻ để kiểm ở đây và bắt được trước khi benchmark đo trên dữ liệu sai.
+          echo "=== Kiểm grain gold.mart_customer_360 ==="
+          grain=$(docker exec ci-trino trino --output-format CSV_UNQUOTED --execute \
+            "SELECT COUNT(*), COUNT(DISTINCT customer_id) FROM iceberg.gold.mart_customer_360 \
+             WHERE cob_dt = DATE '${COB_DT}'" | tr -d ' \r')
+          rows=${grain%,*}
+          distinct=${grain#*,}
+          echo "  rows=${rows} distinct_customers=${distinct}"
+          if [ "$rows" != "$distinct" ]; then
+            echo "::error::grain sai: ${rows} dòng cho ${distinct} khách hàng — fan-out"
+            exit 1
+          fi
 
           echo "✅ ETL pipeline complete"
 
