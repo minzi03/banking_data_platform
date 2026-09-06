@@ -543,11 +543,15 @@ jobs:
           set -euo pipefail
           TESTS="tests/integration/test_data_quality.py tests/integration/test_etl_validation.py"
 
-          # Collection kiểm riêng: nếu số test đổi thì baseline không còn so
-          # sánh được với inventory đã chốt. Không pipe qua grep — capture rồi
-          # parse, đúng TD-5.
+          # `-o addopts=` ghi đè addopts trong pytest.ini (`-v --tb=short`).
+          # Có -v thì --collect-only in ra dạng CÂY (`<Function ...>`) kèm banner
+          # `===== 34 tests collected =====`; không có -v thì in node id mỗi
+          # dòng một cái. Đếm node id là ổn định, còn parse banner thì không —
+          # lần chạy trước chết đúng vì regex neo `^[0-9]+` không khớp dòng có
+          # `=====` ở đầu, nên harness báo `collected=0` và dừng trước khi chạy
+          # test nào. Đừng suy một con số từ text trình bày cho người đọc.
           set +e
-          python -m pytest $TESTS -m integration --collect-only -q \
+          python -m pytest -o addopts= $TESTS -m integration --collect-only -q \
             > /tmp/collect.log 2>&1
           collect_rc=$?
           set -e
@@ -556,7 +560,7 @@ jobs:
             echo "::error::collection thất bại (exit=${collect_rc})"
             exit "$collect_rc"
           fi
-          collected=$(grep -oE '^[0-9]+ tests collected' /tmp/collect.log | grep -oE '^[0-9]+' || echo 0)
+          collected=$(grep -cE '^tests/integration/.*::' /tmp/collect.log || true)
           echo "collected=${collected}"
           if [ "$collected" -ne 34 ]; then
             echo "::error::mong đợi 34 test, collect được ${collected}"
@@ -564,12 +568,18 @@ jobs:
           fi
 
           # Không --maxfail: baseline cần FULL pass/fail matrix trong một vòng.
+          # --junitxml cho ra kết quả MÁY ĐỌC ĐƯỢC; ma trận pass/fail lấy từ đó
+          # chứ không bới trong output người đọc.
           set +e
-          python -m pytest $TESTS -m integration -vv --tb=short \
+          python -m pytest -o addopts= $TESTS -m integration -v --tb=short \
+            --junitxml=/tmp/baseline-junit.xml \
             > /tmp/trino-integration-baseline.log 2>&1
           rc=$?
           set -e
           cat /tmp/trino-integration-baseline.log
+
+          echo "=== MA TRẬN BASELINE ==="
+          python scripts/summarize_junit.py /tmp/baseline-junit.xml             --title "TD-1 baseline: 34 Trino integration tests, unmodified"             | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$rc" -ne 0 ]; then
             echo "::error::Trino integration baseline failed (exit=${rc})"
@@ -581,7 +591,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: trino-integration-baseline
-          path: /tmp/trino-integration-baseline.log
+          path: |
+            /tmp/trino-integration-baseline.log
+            /tmp/baseline-junit.xml
           if-no-files-found: warn
 
       - name: Run benchmark queries
