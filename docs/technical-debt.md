@@ -130,8 +130,25 @@ the same outcome: something reported success while doing nothing.
 | 3 | `benchmark.yml` query runner | `$(cmd \| grep …)` takes `grep`'s status |
 | 4 | `benchmark.yml` baseline commit | `git push \|\| true` |
 | 5 | `ci-trino-init` | `sh -c` ending in `echo`, so five failed `CREATE SCHEMA` calls still exited `0` |
+| 6 | `benchmark.yml` benchmark queries | `branch_performance` queried a column that does not exist; the failure was hidden by instance 3, so a query that never ran still recorded a timing in every published benchmark |
+| 7 | CI `Lint & Format` job | `ruff check … \|\| true` and `ruff format --check … \|\| true` |
 
-Instances 1–5 were each found by accident or by adding a verification step, never
+Instance 7 in the format used for triage:
+
+```text
+Instance:       CI Lint & Format
+Pattern:        ruff ... || true
+Effect:         lint/format violations cannot fail the job
+Classification: false-green / non-blocking gate
+Status:         recorded, not fixed in TD-2
+```
+
+It is named as a gate and reports as green while enforcing nothing — the job has
+been surfacing `BLE001`, `EXE001` and `DTZ005` findings as annotations for
+months. Removing `|| true` would immediately turn a body of pre-existing debt
+into a merge blocker, so it is a scope decision rather than a bug fix.
+
+Instances 1–7 were each found by accident or by adding a verification step, never
 by a check that looks for the pattern itself.
 
 ### Acceptance
