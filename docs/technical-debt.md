@@ -115,6 +115,41 @@ pattern rather than assuming it is absent.
 
 ---
 
+## TD-6 — Two workflows build the same lakehouse fixture
+
+**Status:** open (recorded at TD-1)
+
+`ci.yml`'s `trino-integration` job and `benchmark.yml` both run the same
+sequence: pull, build, start the `ci-trino` stack, create schemas, seed, then
+Bronze → Silver → Gold. Roughly 250 lines exist twice.
+
+Deliberate for now, because the two are expected to **diverge** rather than
+converge: the benchmark wants production-like volume, while the 34 integration
+tests check structure, uniqueness, referential integrity and count matching and
+need nothing like 1.2M transactions. Extracting a composite action today would
+couple two consumers that should end up parameterised differently — and GitHub
+composite actions cannot carry per-step `timeout-minutes`, which would undo the
+separation of image-acquisition from readiness budgets that TD-2 established.
+
+The integration job currently costs ~18 minutes, of which ~13 is seeding and
+ETL and ~40 seconds is the tests themselves.
+
+### Acceptance
+
+```text
+[ ] one canonical generator/config drives both profiles
+      benchmark profile    → production-like volume
+      integration profile  → reduced volume
+[ ] same schema, same generation rules, same code path — only scale differs
+[ ] integration job wall time materially reduced
+[ ] no second "mini seed" implementation
+```
+
+The failure mode to avoid is a separate small seeder: that is how the schemas
+in `trino-init` and `benchmark.yml` drifted apart in the first place.
+
+---
+
 ## TD-5 — Shell failure propagation and false-success patterns
 
 **Status:** open (recorded at `portfolio-v1.1`)

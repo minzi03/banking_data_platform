@@ -18,6 +18,49 @@ permissions:
 
 jobs:
   # ===========================================================================
+  # Job 0: phát hiện thay đổi liên quan tới Trino integration
+  #
+  # KHÔNG dùng `on.pull_request.paths` để lọc cả workflow: nếu check này thành
+  # required check, một workflow không chạy sẽ để lại trạng thái pending và
+  # branch protection kẹt. Thay vào đó workflow LUÔN chạy, còn job nặng thì
+  # chạy có điều kiện và một gate job cố định luôn báo cáo kết quả.
+  #
+  # Phạm vi path đi theo dependency graph THẬT của fixture, không chỉ nơi test
+  # nằm. data_generator/** bắt buộc phải có: MCC collision đã làm cả pipeline
+  # đỏ trong khi code_etl/ không đổi một dòng nào.
+  # ===========================================================================
+  changes:
+    name: 🔎 Detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      trino_integration: ${{ steps.detect.outputs.trino_integration }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Không phải PR — chạy đầy đủ."
+            echo "trino_integration=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
+          echo "$CHANGED"
+          PATTERN='^(code_etl/|data_generator/|docker/|tests/integration/|requirements-ci-seed\.txt|pytest\.ini|scripts/summarize_junit\.py|\.github/workflows/ci\.yml)'
+          if echo "$CHANGED" | grep -qE "$PATTERN"; then
+            echo "trino_integration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trino_integration=false" >> "$GITHUB_OUTPUT"
+            echo "Không đụng đường phụ thuộc của Trino integration — bỏ qua theo chính sách."
+          fi
+
+  # ===========================================================================
   # Job 1: Lint & Format Check
   # ===========================================================================
   lint:
@@ -439,3 +482,640 @@ jobs:
         with:
           name: security-scan-results
           path: bandit-report.json
+
+  trino-integration:
+    name: 🧪 Trino Integration
+    runs-on: ubuntu-latest
+    needs:
+    - changes
+    if: needs.changes.outputs.trino_integration == 'true'
+    timeout-minutes: 45
+    env:
+      POSTGRES_USER: banking_admin
+      POSTGRES_PASSWORD: BankingAdmin123
+      POSTGRES_DB: banking_db
+      BENCHMARK_COB_DT: '2026-01-01'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: pip
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-timeout pyyaml
+    - name: Pull images
+      working-directory: docker
+      timeout-minutes: 15
+      run: |
+        set -euo pipefail
+        echo "=== Pulling images (not counted against readiness) ==="
+        t0=$(date +%s)
+        docker compose -f docker-compose.ci.yml pull --quiet --ignore-buildable
+        echo "IMAGE_PULL_SECONDS=$(( $(date +%s) - t0 ))" >> "$GITHUB_ENV"
+    - name: Build images
+      working-directory: docker
+      timeout-minutes: 25
+      run: |
+        set -euo pipefail
+        echo "=== Building Spark images (not counted against readiness) ==="
+        t0=$(date +%s)
+        docker compose -f docker-compose.ci.yml build
+        echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - t0 ))" >> "$GITHUB_ENV"
+    - name: Start Docker stack
+      id: start_stack
+      working-directory: docker
+      timeout-minutes: 12
+      env:
+        READINESS_TIMEOUT: '300'
+      run: |
+        set -euo pipefail
+        COMPOSE="docker compose -f docker-compose.ci.yml"
+
+        # Chờ một container one-shot (mc, trino-init) chạy xong và kiểm tra
+        # exit code THẬT. Không đọc $? qua pipe — đó là cách một lỗi biến mất.
+        wait_for_completion() {
+          # `ps -aq`, KHÔNG phải `ps -q`. Không có -a thì compose chỉ liệt kê
+          # service đang CHẠY, nên một container one-shot thoát nhanh sẽ trả
+          # về id rỗng và bị báo nhầm là "chưa được tạo". Đã xảy ra thật:
+          # log hiện `Container ci-mc Started` rồi ngay dòng sau là
+          # "mc không có container nào được tạo" — mc đã chạy xong trước khi
+          # ta kịp hỏi. Các lần chạy trước xanh chỉ vì nó tình cờ còn sống
+          # đúng lúc; đây là race, không phải may rủi vô hại.
+          local service="$1" deadline=$((SECONDS + 180)) cid state code
+          cid=$($COMPOSE ps -aq "$service")
+          if [ -z "$cid" ]; then
+            echo "::error::$service: compose không tạo container nào (kể cả đã thoát)"
+            return 1
+          fi
+          while [ $SECONDS -lt $deadline ]; do
+            state=$(docker inspect -f '{{.State.Status}}' "$cid")
+            if [ "$state" = "exited" ]; then
+              code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+              if [ "$code" = "0" ]; then
+                echo "  ✓ $service hoàn tất (exit 0)"
+                return 0
+              fi
+              echo "::error::$service thoát với exit $code"
+              return 1
+            fi
+            sleep 3
+          done
+          echo "::error::$service không kết thúc trong 180s (state=$state)"
+          return 1
+        }
+
+        # Đo readiness của TỪNG service từ một mốc t0 chung. Một vòng poll
+        # duy nhất kiểm mọi service còn lại mỗi nhịp, nên thời điểm ghi nhận
+        # là lúc service healthy thật — không phải lúc script rảnh để hỏi nó.
+        # Đây là acceptance "separate image acquisition from readiness" ở
+        # dạng đo được: lần sau fail thì đọc được `pull=8m41s postgres=14s`
+        # thay vì lại suy từ tổng thời gian job.
+        record_readiness() {
+          local t0="$1"; shift
+          local pending=("$@") deadline=$((SECONDS + READINESS_TIMEOUT))
+          while [ ${#pending[@]} -gt 0 ]; do
+            if [ $SECONDS -ge $deadline ]; then
+              echo "::error::readiness timeout sau ${READINESS_TIMEOUT}s — còn chờ: ${pending[*]}"
+              return 1
+            fi
+            local still=()
+            for service in "${pending[@]}"; do
+              local cid health
+              cid=$($COMPOSE ps -q "$service" 2>/dev/null || true)
+              health=""
+              [ -n "$cid" ] && health=$(docker inspect -f \
+                '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$cid")
+              if [ "$health" = "healthy" ]; then
+                local secs=$(( $(date +%s) - t0 ))
+                local key
+                key=$(echo "$service" | tr 'a-z-' 'A-Z_')
+                echo "  ✓ $service healthy sau ${secs}s"
+                echo "${key}_READY_SECONDS=${secs}" >> "$GITHUB_ENV"
+              else
+                still+=("$service")
+              fi
+            done
+            pending=("${still[@]}")
+            [ ${#pending[@]} -gt 0 ] && sleep 3
+          done
+          return 0
+        }
+
+        STACK_T0=$(date +%s)
+
+        echo "=== Phase 1/4: storage + compute (readiness ${READINESS_TIMEOUT}s) ==="
+        echo "stage=storage_compute" >> "$GITHUB_OUTPUT"
+        $COMPOSE up -d postgres minio spark-master spark-worker-1
+        record_readiness "$STACK_T0" postgres minio spark-master spark-worker-1
+
+        echo "=== Phase 2/4: MinIO bucket bootstrap ==="
+        echo "stage=minio_bucket" >> "$GITHUB_OUTPUT"
+        $COMPOSE up -d mc
+        wait_for_completion mc
+
+        echo "=== Phase 3/5: Trino (readiness ${READINESS_TIMEOUT}s) ==="
+        echo "stage=trino_engine" >> "$GITHUB_OUTPUT"
+        $COMPOSE up -d iceberg-rest trino
+        record_readiness "$STACK_T0" trino
+
+        # -------------------------------------------------------------------
+        # Readiness THẬT của catalog: Trino DÙNG được nó. Không phải "port
+        # 8181 mở", cũng không phải "REST trả HTTP 200" — hai thứ đó là proxy
+        # signal. Đây là consumer path thật:
+        #   iceberg-rest → Trino Iceberg connector → SHOW SCHEMAS FROM iceberg
+        #
+        # Gate này chạy TRƯỚC trino-init để tách hai lớp lỗi: nếu SHOW SCHEMAS
+        # hỏng thì là catalog connectivity; nếu SHOW SCHEMAS chạy được mà
+        # trino-init hỏng thì là schema bootstrap. Trước đây hai lớp này lẫn
+        # vào nhau.
+        # -------------------------------------------------------------------
+        echo "=== Phase 4/5: Iceberg catalog queryable qua Trino ==="
+        echo "stage=catalog_queryable" >> "$GITHUB_OUTPUT"
+        CATALOG_TIMEOUT=180
+        catalog_t0=$(date +%s)
+        until docker exec ci-trino trino --execute "SHOW SCHEMAS FROM iceberg" \
+                >/tmp/catalog-check.out 2>/tmp/catalog-check.err
+        do
+          if [ $(( $(date +%s) - catalog_t0 )) -ge $CATALOG_TIMEOUT ]; then
+            echo "::error::Iceberg catalog không query được qua Trino trong ${CATALOG_TIMEOUT}s"
+            echo "=== Trino stderr ==="
+            cat /tmp/catalog-check.err || true
+            exit 1
+          fi
+          sleep 3
+        done
+        echo "CATALOG_QUERYABLE_SECONDS=$(( $(date +%s) - STACK_T0 ))" >> "$GITHUB_ENV"
+        echo "  ✓ catalog query được sau $(( $(date +%s) - STACK_T0 ))s"
+
+        echo "=== Phase 5/5: schema bootstrap ==="
+        echo "stage=schema_bootstrap" >> "$GITHUB_OUTPUT"
+        $COMPOSE up -d trino-init
+        wait_for_completion trino-init
+
+        # Kiểm chứng kết quả bootstrap, không tin vào exit code một mình.
+        echo "=== Xác nhận schema đã tồn tại ==="
+        docker exec ci-trino trino --output-format CSV_UNQUOTED \
+          --execute "SHOW SCHEMAS FROM iceberg" > /tmp/schemas.out
+        missing=""
+        for schema in bronze silver gold serving; do
+          grep -qx "$schema" /tmp/schemas.out || missing="$missing $schema"
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::trino-init exit 0 nhưng thiếu schema:$missing"
+          cat /tmp/schemas.out
+          exit 1
+        fi
+        echo "  ✓ bronze/silver/gold/serving đều có"
+
+        # Khẳng định lại bằng chính compose: nếu vòng poll ở trên có sai sót
+        # thì bước này vẫn bắt được. Lúc này mọi service đã healthy nên nó
+        # trả về gần như tức thì. iceberg-rest KHÔNG có trong danh sách vì nó
+        # cố ý không có healthcheck — readiness của nó do gate phía trên chứng.
+        $COMPOSE up -d --wait --wait-timeout 60 \
+          postgres minio spark-master spark-worker-1 trino
+
+        echo "STACK_START_SECONDS=$(( $(date +%s) - STACK_T0 ))" >> "$GITHUB_ENV"
+        echo "stage=done" >> "$GITHUB_OUTPUT"
+        echo "✅ Stack sẵn sàng"
+    - name: Report stack timing
+      if: always()
+      run: |
+        {
+          echo "### Stack timing"
+          echo ""
+          echo "| Giai đoạn | Giây |"
+          echo "| --- | ---: |"
+          echo "| Image pull | ${IMAGE_PULL_SECONDS:-not_reached} |"
+          echo "| Image build | ${IMAGE_BUILD_SECONDS:-not_reached} |"
+          echo "| Stack start (tổng) | ${STACK_START_SECONDS:-not_reached} |"
+          echo "| postgres ready | ${POSTGRES_READY_SECONDS:-not_reached} |"
+          echo "| minio ready | ${MINIO_READY_SECONDS:-not_reached} |"
+          echo "| spark-master ready | ${SPARK_MASTER_READY_SECONDS:-not_reached} |"
+          echo "| spark-worker-1 ready | ${SPARK_WORKER_1_READY_SECONDS:-not_reached} |"
+          echo "| trino ready | ${TRINO_READY_SECONDS:-not_reached} |"
+          echo "| Iceberg catalog queryable | ${CATALOG_QUERYABLE_SECONDS:-not_reached} |"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
+    - name: Diagnose stack failure
+      if: failure()
+      working-directory: docker
+      run: |
+        COMPOSE="docker compose -f docker-compose.ci.yml"
+        echo "=== Giai đoạn đang chạy khi hỏng: ${{ steps.start_stack.outputs.stage || 'chưa tới bước khởi động' }} ==="
+
+        echo ""
+        echo "=== docker compose ps ==="
+        $COMPOSE ps --all
+
+        echo ""
+        echo "=== Trạng thái từng container ==="
+        unhealthy=""
+        for service in $($COMPOSE config --services); do
+          cid=$($COMPOSE ps -aq "$service" 2>/dev/null || true)
+          if [ -z "$cid" ]; then
+            echo "  $service: KHÔNG CÓ CONTAINER"
+            unhealthy="$unhealthy $service"
+            continue
+          fi
+          status=$(docker inspect -f '{{.State.Status}}' "$cid")
+          health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$cid")
+          code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+          echo "  $service: status=$status health=$health exit=$code"
+          if [ "$health" = "unhealthy" ] || [ "$health" = "starting" ] \
+             || { [ "$status" = "exited" ] && [ "$code" != "0" ]; }; then
+            unhealthy="$unhealthy $service"
+          fi
+        done
+
+        # iceberg-rest cố ý không có healthcheck, nên nó không bao giờ tự lọt
+        # vào danh sách trên. Nếu hỏng ở giai đoạn liên quan tới catalog thì
+        # log của nó chính là thứ cần đọc — thêm tường minh.
+        case "${{ steps.start_stack.outputs.stage }}" in
+          trino_engine|catalog_queryable|schema_bootstrap)
+            unhealthy="$unhealthy iceberg-rest trino"
+            ;;
+        esac
+
+        echo ""
+        if [ -n "$unhealthy" ]; then
+          echo "=== Log của service có vấn đề:$unhealthy ==="
+          for service in $unhealthy; do
+            echo ""
+            echo "----- $service (200 dòng cuối) -----"
+            $COMPOSE logs --tail=200 --no-color "$service" || true
+          done
+        else
+          echo "=== Không service nào ở trạng thái xấu — in log toàn stack ==="
+          $COMPOSE logs --tail=100 --no-color || true
+        fi
+    - name: Create schemas and tables
+      run: |
+        # Schema Trino do service `trino-init` trong docker-compose.ci.yml tạo
+        # (bronze/silver/gold/silver_cdc/serving) và bước khởi động ở trên đã
+        # chờ nó exit 0. Trước đây workflow tạo lại 3 schema ở đây, nên có hai
+        # nơi định nghĩa cùng một thứ và chúng đã lệch nhau: compose có
+        # silver_cdc còn workflow thì không. Giữ một nguồn duy nhất.
+        echo "=== Running Iceberg DDL ==="
+        docker exec ci-spark-master /opt/spark/bin/spark-sql \
+          --master spark://spark-master:7077 \
+          -f /opt/project/docker/init_iceberg/01_ddl_bronze.sql
+
+        docker exec ci-spark-master /opt/spark/bin/spark-sql \
+          --master spark://spark-master:7077 \
+          -f /opt/project/docker/init_iceberg/02_ddl_silver.sql
+
+        docker exec ci-spark-master /opt/spark/bin/spark-sql \
+          --master spark://spark-master:7077 \
+          -f /opt/project/docker/init_iceberg/03_ddl_gold.sql
+
+        echo "✅ Tables created"
+    - name: Generate seed data
+      env:
+        POSTGRES_HOST: localhost
+        POSTGRES_PORT: '5432'
+      run: |
+        set -euo pipefail
+        echo "=== Installing seed dependencies ==="
+        python -m pip install -r requirements-ci-seed.txt
+
+        echo "=== Generating seed data ==="
+        python data_generator/generate_all.py
+
+        # Post-condition trên chính source, không tin generator tự báo.
+        # `> 0` chứ không ghim số: khối lượng do seed_config.yaml quyết định,
+        # ghim ở đây sẽ tạo ra hai nơi định nghĩa cùng một con số.
+        echo "=== Xác nhận PostgreSQL source có dữ liệu ==="
+        for table in core_banking.customer core_banking.txn_account; do
+          count=$(docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            -tAc "SELECT COUNT(*) FROM ${table}")
+          echo "  ${table}: ${count} rows"
+          if [ "$count" -le 0 ]; then
+            echo "::error::seed generator kết thúc thành công nhưng ${table} rỗng"
+            exit 1
+          fi
+        done
+        echo "✅ Seed data generated"
+    - name: Run full ETL pipeline
+      run: |
+        set -euo pipefail
+        COB_DT="$BENCHMARK_COB_DT"
+
+        # Mỗi ranh giới layer có HAI kiểm tra: process (exit code) và data
+        # (query từ platform). Exit code 0 chỉ là điều kiện cần — bài học
+        # v1.1 là Bronze bootstrap từng báo "16/16 loaded" với 16 bảng fail,
+        # và trino-init vừa exit 0 mà không tạo schema nào.
+        #
+        # Không có assertion Silver/Gold thì hai failure mode này lọt lưới:
+        #   Bronze>0, Silver=0 → Gold query vẫn chạy nhưng vô nghĩa
+        #   Silver>0, Gold=0   → benchmark ghi timing trên kết quả rỗng
+        assert_rows() {
+          local label="$1" query="$2" count
+          count=$(docker exec ci-trino trino --output-format CSV_UNQUOTED \
+            --execute "$query" | tr -d ' \r')
+          if ! [ "$count" -ge 0 ] 2>/dev/null; then
+            echo "::error::${label}: không đọc được số dòng; Trino trả về: [${count}]"
+            exit 1
+          fi
+          echo "  ${label}: ${count} rows (cob_dt=${COB_DT})"
+          if [ "$count" -le 0 ]; then
+            echo "::error::${label} rỗng ở cob_dt=${COB_DT} — bootstrap exit 0 nhưng không ghi dữ liệu"
+            exit 1
+          fi
+        }
+
+        # Ba layer đều gọi ĐÚNG entrypoint bootstrap canonical mà clean
+        # rebuild v1.1 đã chạy. Trước đây Bronze tự loop
+        # `code_etl/bronze/configs/*.yml` gọi `code_etl/bronze/ingest.py` —
+        # cả hai đường dẫn đều KHÔNG tồn tại (thực tế là
+        # code_etl/bronze/{core_banking,card_crm,digital_banking}/*.yml chạy
+        # qua code_etl/bronze/bootstrap/initial_load.py). Glob không khớp nên
+        # $config là chuỗi literal, và `|| true` nuốt lỗi: benchmark đo trên
+        # một Bronze layer rỗng mà vẫn báo thành công.
+        #
+        # -w /opt/project là bắt buộc: BRONZE_CONFIGS/SILVER/GOLD dùng đường
+        # dẫn tương đối và WORKDIR của image Spark là /opt/spark/work-dir,
+        # nơi code_etl/ không resolve được (đã kiểm bằng
+        # `docker compose exec spark-worker-1 pwd`).
+        #
+        # KHÔNG có `|| true` ở đây. Bronze fail thì benchmark vô nghĩa, nên
+        # workflow phải đỏ.
+        # Mảng, không phải chuỗi: giữ đúng ranh giới argv và tránh
+        # word-splitting/globbing ngoài ý muốn. Chuỗi nhiều từ chỉ chạy được
+        # nhờ word-splitting cố ý, và khi bọc vào `if ! "$VAR"` thì quote lại
+        # biến cả chuỗi thành MỘT tên lệnh → command not found.
+        SPARK_SUBMIT=(
+          docker exec
+          -w /opt/project
+          ci-spark-worker-1
+          /opt/spark/bin/spark-submit
+          --master spark://spark-master:7077
+          --deploy-mode client
+          --executor-memory 2g
+        )
+
+        # Wrapper chỉ làm ĐÚNG hai việc: phát annotation và propagate failure.
+        # Không tee, không grep, không pipeline mới — thêm một lớp quan sát
+        # quanh exit code chính là cách TD-5 sinh ra lần thứ sáu.
+        #
+        # `set +e ... rc=$? ... set -e` thay vì `if ! cmd; then rc=$?`: trong
+        # nhánh then của `if !`, $? là status của phép phủ định (0), không còn
+        # là exit code gốc. Ở đây ta muốn giữ nguyên rc thật để in ra.
+        run_stage() {
+          local label="$1"; shift
+          echo "::group::${label}"
+          set +e
+          "$@"
+          local rc=$?
+          set -e
+          echo "::endgroup::"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::${label} — process thất bại (exit=${rc})"
+            exit "$rc"
+          fi
+        }
+
+        run_stage "C — Bronze process" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/bronze/bootstrap/initial_load.py \
+          --jdbc_url "jdbc:postgresql://postgres:5432/${POSTGRES_DB}" \
+          --db_user "${POSTGRES_USER}" \
+          --db_password "${POSTGRES_PASSWORD}" \
+          --cob_dt "${COB_DT}"
+
+        echo "::group::D — Bronze state"
+        assert_rows "bronze.core_customer" \
+          "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
+        echo "::endgroup::"
+
+        run_stage "E — Silver process" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/bootstrap/initial_load.py \
+          --cob_dt "${COB_DT}"
+
+        # fact_txn_account, không phải dim_customer: chỉ các bảng fact_* trong
+        # Silver mang cob_dt (đã kiểm information_schema), và đây đúng là fact
+        # nuôi mart_customer_360 — cũng là nơi hai bug P0 fan-out /
+        # multi-snapshot từng nằm.
+        echo "::group::F — Silver state"
+        assert_rows "silver.fact_txn_account" \
+          "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account WHERE cob_dt = DATE '${COB_DT}'"
+        echo "::endgroup::"
+
+        run_stage "G — Gold process" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/gold/bootstrap/initial_load.py \
+          --cob_dt "${COB_DT}"
+
+        echo "::group::H — Gold state + grain"
+        assert_rows "gold.mart_customer_360" \
+          "SELECT COUNT(*) FROM iceberg.gold.mart_customer_360 WHERE cob_dt = DATE '${COB_DT}'"
+
+        # Grain check: mart_customer_360 phải là một dòng cho mỗi khách hàng.
+        # rows > distinct_customers chính là hình dạng của bug fan-out P0 —
+        # rẻ để kiểm ở đây và bắt được trước khi benchmark đo trên dữ liệu sai.
+        echo "=== Kiểm grain gold.mart_customer_360 ==="
+        grain=$(docker exec ci-trino trino --output-format CSV_UNQUOTED --execute \
+          "SELECT COUNT(*), COUNT(DISTINCT customer_id) FROM iceberg.gold.mart_customer_360 \
+           WHERE cob_dt = DATE '${COB_DT}'" | tr -d ' \r')
+        rows=${grain%,*}
+        distinct=${grain#*,}
+        echo "  rows=${rows} distinct_customers=${distinct}"
+        if [ "$rows" != "$distinct" ]; then
+          echo "::error::grain sai: ${rows} dòng cho ${distinct} khách hàng — fan-out"
+          exit 1
+        fi
+        echo "::endgroup::"
+
+        echo "✅ ETL pipeline complete"
+    - name: 'FIXTURE: SCD2 second snapshot with a tracked change'
+      env:
+        SCD2_CUSTOMER_ID: '1000'
+      run: |
+        set -euo pipefail
+        D1="$BENCHMARK_COB_DT"
+        D2=$(date -u -d "$D1 +1 day" +%F)
+        echo "D1=${D1}  D2=${D2}  customer=${SCD2_CUSTOMER_ID}"
+
+        psql() {
+          docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"
+        }
+        trino_q() {
+          docker exec ci-trino trino --output-format CSV_UNQUOTED --execute "$1"
+        }
+
+        before=$(psql "SELECT customer_segment FROM core_banking.customer
+                       WHERE customer_id = ${SCD2_CUSTOMER_ID}")
+        # Giá trị mới phải KHÁC giá trị cũ, nếu không SCD2 đúng khi không tạo
+        # version mới và fixture sẽ im lặng không dựng được history.
+        #
+        # RETAIL/VIP là giá trị CÓ THẬT trong dữ liệu sinh ra (đã kiểm:
+        # SELECT DISTINCT customer_segment → PRIORITY, RETAIL, VIP). Không
+        # bịa một segment mới — nó sẽ vừa vi phạm constraint tiềm tàng vừa
+        # làm fixture khác hình dạng dữ liệu thật.
+        if [ "$before" = "RETAIL" ]; then after="VIP"; else after="RETAIL"; fi
+        echo "customer_segment: ${before} -> ${after}"
+
+        psql "UPDATE core_banking.customer
+              SET customer_segment = '${after}', last_updated = NOW()
+              WHERE customer_id = ${SCD2_CUSTOMER_ID}" > /dev/null
+
+        run_stage() {
+          local label="$1"; shift
+          echo "::group::${label}"
+          set +e; "$@"; local rc=$?; set -e
+          echo "::endgroup::"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::${label} — process thất bại (exit=${rc})"
+            exit "$rc"
+          fi
+        }
+        SPARK_SUBMIT=(
+          docker exec -w /opt/project ci-spark-worker-1
+          /opt/spark/bin/spark-submit
+          --master spark://spark-master:7077 --deploy-mode client
+          --executor-memory 2g
+        )
+
+        run_stage "Bronze core_customer @ ${D2}" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/bronze/base_job/ingestion_jdbc.py \
+          --config code_etl/bronze/core_banking/customer.yml \
+          --cob_dt "${D2}" \
+          --jdbc_url "jdbc:postgresql://postgres:5432/${POSTGRES_DB}" \
+          --db_user "${POSTGRES_USER}" --db_password "${POSTGRES_PASSWORD}"
+
+        run_stage "Silver dim_customer @ ${D2}" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/base_job/scd_type2.py \
+          --config code_etl/silver/dims/dim_customer.yml \
+          --cob_dt "${D2}"
+
+        # Post-condition mạnh hơn chính test SCD2: chứng minh history đến từ
+        # một transition THẬT, không phải fixture tình cờ có một dòng cũ.
+        echo "::group::Verify SCD2 transition"
+        versions=$(trino_q "SELECT COUNT(*) FROM iceberg.silver.dim_customer
+                            WHERE customer_id = ${SCD2_CUSTOMER_ID}" | tr -d ' \r')
+        historical=$(trino_q "SELECT COUNT(*) FROM iceberg.silver.dim_customer
+                              WHERE customer_id = ${SCD2_CUSTOMER_ID} AND is_current = 0
+                                AND effective_to IS NOT NULL" | tr -d ' \r')
+        current=$(trino_q "SELECT COUNT(*) FROM iceberg.silver.dim_customer
+                           WHERE customer_id = ${SCD2_CUSTOMER_ID} AND is_current = 1" | tr -d ' \r')
+        current_value=$(trino_q "SELECT customer_segment FROM iceberg.silver.dim_customer
+                                 WHERE customer_id = ${SCD2_CUSTOMER_ID} AND is_current = 1" | tr -d ' \r')
+        echo "  versions=${versions} historical=${historical} current=${current} value=${current_value}"
+        echo "::endgroup::"
+
+        fail=""
+        [ "$versions"      = "2" ]       || fail="${fail} versions(${versions})≠2"
+        [ "$historical"    = "1" ]       || fail="${fail} historical(${historical})≠1"
+        [ "$current"       = "1" ]       || fail="${fail} current(${current})≠1"
+        [ "$current_value" = "${after}" ] || fail="${fail} value(${current_value})≠${after}"
+        if [ -n "$fail" ]; then
+          echo "::error::SCD2 transition không đúng:${fail}"
+          exit 1
+        fi
+        echo "✅ SCD2 history dựng bằng transition thật"
+    - name: 34 Trino integration tests
+      run: |
+        set -euo pipefail
+        TESTS="tests/integration/test_data_quality.py tests/integration/test_etl_validation.py"
+
+        # `-o addopts=` ghi đè addopts trong pytest.ini (`-v --tb=short`).
+        # Có -v thì --collect-only in ra dạng CÂY (`<Function ...>`) kèm banner
+        # `===== 34 tests collected =====`; không có -v thì in node id mỗi
+        # dòng một cái. Đếm node id là ổn định, còn parse banner thì không —
+        # lần chạy trước chết đúng vì regex neo `^[0-9]+` không khớp dòng có
+        # `=====` ở đầu, nên harness báo `collected=0` và dừng trước khi chạy
+        # test nào. Đừng suy một con số từ text trình bày cho người đọc.
+        set +e
+        python -m pytest -o addopts= $TESTS -m integration --collect-only -q \
+          > /tmp/collect.log 2>&1
+        collect_rc=$?
+        set -e
+        cat /tmp/collect.log
+        if [ "$collect_rc" -ne 0 ]; then
+          echo "::error::collection thất bại (exit=${collect_rc})"
+          exit "$collect_rc"
+        fi
+        collected=$(grep -cE '^tests/integration/.*::' /tmp/collect.log || true)
+        echo "collected=${collected}"
+        if [ "$collected" -ne 34 ]; then
+          echo "::error::mong đợi 34 test, collect được ${collected}"
+          exit 1
+        fi
+
+        # Không --maxfail: baseline cần FULL pass/fail matrix trong một vòng.
+        # --junitxml cho ra kết quả MÁY ĐỌC ĐƯỢC; ma trận pass/fail lấy từ đó
+        # chứ không bới trong output người đọc.
+        set +e
+        python -m pytest -o addopts= $TESTS -m integration -v --tb=short \
+          --junitxml=/tmp/baseline-junit.xml \
+          > /tmp/trino-integration-baseline.log 2>&1
+        rc=$?
+        set -e
+        cat /tmp/trino-integration-baseline.log
+
+        echo "=== MA TRẬN BASELINE ==="
+        python scripts/summarize_junit.py /tmp/baseline-junit.xml             --title "TD-1: 34 Trino integration tests"             | tee -a "$GITHUB_STEP_SUMMARY"
+
+        if [ "$rc" -ne 0 ]; then
+          echo "::error::Trino integration baseline failed (exit=${rc})"
+          exit "$rc"
+        fi
+    - name: Upload integration test evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: trino-integration-results
+        path: |
+          /tmp/trino-integration-baseline.log
+          /tmp/baseline-junit.xml
+        if-no-files-found: warn
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "=== Cleaning up ==="
+        cd docker
+        docker compose -f docker-compose.ci.yml down -v --remove-orphans
+        echo "✅ Cleanup complete"
+
+  # ===========================================================================
+  # Gate cố định cho branch protection.
+  #
+  # Job này LUÔN tồn tại và luôn chạy, nên required check không bao giờ pending.
+  # Nó chỉ chuyển kết quả của trino-integration thành một trạng thái ổn định:
+  #   - path không liên quan  → PASS (skipped theo chính sách)
+  #   - integration chạy & pass → PASS
+  #   - mọi trường hợp khác     → FAIL
+  #
+  # `skipped` chỉ được chấp nhận khi changes nói là không liên quan. Nếu
+  # integration bị skip vì lý do khác (ví dụ job phụ thuộc hỏng), đó là FAIL.
+  # ===========================================================================
+  trino-integration-gate:
+    name: 🚦 Trino Integration Gate
+    runs-on: ubuntu-latest
+    needs: [changes, trino-integration]
+    if: always()
+    steps:
+      - name: Evaluate
+        run: |
+          set -euo pipefail
+          relevant="${{ needs.changes.outputs.trino_integration }}"
+          result="${{ needs.trino-integration.result }}"
+          echo "relevant=${relevant}  trino-integration=${result}"
+
+          if [ "$relevant" = "false" ]; then
+            if [ "$result" = "skipped" ]; then
+              echo "✅ Không đụng đường phụ thuộc integration — bỏ qua theo chính sách."
+              exit 0
+            fi
+            echo "::error::changes nói không liên quan nhưng trino-integration=${result}"
+            exit 1
+          fi
+
+          if [ "$result" = "success" ]; then
+            echo "✅ 34 Trino integration test chạy và pass."
+            exit 0
+          fi
+          echo "::error::Trino integration bắt buộc phải chạy và pass, nhận được: ${result}"
+          exit 1
