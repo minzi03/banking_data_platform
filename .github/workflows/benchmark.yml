@@ -55,29 +55,218 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-timeout pyyaml
 
+      # -----------------------------------------------------------------------
+      # Image acquisition is a SEPARATE step from startup.
+      #
+      # Trước đây `docker compose up -d` (kéo ~8 image + build 2 image Spark) và
+      # `timeout 120 ... pg_isready` nằm chung một step. Cold pull ăn hết ngân
+      # sách readiness, nên workflow chết bằng `exit 124` mà không cho biết
+      # service nào chưa sẵn sàng — bốn scheduled run liên tiếp fail như vậy.
+      # Tách ra thì thời gian kéo/build image không còn tính vào readiness, và
+      # mỗi loại chậm có timeout riêng để đọc.
+      # -----------------------------------------------------------------------
+      - name: Pull images
+        working-directory: docker
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          echo "=== Pulling images (not counted against readiness) ==="
+          t0=$(date +%s)
+          docker compose -f docker-compose.ci.yml pull --quiet --ignore-buildable
+          echo "IMAGE_PULL_SECONDS=$(( $(date +%s) - t0 ))" >> "$GITHUB_ENV"
+
+      - name: Build images
+        working-directory: docker
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          echo "=== Building Spark images (not counted against readiness) ==="
+          t0=$(date +%s)
+          docker compose -f docker-compose.ci.yml build
+          echo "IMAGE_BUILD_SECONDS=$(( $(date +%s) - t0 ))" >> "$GITHUB_ENV"
+
       - name: Start Docker stack
+        id: start_stack
+        working-directory: docker
+        timeout-minutes: 12
+        env:
+          READINESS_TIMEOUT: "300"
+        run: |
+          set -euo pipefail
+          COMPOSE="docker compose -f docker-compose.ci.yml"
+
+          # Chờ một container one-shot (mc, trino-init) chạy xong và kiểm tra
+          # exit code THẬT. Không đọc $? qua pipe — đó là cách một lỗi biến mất.
+          wait_for_completion() {
+            local service="$1" deadline=$((SECONDS + 180)) cid state code
+            cid=$($COMPOSE ps -q "$service")
+            if [ -z "$cid" ]; then
+              echo "::error::$service không có container nào được tạo"
+              return 1
+            fi
+            while [ $SECONDS -lt $deadline ]; do
+              state=$(docker inspect -f '{{.State.Status}}' "$cid")
+              if [ "$state" = "exited" ]; then
+                code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+                if [ "$code" = "0" ]; then
+                  echo "  ✓ $service hoàn tất (exit 0)"
+                  return 0
+                fi
+                echo "::error::$service thoát với exit $code"
+                return 1
+              fi
+              sleep 3
+            done
+            echo "::error::$service không kết thúc trong 180s (state=$state)"
+            return 1
+          }
+
+          # Đo readiness của TỪNG service từ một mốc t0 chung. Một vòng poll
+          # duy nhất kiểm mọi service còn lại mỗi nhịp, nên thời điểm ghi nhận
+          # là lúc service healthy thật — không phải lúc script rảnh để hỏi nó.
+          # Đây là acceptance "separate image acquisition from readiness" ở
+          # dạng đo được: lần sau fail thì đọc được `pull=8m41s postgres=14s`
+          # thay vì lại suy từ tổng thời gian job.
+          record_readiness() {
+            local t0="$1"; shift
+            local pending=("$@") deadline=$((SECONDS + READINESS_TIMEOUT))
+            while [ ${#pending[@]} -gt 0 ]; do
+              if [ $SECONDS -ge $deadline ]; then
+                echo "::error::readiness timeout sau ${READINESS_TIMEOUT}s — còn chờ: ${pending[*]}"
+                return 1
+              fi
+              local still=()
+              for service in "${pending[@]}"; do
+                local cid health
+                cid=$($COMPOSE ps -q "$service" 2>/dev/null || true)
+                health=""
+                [ -n "$cid" ] && health=$(docker inspect -f \
+                  '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$cid")
+                if [ "$health" = "healthy" ]; then
+                  local secs=$(( $(date +%s) - t0 ))
+                  local key
+                  key=$(echo "$service" | tr 'a-z-' 'A-Z_')
+                  echo "  ✓ $service healthy sau ${secs}s"
+                  echo "${key}_READY_SECONDS=${secs}" >> "$GITHUB_ENV"
+                else
+                  still+=("$service")
+                fi
+              done
+              pending=("${still[@]}")
+              [ ${#pending[@]} -gt 0 ] && sleep 3
+            done
+            return 0
+          }
+
+          STACK_T0=$(date +%s)
+
+          echo "=== Phase 1/4: storage + compute (readiness ${READINESS_TIMEOUT}s) ==="
+          echo "stage=storage_compute" >> "$GITHUB_OUTPUT"
+          $COMPOSE up -d postgres minio spark-master spark-worker-1
+          record_readiness "$STACK_T0" postgres minio spark-master spark-worker-1
+
+          echo "=== Phase 2/4: MinIO bucket bootstrap ==="
+          echo "stage=minio_bucket" >> "$GITHUB_OUTPUT"
+          $COMPOSE up -d mc
+          wait_for_completion mc
+
+          echo "=== Phase 3/4: Iceberg REST catalog + Trino (readiness ${READINESS_TIMEOUT}s) ==="
+          echo "stage=catalog_query_engine" >> "$GITHUB_OUTPUT"
+          $COMPOSE up -d iceberg-rest trino
+          record_readiness "$STACK_T0" iceberg-rest trino
+
+          echo "=== Phase 4/4: schema bootstrap ==="
+          echo "stage=schema_bootstrap" >> "$GITHUB_OUTPUT"
+          $COMPOSE up -d trino-init
+          wait_for_completion trino-init
+
+          # Khẳng định lại bằng chính compose: nếu vòng poll ở trên có sai sót
+          # thì bước này vẫn bắt được. Lúc này mọi service đã healthy nên nó
+          # trả về gần như tức thì.
+          $COMPOSE up -d --wait --wait-timeout 60 \
+            postgres minio spark-master spark-worker-1 iceberg-rest trino
+
+          echo "STACK_START_SECONDS=$(( $(date +%s) - STACK_T0 ))" >> "$GITHUB_ENV"
+          echo "stage=done" >> "$GITHUB_OUTPUT"
+          echo "✅ Stack sẵn sàng"
+
+      # -----------------------------------------------------------------------
+      # Chạy khi BẤT KỲ step nào phía trên hỏng. Mục tiêu là không bao giờ phải
+      # đoán từ một mã lỗi trần: nói rõ container nào không healthy và in log
+      # của đúng nó.
+      # -----------------------------------------------------------------------
+      # Chạy cả khi thành công: có số của lần chạy tốt mới biết lần chạy xấu
+      # chậm ở đâu. Giá trị nào trống nghĩa là chưa tới bước đó.
+      - name: Report stack timing
+        if: always()
+        run: |
+          {
+            echo "### Stack timing"
+            echo ""
+            echo "| Giai đoạn | Giây |"
+            echo "| --- | ---: |"
+            echo "| Image pull | ${IMAGE_PULL_SECONDS:-not_reached} |"
+            echo "| Image build | ${IMAGE_BUILD_SECONDS:-not_reached} |"
+            echo "| Stack start (tổng) | ${STACK_START_SECONDS:-not_reached} |"
+            echo "| postgres ready | ${POSTGRES_READY_SECONDS:-not_reached} |"
+            echo "| minio ready | ${MINIO_READY_SECONDS:-not_reached} |"
+            echo "| spark-master ready | ${SPARK_MASTER_READY_SECONDS:-not_reached} |"
+            echo "| spark-worker-1 ready | ${SPARK_WORKER_1_READY_SECONDS:-not_reached} |"
+            echo "| iceberg-rest ready | ${ICEBERG_REST_READY_SECONDS:-not_reached} |"
+            echo "| trino ready | ${TRINO_READY_SECONDS:-not_reached} |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Diagnose stack failure
+        if: failure()
         working-directory: docker
         run: |
-          echo "=== Starting Docker stack for benchmark ==="
-          docker compose -f docker-compose.ci.yml up -d
+          COMPOSE="docker compose -f docker-compose.ci.yml"
+          echo "=== Giai đoạn đang chạy khi hỏng: ${{ steps.start_stack.outputs.stage || 'chưa tới bước khởi động' }} ==="
 
-          # Wait for all services
-          echo "Waiting for services..."
-          timeout 120 bash -c 'until docker exec ci-postgres pg_isready -U banking_admin; do sleep 2; done'
-          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done'
-          timeout 60 bash -c 'until curl -sf http://localhost:8181/; do sleep 2; done'
-          timeout 60 bash -c 'until curl -sf http://localhost:9090; do sleep 2; done'
-          timeout 180 bash -c 'until docker exec ci-trino trino --execute "SELECT 1"; do sleep 5; done'
+          echo ""
+          echo "=== docker compose ps ==="
+          $COMPOSE ps --all
 
-          echo "✅ All services healthy"
+          echo ""
+          echo "=== Trạng thái từng container ==="
+          unhealthy=""
+          for service in $($COMPOSE config --services); do
+            cid=$($COMPOSE ps -aq "$service" 2>/dev/null || true)
+            if [ -z "$cid" ]; then
+              echo "  $service: KHÔNG CÓ CONTAINER"
+              unhealthy="$unhealthy $service"
+              continue
+            fi
+            status=$(docker inspect -f '{{.State.Status}}' "$cid")
+            health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$cid")
+            code=$(docker inspect -f '{{.State.ExitCode}}' "$cid")
+            echo "  $service: status=$status health=$health exit=$code"
+            if [ "$health" = "unhealthy" ] || [ "$health" = "starting" ] \
+               || { [ "$status" = "exited" ] && [ "$code" != "0" ]; }; then
+              unhealthy="$unhealthy $service"
+            fi
+          done
+
+          echo ""
+          if [ -n "$unhealthy" ]; then
+            echo "=== Log của service có vấn đề:$unhealthy ==="
+            for service in $unhealthy; do
+              echo ""
+              echo "----- $service (200 dòng cuối) -----"
+              $COMPOSE logs --tail=200 --no-color "$service" || true
+            done
+          else
+            echo "=== Không service nào ở trạng thái xấu — in log toàn stack ==="
+            $COMPOSE logs --tail=100 --no-color || true
+          fi
 
       - name: Create schemas and tables
         run: |
-          echo "=== Creating Iceberg schemas ==="
-          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze'
-          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver'
-          docker exec ci-trino trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold'
-
+          # Schema Trino do service `trino-init` trong docker-compose.ci.yml tạo
+          # (bronze/silver/gold/silver_cdc/serving) và bước khởi động ở trên đã
+          # chờ nó exit 0. Trước đây workflow tạo lại 3 schema ở đây, nên có hai
+          # nơi định nghĩa cùng một thứ và chúng đã lệch nhau: compose có
+          # silver_cdc còn workflow thì không. Giữ một nguồn duy nhất.
           echo "=== Running Iceberg DDL ==="
           docker exec ci-spark-master /opt/spark/bin/spark-sql \
             --master spark://spark-master:7077 \

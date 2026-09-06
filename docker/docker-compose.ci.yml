@@ -96,6 +96,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # Đây là service duy nhất trong stack CI không có healthcheck, nên `trino`
+    # chỉ chờ được `service_started` — tức là Trino có thể khởi động trước khi
+    # catalog REST trả lời được, và lỗi lộ ra muộn hơn ở tầng query. Có
+    # healthcheck thì `docker compose up --wait` bao được cả service này.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8181/v1/config || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - ci_net
 
@@ -183,7 +192,7 @@ services:
       - ./init_trino/catalog:/etc/trino/catalog
     depends_on:
       iceberg-rest:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "trino --execute 'SELECT 1' || exit 1"]
       interval: 10s
@@ -208,6 +217,7 @@ services:
         trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
         trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
         trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
         echo 'Schemas created successfully';
       "
     networks:
