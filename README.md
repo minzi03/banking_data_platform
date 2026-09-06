@@ -45,9 +45,11 @@ An end-to-end, production-like banking lakehouse built to show how batch, CDC, d
 
 Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and served through Trino and dbt.
 
-The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains. The analytical layer is **10 historical Gold models** plus **9 dbt-managed current-serving tables**.
+The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Correctness is treated as a property of the platform rather than of a successful job log. Gold transformations are protected against join fan-out and multi-snapshot double counting; CDC current state is checked for idempotency and duplicate keys; business-date semantics are separated explicitly from UTC storage semantics; and every number published here is generated from a versioned evidence manifest and drift-checked in CI.
+Spark owns history: **10 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **9 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+
+Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
 CI goes past unit tests. A reproducible Docker-based Trino/Iceberg topology runs **34 Trino-backed integration tests** against real pipeline output, including a real SCD Type 2 transition. The gate is path-aware, blocks the pull request when it is relevant, and was deliberately negative-tested: an intentional data assertion failure was pushed, the pull request went red, and the revert restored it.
 
