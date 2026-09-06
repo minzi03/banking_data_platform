@@ -211,14 +211,22 @@ services:
     depends_on:
       trino:
         condition: service_healthy
+    # --server trino:8080 là BẮT BUỘC. CLI Trino mặc định nối localhost:8080,
+    # mà container này KHÔNG chạy Trino server — nó chỉ mượn image để lấy CLI.
+    # Thiếu cờ đó thì cả 5 lệnh đều `ConnectException: Failed to connect to
+    # localhost:8080`, và vì lệnh cuối của `sh -c` là `echo` nên container vẫn
+    # exit 0: không schema nào được tạo mà mọi thứ báo thành công.
+    #
+    # `set -e` để một CREATE SCHEMA hỏng là container hỏng. Đây là lần thứ năm
+    # trong repo này một exit code bị nuốt; xem docs/technical-debt.md.
     entrypoint: >
-      /bin/sh -c "
+      /bin/sh -ec "
         echo 'Creating schemas...';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
-        trino --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
         echo 'Schemas created successfully';
       "
     networks:
