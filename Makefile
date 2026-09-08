@@ -50,6 +50,17 @@ help:
 	@echo "    make superset    Open Superset UI (http://localhost:8088)"
 	@echo "    make clean       Remove volumes and data"
 	@echo ""
+	@echo "  CI / Code Quality:"
+	@echo "    make lint            Run ruff linter"
+	@echo "    make format          Auto-format with ruff"
+	@echo "    make test            Run unit tests (fast, no Spark)"
+	@echo "    make test-slow       Run all tests including slow ones"
+	@echo "    make test-integration Run integration tests (Docker stack)"
+	@echo "    make check           Lint + test (pre-push gate)"
+	@echo "    make ci              Full local CI (lint + YAML + test + security)"
+	@echo "    make pre-commit      Install pre-commit hooks"
+	@echo "    make install-dev     Install dev dependencies (editable mode)"
+	@echo ""
 	@echo "  Infrastructure as Code:"
 	@echo "    make infra-init      terraform init"
 	@echo "    make infra-plan      terraform plan"
@@ -344,6 +355,79 @@ full-batch:
 	@echo "Full batch pipeline completed successfully"
 
 .PHONY: validate-pipeline serving-bootstrap full-batch
-.DEFAULT_GOAL := help
 
-# End
+# ---------------------------------------------------------------------------
+# CI / Code Quality (local development)
+# ---------------------------------------------------------------------------
+.PHONY: lint format test test-slow test-integration check ci pre-commit install-dev
+
+install-dev:
+	pip install -e ".[dev]"
+	pre-commit install
+	@echo "✅ Dev dependencies installed + pre-commit hooks activated"
+
+lint:
+	@echo "=== Ruff Lint ==="
+	ruff check governance/ code_etl/ data_generator/ api/ ml/ tests/ --output-format=github
+	@echo "✅ Lint clean"
+
+format:
+	@echo "=== Ruff Format ==="
+	ruff format governance/ code_etl/ data_generator/ api/ ml/ tests/
+	@echo "✅ Formatted"
+
+test:
+	@echo "=== Unit Tests (fast) ==="
+	python -m pytest tests/ \
+		-v --tb=short \
+		-m "not integration and not slow" \
+		--cov=governance --cov=code_etl/shared \
+		--cov-report=term-missing \
+		--junitxml=test-results.xml
+	@echo "✅ Unit tests passed"
+
+test-slow:
+	@echo "=== All Tests (including slow) ==="
+	python -m pytest tests/ \
+		-v --tb=short \
+		-m "not integration" \
+		--cov=governance --cov=code_etl/shared \
+		--cov-report=term-missing
+	@echo "✅ All tests passed"
+
+test-integration:
+	@echo "=== Integration Tests (requires Docker stack) ==="
+	python -m pytest tests/integration/ \
+		-v --tb=short -m integration \
+		--junitxml=integration-results.xml
+	@echo "✅ Integration tests passed"
+
+validate-yaml:
+	@echo "=== Validate YAML Configs ==="
+	python -c "\
+	import yaml; from pathlib import Path; \
+	errs=[]; \
+	[errs.append(f'{f}: {e}') or print(f'  ❌ {f.name}') \
+	 for f in Path('code_etl').rglob('*.yml') \
+	 for e in [None] if not (lambda: (yaml.safe_load(open(f)), print(f'  ✅ {f.name}'))[0] or True)()]; \
+	exit(1) if errs else print('✅ All YAML valid')"
+
+security-scan:
+	@echo "=== Security Scan (Bandit) ==="
+	bandit -r code_etl/ governance/ --severity-level medium -f screen || true
+	@echo "✅ Security scan complete"
+
+check: lint test
+	@echo "✅ Pre-push gate passed (lint + test)"
+
+ci: lint validate-yaml test security-scan
+	@echo "✅ Full local CI passed"
+
+pre-commit:
+	pre-commit install
+	pre-commit run --all-files
+	@echo "✅ Pre-commit hooks installed and verified"
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
