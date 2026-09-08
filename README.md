@@ -96,6 +96,10 @@ Silver Current
 
 # Architecture
 
+<p align="center">
+  <img src="docs/images/banking_data_platform_architecture_4.png" alt="Banking Data Platform Architecture" width="100%">
+</p>
+
 The platform is easier to understand as five cooperating planes than as a list
 of technologies. The first four move and shape data; the fifth controls and
 verifies all of them.
