@@ -1,4 +1,4 @@
-"""
+﻿"""
 Airflow DAG: CDC Streaming Pipeline
 
 Starts Spark Structured Streaming jobs to consume CDC events from Kafka
@@ -80,25 +80,39 @@ with DAG(
         # Note: Streaming jobs need to run in background and not block Airflow
         # We use a BashOperator with nohup to run in background
         cmd = (
+            # Start detached, then fail the Airflow task unless the worker
+            # actually retains the submit process. `docker exec -d` returns
+            # success even when spark-submit exits immediately, which used to
+            # mark all six tasks successful while Spark had zero active apps.
             f"/usr/bin/docker exec -d banking-spark-worker-1 "
             f"/opt/spark/bin/spark-submit "
             f"--master spark://spark-master:7077 "
             f"--deploy-mode client "
             f"--name cdc_{table_name} "
+            # One executor per streaming query keeps the local single-worker
+            # deployment from reserving all six executors per app (the default
+            # spark.executor.instances in spark-defaults.conf). Without this,
+            # six CDC queries compete for the worker's six cores and leave
+            # some applications permanently WAITING.
+            f"--num-executors 1 "
+            f"--conf spark.executor.instances=1 "
+            f"--conf spark.dynamicAllocation.enabled=false "
             f"--conf spark.driver.memory=512m "
-            f"--conf spark.executor.memory=768m "
+            f"--conf spark.executor.memory=512m "
             f"--conf spark.executor.cores=1 "
             f"--conf spark.sql.streaming.checkpointLocation={checkpoint} "
             f"--conf spark.sql.shuffle.partitions=4 "
             f"{SPARK_APP} "
             f"--config {CONFIG_DIR}/cdc_{table_name}.yml "
-            f"--kafka_bootstrap kafka:9092"
+            f"--kafka_bootstrap kafka:9092; "
+            f"sleep 5; "
+            f"docker exec banking-spark-worker-1 pgrep -af 'cdc_{table_name}' >/dev/null "
         )
 
         task = BashOperator(
             task_id=f"stream_{table_name}",
             bash_command=cmd,
-            doc_md=f"Streaming job for {kafka_topic} → {target_table}",
+            doc_md=f"Streaming job for {kafka_topic} â†’ {target_table}",
         )
         streaming_tasks.append(task)
 
@@ -144,3 +158,4 @@ with DAG(
             "' || echo 'No streaming jobs found'"
         ),
     )
+

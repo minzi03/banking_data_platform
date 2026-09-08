@@ -266,3 +266,73 @@ DROP TRIGGER IF EXISTS trg_employee_last_upd ON core_banking.employee;
 CREATE TRIGGER trg_employee_last_upd
     BEFORE UPDATE ON core_banking.employee
     FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
+
+-- =============================================================================
+-- 9. LOAN_PAYMENT (loan amortization schedule) — ~250K rows
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS core_banking.loan_payment (
+    payment_id          BIGINT          NOT NULL,
+    loan_id             BIGINT          NOT NULL,          -- FK -> loan
+    payment_date        DATE            NOT NULL,
+    scheduled_amount    NUMERIC(18,2)   NOT NULL,          -- expected monthly payment
+    amount_paid         NUMERIC(18,2)   NOT NULL,          -- actual amount paid
+    principal_component NUMERIC(18,2)   NOT NULL,
+    interest_component  NUMERIC(18,2)   NOT NULL,
+    penalty             NUMERIC(18,2)   NOT NULL DEFAULT 0, -- late fee if any
+    outstanding_after   NUMERIC(18,2)   NOT NULL,
+    days_late           SMALLINT        NOT NULL DEFAULT 0, -- 0 if on time
+    payment_method      VARCHAR(30),                       -- BANK_TRANSFER / CASH / CHEQUE / DEBIT_CARD / MOBILE_APP
+    payment_status      VARCHAR(20)     NOT NULL,           -- PAID / LATE / MISSED / PENDING
+    late_payment_flag   SMALLINT        NOT NULL DEFAULT 0,  -- legacy 0/1
+    last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT pk_loan_payment PRIMARY KEY (payment_id),
+    CONSTRAINT fk_loan_payment_loan FOREIGN KEY (loan_id) REFERENCES core_banking.loan(loan_id),
+    CONSTRAINT chk_lpay_late CHECK (late_payment_flag IN (0, 1)),
+    CONSTRAINT chk_lpay_status CHECK (payment_status IN ('PAID', 'LATE', 'MISSED', 'PENDING')),
+    CONSTRAINT chk_lpay_method CHECK (payment_method IS NULL OR payment_method IN ('BANK_TRANSFER', 'CASH', 'CHEQUE', 'DEBIT_CARD', 'MOBILE_APP'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_lpay_loan ON core_banking.loan_payment(loan_id);
+CREATE INDEX IF NOT EXISTS idx_lpay_date ON core_banking.loan_payment(payment_date);
+CREATE INDEX IF NOT EXISTS idx_lpay_upd ON core_banking.loan_payment(last_updated);
+
+DROP TRIGGER IF EXISTS trg_loan_payment_last_upd ON core_banking.loan_payment;
+CREATE TRIGGER trg_loan_payment_last_upd
+    BEFORE UPDATE ON core_banking.loan_payment
+    FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();
+
+-- =============================================================================
+-- 10. STANDING_ORDER (recurring payments) — ~15K rows
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS core_banking.standing_order (
+    order_id            BIGINT          NOT NULL,
+    account_id          BIGINT          NOT NULL,           -- FK -> account
+    customer_id         BIGINT          NOT NULL,           -- FK -> customer
+    order_type          VARCHAR(30)     NOT NULL,           -- BILL_PAYMENT / TRANSFER / LOAN_PAYMENT
+    beneficiary_name    VARCHAR(200),
+    beneficiary_account VARCHAR(20),
+    amount              NUMERIC(18,2)   NOT NULL,
+    frequency           VARCHAR(20)     NOT NULL,           -- MONTHLY / WEEKLY / QUARTERLY
+    next_execute_date   DATE            NOT NULL,
+    status              VARCHAR(20)     NOT NULL,           -- ACTIVE / PAUSED / CANCELLED
+    created_date        DATE            NOT NULL,
+    last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT pk_standing_order PRIMARY KEY (order_id),
+    CONSTRAINT fk_so_account FOREIGN KEY (account_id) REFERENCES core_banking.account(account_id),
+    CONSTRAINT fk_so_customer FOREIGN KEY (customer_id) REFERENCES core_banking.customer(customer_id),
+    CONSTRAINT chk_so_type CHECK (order_type IN ('BILL_PAYMENT', 'TRANSFER', 'LOAN_PAYMENT')),
+    CONSTRAINT chk_so_frequency CHECK (frequency IN ('MONTHLY', 'WEEKLY', 'QUARTERLY')),
+    CONSTRAINT chk_so_status CHECK (status IN ('ACTIVE', 'PAUSED', 'CANCELLED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_so_account ON core_banking.standing_order(account_id);
+CREATE INDEX IF NOT EXISTS idx_so_customer ON core_banking.standing_order(customer_id);
+CREATE INDEX IF NOT EXISTS idx_so_status ON core_banking.standing_order(status);
+CREATE INDEX IF NOT EXISTS idx_so_upd ON core_banking.standing_order(last_updated);
+
+DROP TRIGGER IF EXISTS trg_standing_order_last_upd ON core_banking.standing_order;
+CREATE TRIGGER trg_standing_order_last_upd
+    BEFORE UPDATE ON core_banking.standing_order
+    FOR EACH ROW EXECUTE FUNCTION core_banking.set_last_updated();

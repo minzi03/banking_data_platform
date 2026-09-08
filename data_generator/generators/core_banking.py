@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Core Banking Generator — 8 tables
 Generates realistic banking data for: branch, product, customer, account,
@@ -9,22 +10,40 @@ import string
 from datetime import datetime, timedelta
 from typing import Any
 
-# Vietnamese names
+# Vietnamese names — expanded pool for 10K+ customer uniqueness
 FIRST_NAMES_MALE = [
     "Nguyen Van", "Tran Minh", "Le Hong", "Pham Duc", "Hoang Anh",
     "Vo Thanh", "Phan Tuan", "Do Minh", "Ngo Quoc", "Dang Khoa",
     "Bui Van", "Duong Ngoc", "Ly Hai", "Ho Thanh", "Nguyen Xuan",
+    "Nguyen Tien", "Tran Ngoc", "Le Trung", "Pham Hieu", "Hoang Nam",
+    "Vo Dinh", "Phan Duc", "Do Quang", "Ngo Anh", "Dang Ba",
+    "Bui Duc", "Duong Tuan", "Ly Minh", "Ho Ngoc", "Nguyen The",
+    "Tran Duc", "Le Duy", "Pham Tien", "Hoang Duc", "Vo Xuan",
+    "Phan Hoang", "Do Anh", "Ngo Van", "Dang Trung", "Bui Anh",
+    "Duong Van", "Ly Duc", "Ho Tuan", "Nguyen Phuc", "Tran Khoi",
+    "Le Son", "Pham Phuong", "Hoang Long", "Vo Quoc", "Phan Ngoc",
 ]
 FIRST_NAMES_FEMALE = [
     "Nguyen Thi", "Tran Thi", "Le Thi", "Pham Thi", "Hoang Thi",
     "Vo Thi", "Phan Thi", "Do Thi", "Ngo Thi", "Dang Thi",
     "Bui Thi", "Duong Thi", "Ly Thi", "Ho Thi", "Nguyen Mai",
+    "Nguyen Thanh", "Tran Thanh", "Le Thanh", "Pham Thanh", "Hoang Thanh",
+    "Vo Ngoc", "Phan Ngoc", "Do Ngoc", "Ngo Thanh", "Dang Ngoc",
+    "Bui Ngoc", "Duong Thanh", "Ly Thi Mai", "Ho Ngoc", "Nguyen Cam",
+    "Tran Cam", "Le Ha", "Pham Ha", "Hoang Lan", "Vo Lan",
+    "Phan Lan", "Do Linh", "Ngo Linh", "Dang Ha", "Bui Lan",
+    "Duong Linh", "Ly Ha", "Ho Mai", "Nguyen Oanh", "Tran Oanh",
+    "Le Quynh", "Pham Quynh", "Hoang Trang", "Vo Trang", "Phan Trang",
 ]
 LAST_NAMES = [
-    "An", "Binh", "Cam", "Dung", "Giang", "Ha", "Huong", "Khanh",
-    "Lan", "Linh", "Mai", "Nga", "Oanh", "Phuong", "Quynh",
-    "Son", "Tam", "Thao", "Thu", "Trang", "Tuyen", "Uyen", "Yen",
-    "Chieu", "Duc", "Fu", "Giang", "Hai", "Kien", "Long",
+    "An", "Bao", "Cam", "Chieu", "Cuong", "Dung", "Duc", "Duy",
+    "Giang", "Ha", "Hai", "Hien", "Hoang", "Huong", "Huy",
+    "Khanh", "Kien", "Khoa", "Lam", "Lan", "Linh", "Long",
+    "Mai", "Minh", "My", "Nga", "Nghia", "Ngoc", "Nhat",
+    "Oanh", "Phong", "Phuong", "Quan", "Quoc", "Quynh",
+    "Son", "Son", "Suong", "Tam", "Thao", "Thu", "Thuy",
+    "Tien", "Tra", "Tram", "Trang", "Tuyen", "Tuyet",
+    "Uyen", "Yen", "Yen",
 ]
 CITIES = [
     "Hanoi", "HCM", "Da Nang", "Hai Phong", "Can Tho",
@@ -39,9 +58,37 @@ CHANNELS = ["BRANCH", "ATM", "INTERNET_BANKING", "MOBILE_BANKING", "POS"]
 TXN_TYPES = ["DEPOSIT", "WITHDRAWAL", "TRANSFER_IN", "TRANSFER_OUT", "FEE", "INTEREST"]
 ROLES = ["TELLER", "MANAGER", "ANALYST", "DIRECTOR"]
 
+# Geographic mapping: region → cities (Vietnamese banking geography)
+REGION_CITIES = {
+    "NORTH": ["Hanoi", "Hai Phong", "Ha Long", "Bac Ninh", "Nam Dinh"],
+    "CENTRAL": ["Da Nang", "Hue", "Nha Trang", "Quy Nhon", "Vinh"],
+    "SOUTH": ["HCM", "Can Tho", "Bien Hoa", "Vung Tau", "My Tho"],
+}
+
+# City → districts mapping (realistic Vietnamese districts)
+CITY_DISTRICTS = {
+    "Hanoi": ["Ba Dinh", "Hoan Kiem", "Hai Ba Trung", "Dong Da", "Cau Giay",
+              "Thanh Xuan", "Ha Dong", "Long Bien", "Nam Tu Liem", "Bac Tu Liem"],
+    "HCM": ["District 1", "District 3", "District 5", "Binh Thanh", "Tan Binh",
+            "Phu Nhuan", "Thu Duc", "Go Vap", "District 7", "Nha Be"],
+    "Da Nang": ["Hai Chau", "Thanh Khe", "Son Tra", "Ngu Hanh Son", "Lien Chieu"],
+    "Hai Phong": ["Hong Bang", "Le Chan", "Ngo Quyen", "Hai An", "Toan Thang"],
+    "Can Tho": ["Ninh Kieu", "Binh Thuy", "Cai Rang", "O Mon", "Thot Not"],
+    "Bien Hoa": ["Tan Hiep", "Quang Vinh", "Buu Hoa", "Hiep Hoa", "Trang Dai"],
+    "Nha Trang": ["Loc Tho", "Vinh Thanh", "Vinh Nguyen", "Phuoc Hai", "Xuong Huan"],
+    "Vung Tau": ["Ward 1", "Ward 2", "Ward 5", "Thang Nhat", "Rach Dua"],
+    "Hue": ["Thuong Hoa", "Kim Long", "Vinh Ninh", "Phuoc Vinh", "An Cuu"],
+    "Quy Nhon": ["Nguyen Van Cu", "Tran Hung Dao", "Bach Dang", "Le Hong Phong"],
+}
+# Fallback districts for cities not in the map
+DEFAULT_DISTRICTS = ["District 1", "District 2", "District 3", "Ward 1", "Ward 2"]
+
 
 def generate_branches(count: int, config: dict) -> list[tuple]:
-    """Generate branch data."""
+    """
+    Generate branch data with geographic consistency.
+    Branches are assigned to cities that match their region.
+    """
     rows = []
     regions = config.get("regions", ["NORTH", "CENTRAL", "SOUTH"])
     weights = config.get("region_weights", [0.35, 0.20, 0.45])
@@ -51,8 +98,12 @@ def generate_branches(count: int, config: dict) -> list[tuple]:
     for i in range(1, count + 1):
         code = f"BR{i:03d}"
         region = random.choices(regions, weights=weights)[0]
-        city = random.choice(CITIES)
-        district = random.choice(DISTRICTS)
+        # Pick city from region
+        region_cities = REGION_CITIES.get(region, CITIES)
+        city = random.choice(region_cities)
+        # Pick district from city
+        city_districts = CITY_DISTRICTS.get(city, DEFAULT_DISTRICTS)
+        district = random.choice(city_districts)
         status = random.choices(statuses, weights=s_weights)[0]
         open_date = _random_date("2000-01-01", "2024-12-31")
         manager = _random_name("M") if random.random() < 0.8 else None
@@ -91,8 +142,15 @@ def generate_products(config: dict) -> list[tuple]:
     return rows
 
 
-def generate_customers(count: int, config: dict, branch_codes: list[str]) -> list[tuple]:
-    """Generate customer data."""
+def generate_customers(count: int, config: dict, branch_codes: list[str],
+                       branch_city_map: dict | None = None) -> list[tuple]:
+    """
+    Generate customer data with geographic consistency.
+
+    Args:
+        branch_city_map: {branch_code: city} mapping for geographic assignment.
+                         If provided, customers in a city are assigned to branches in that city.
+    """
     rows = []
     seg_dist = config.get("segment_distribution", {"RETAIL": 0.70, "PRIORITY": 0.22, "VIP": 0.08})
     kyc_dist = config.get("kyc_distribution", {"VERIFIED": 0.85, "PENDING": 0.10, "REJECTED": 0.05})
@@ -104,6 +162,12 @@ def generate_customers(count: int, config: dict, branch_codes: list[str]) -> lis
     kycs = list(kyc_dist.keys())
     kyc_weights = list(kyc_dist.values())
 
+    # Build city → branches mapping if provided
+    city_branches = {}
+    if branch_city_map:
+        for b_code, b_city in branch_city_map.items():
+            city_branches.setdefault(b_city, []).append(b_code)
+
     for i in range(1, count + 1):
         gender = random.choices(["M", "F", "O"], weights=[0.52, 0.46, 0.02])[0]
         name = _random_name(gender)
@@ -114,7 +178,15 @@ def generate_customers(count: int, config: dict, branch_codes: list[str]) -> lis
         email = f"{name.lower().replace(' ', '.')}_{i}@email.com"
         segment = random.choices(segments, weights=seg_weights)[0]
         kyc = random.choices(kycs, weights=kyc_weights)[0]
-        branch = random.choice(branch_codes)
+
+        # Geographic consistency: assign branch matching customer's city
+        if city_branches and city in city_branches:
+            branch = random.choice(city_branches[city])
+        else:
+            branch = random.choice(branch_codes)
+
+        # Pick district from city
+        city_districts_list = CITY_DISTRICTS.get(city, DEFAULT_DISTRICTS)
 
         rows.append((
             i,
@@ -126,7 +198,7 @@ def generate_customers(count: int, config: dict, branch_codes: list[str]) -> lis
             email,
             f"{random.randint(1, 100)} {random.choice(['Le Loi', 'Nguyen Hue', 'Tran Phu'])}",
             city,
-            random.choice(DISTRICTS),
+            random.choice(city_districts_list),
             branch,
             segment,
             kyc,
@@ -272,10 +344,16 @@ def generate_loans(count: int, config: dict, customer_ids: list[int],
 
 
 def generate_txn_account(count: int, config: dict, account_ids: list[int],
-                         customer_map: dict) -> list[tuple]:
+                         customer_map: dict, account_balances: dict | None = None) -> list[tuple]:
     """
-    Generate account transaction data.
-    customer_map: {account_id: customer_id}
+    Generate account transaction data with seasonal patterns and balance simulation.
+
+    Args:
+        count: Number of transactions to generate
+        config: Configuration dict
+        account_ids: List of valid account IDs
+        customer_map: {account_id: customer_id}
+        account_balances: {account_id: initial_balance} for balance simulation
     """
     rows = []
     type_dist = config.get("type_distribution", {})
@@ -290,6 +368,11 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
     dcs = list(dc_dist.keys())
     dc_weights = list(dc_dist.values())
 
+    # Balance simulation: track running balance per account
+    running_balances = {}
+    if account_balances:
+        running_balances = dict(account_balances)
+
     for i in range(1, count + 1):
         acct_id = random.choice(account_ids)
         cust_id = customer_map.get(acct_id, 1)
@@ -297,8 +380,25 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
         dc = random.choices(dcs, weights=dc_weights)[0]
         channel = random.choices(channels, weights=ch_weights)[0]
         amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
-        txn_date = _random_datetime("2025-06-01", "2026-08-01")
-        balance_after = round(random.uniform(100000, 500000000), 2)
+        # Use seasonal datetime for realistic patterns
+        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
+
+        # Balance simulation
+        if running_balances:
+            current_balance = running_balances.get(acct_id, 1000000)
+            if dc == "C":
+                # Credit: deposit, transfer_in, interest
+                new_balance = round(current_balance + amount, 2)
+            else:
+                # Debit: withdrawal, transfer_out, fee
+                new_balance = round(current_balance - amount, 2)
+                # Prevent negative balance — clamp to minimum
+                if new_balance < 0:
+                    new_balance = round(random.uniform(10000, 50000), 2)
+            running_balances[acct_id] = new_balance
+            balance_after = new_balance
+        else:
+            balance_after = round(random.uniform(100000, 500000000), 2)
 
         rows.append((
             i,
@@ -352,6 +452,218 @@ def generate_employees(count: int, config: dict, branch_codes: list[str]) -> lis
     return rows
 
 
+def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
+    """
+    Generate loan payment (amortization) schedule for active/closed loans.
+
+    Uses standard amortization formula:
+        monthly_payment = P * r(1+r)^n / ((1+r)^n - 1)
+        where P = principal, r = monthly rate, n = term months
+
+    Enhanced with: payment_method, penalty, payment_status, days_late
+    (inspired by Data13 reference dataset)
+
+    Args:
+        loan_data: list of loan tuples from generate_loans()
+        config: loan_payment config dict
+    """
+    late_rate = config.get("late_payment_rate", 0.05)
+    missed_rate = config.get("missed_payment_rate", 0.02)
+    rows = []
+    payment_id = 1
+
+    payment_methods = ["BANK_TRANSFER", "CASH", "CHEQUE", "DEBIT_CARD", "MOBILE_APP"]
+    method_weights = [0.40, 0.10, 0.05, 0.15, 0.30]
+
+    for loan in loan_data:
+        # loan tuple: (loan_id, customer_id, product_code, branch_code,
+        #              loan_amount, outstanding_balance, interest_rate, term_months,
+        #              disbursement_date, maturity_date, loan_status, last_updated)
+        loan_id = loan[0]
+        principal = float(loan[4])
+        annual_rate = float(loan[6])
+        term_months = int(loan[7])
+        disb_date = datetime.strptime(loan[8], "%Y-%m-%d")
+        loan_status = loan[10]
+
+        # Skip WRITTEN_OFF loans
+        if loan_status == "WRITTEN_OFF":
+            continue
+
+        monthly_rate = annual_rate / 12.0 / 100.0
+
+        # Calculate monthly payment (annuity formula)
+        if monthly_rate == 0:
+            monthly_payment = principal / term_months
+        else:
+            factor = (1 + monthly_rate) ** term_months
+            monthly_payment = principal * (monthly_rate * factor) / (factor - 1)
+
+        # Generate payments up to current date (or full term for CLOSED loans)
+        today = datetime(2026, 8, 1)
+        if loan_status == "CLOSED":
+            months_to_generate = term_months
+        else:
+            months_elapsed = (today.year - disb_date.year) * 12 + (today.month - disb_date.month)
+            months_to_generate = min(months_elapsed, term_months)
+
+        outstanding = principal
+        for month_idx in range(1, months_to_generate + 1):
+            payment_date = disb_date + timedelta(days=month_idx * 30)
+            scheduled_amount = round(monthly_payment, 2)
+
+            # Calculate interest component for this month
+            interest_component = round(outstanding * monthly_rate, 2)
+            principal_component = round(monthly_payment - interest_component, 2)
+
+            # Don't exceed outstanding
+            if principal_component > outstanding:
+                principal_component = round(outstanding, 2)
+                interest_component = round(monthly_payment - principal_component, 2) if monthly_payment > principal_component else 0
+
+            # Determine payment status
+            roll = random.random()
+            if roll < missed_rate and loan_status != "CLOSED":
+                # Missed payment
+                payment_status = "MISSED"
+                days_late = random.randint(30, 90)
+                penalty = round(scheduled_amount * 0.05, 2)  # 5% penalty
+                amount_paid = 0
+                outstanding = round(outstanding, 2)  # outstanding doesn't change
+            elif roll < late_rate and loan_status != "CLOSED":
+                # Late payment
+                payment_status = "LATE"
+                days_late = random.randint(1, 30)
+                penalty = round(scheduled_amount * 0.02, 2)  # 2% late fee
+                amount_paid = round(scheduled_amount + penalty, 2)
+                outstanding = round(max(0, outstanding - principal_component), 2)
+            else:
+                # On-time payment
+                payment_status = "PAID"
+                days_late = 0
+                penalty = 0
+                amount_paid = round(principal_component + interest_component, 2)
+                outstanding = round(max(0, outstanding - principal_component), 2)
+
+            payment_method = random.choices(payment_methods, weights=method_weights)[0]
+
+            rows.append((
+                payment_id,
+                loan_id,
+                payment_date.strftime("%Y-%m-%d"),
+                scheduled_amount,
+                amount_paid,
+                principal_component,
+                interest_component,
+                penalty,
+                outstanding,
+                days_late,
+                payment_method,
+                payment_status,
+                1 if payment_status == "LATE" else 0,  # late_payment_flag
+                datetime.now(),
+            ))
+            payment_id += 1
+
+        if payment_id % 50000 == 0:
+            print(f"    ... {payment_id:,} loan payments generated")
+
+    return rows
+
+
+def generate_standing_orders(count: int, config: dict,
+                             account_ids: list[int], customer_map: dict) -> list[tuple]:
+    """
+    Generate standing order (recurring payment) data.
+
+    Common Vietnamese scenarios: electricity (EVN), water (Sawaco),
+    internet (FPT/Viettel/VNPT), insurance, salary transfers.
+    """
+    freq_dist = config.get("frequency_distribution", {"MONTHLY": 0.60, "WEEKLY": 0.25, "QUARTERLY": 0.15})
+    status_dist = config.get("status_distribution", {"ACTIVE": 0.70, "PAUSED": 0.15, "CANCELLED": 0.15})
+
+    freqs = list(freq_dist.keys())
+    f_weights = list(freq_dist.values())
+    statuses = list(status_dist.keys())
+    s_weights = list(status_dist.values())
+
+    # Vietnamese bill payment scenarios
+    billers = [
+        ("EVN - Dien luc", "BILL_PAYMENT"),
+        ("Sawaco - Nuoc sach", "BILL_PAYMENT"),
+        ("FPT Telecom", "BILL_PAYMENT"),
+        ("Viettel Telecom", "BILL_PAYMENT"),
+        ("VNPT Viettel", "BILL_PAYMENT"),
+        ("Bao Viet Nhan Tho", "BILL_PAYMENT"),
+        ("Prudential Vietnam", "BILL_PAYMENT"),
+        ("Manulife Vietnam", "BILL_PAYMENT"),
+        ("Cong ty Môi trường", "BILL_PAYMENT"),
+        ("Quy Prudential", "TRANSFER"),
+        ("Cong ty TNHH ABC", "TRANSFER"),
+        ("Cong ty XYZ Corp", "TRANSFER"),
+        ("Thanh toan khoan vay", "LOAN_PAYMENT"),
+    ]
+
+    rows = []
+    for i in range(1, count + 1):
+        acct_id = random.choice(account_ids)
+        cust_id = customer_map.get(acct_id, 1)
+        order_type = random.choices(["BILL_PAYMENT", "TRANSFER", "LOAN_PAYMENT"],
+                                    weights=[0.50, 0.30, 0.20])[0]
+        frequency = random.choices(freqs, weights=f_weights)[0]
+        status = random.choices(statuses, weights=s_weights)[0]
+
+        # Pick a biller matching order type
+        matching_billers = [b for b in billers if b[1] == order_type]
+        if matching_billers:
+            beneficiary_name, _ = random.choice(matching_billers)
+        else:
+            beneficiary_name = random.choice(billers)[0]
+
+        # Amount depends on type and frequency
+        if order_type == "BILL_PAYMENT":
+            if "Dien" in beneficiary_name:
+                amount = round(random.uniform(200000, 3000000), 2)  # Electricity 200K-3M VND
+            elif "Nuoc" in beneficiary_name:
+                amount = round(random.uniform(100000, 800000), 2)   # Water 100K-800K
+            elif "Telecom" in beneficiary_name or "VNPT" in beneficiary_name:
+                amount = round(random.uniform(100000, 500000), 2)   # Internet/phone 100K-500K
+            else:
+                amount = round(random.uniform(200000, 2000000), 2)  # Insurance 200K-2M
+        elif order_type == "TRANSFER":
+            amount = round(random.uniform(1000000, 50000000), 2)    # Salary/transfer 1M-50M
+        else:  # LOAN_PAYMENT
+            amount = round(random.uniform(2000000, 30000000), 2)    # Loan payment 2M-30M
+
+        created_date = _random_date("2022-01-01", "2025-12-31")
+        created_dt = datetime.strptime(created_date, "%Y-%m-%d")
+
+        # next_execute_date: based on frequency
+        if frequency == "WEEKLY":
+            next_execute = created_dt + timedelta(days=random.randint(1, 7))
+        elif frequency == "QUARTERLY":
+            next_execute = created_dt + timedelta(days=random.randint(1, 90))
+        else:  # MONTHLY
+            next_execute = created_dt + timedelta(days=random.randint(1, 30))
+
+        rows.append((
+            i,
+            acct_id,
+            cust_id,
+            order_type,
+            beneficiary_name,
+            f"VN{random.randint(100000000, 999999999)}",  # beneficiary account
+            amount,
+            frequency,
+            next_execute.strftime("%Y-%m-%d"),
+            status,
+            created_date,
+            datetime.now(),
+        ))
+
+    return rows
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _random_name(gender: str) -> str:
@@ -382,3 +694,83 @@ def _random_datetime(start_str: str, end_str: str) -> datetime:
     delta = (end - start).total_seconds()
     rand_secs = random.randint(0, int(delta))
     return start + timedelta(seconds=rand_secs)
+
+
+def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
+    """
+    Generate a random datetime with realistic banking patterns:
+    - 65% weekday, 20% Saturday, 15% Sunday
+    - Hour peaks: 9-11am (salary/payments), 7-9pm (mobile banking)
+    - Monthly: higher volume on 1st-5th (salary) and 15th (mid-month)
+    """
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+    delta_days = (end - start).days
+    if delta_days <= 0:
+        return start
+
+    # Pick a random day, biased toward weekdays
+    rand_day = random.randint(0, delta_days)
+    dt = start + timedelta(days=rand_day)
+    weekday = dt.weekday()  # 0=Mon, 6=Sun
+
+    # Re-roll day of week with bias: 65% weekday, 20% Sat, 15% Sun
+    day_roll = random.random()
+    if day_roll < 0.65:
+        # Weekday — if currently weekend, shift to nearest weekday
+        if weekday >= 5:
+            shift = random.choice([-(weekday - 4), (7 - weekday)])
+            dt = dt + timedelta(days=shift)
+    elif day_roll < 0.85:
+        # Saturday
+        while dt.weekday() != 5:
+            dt = dt + timedelta(days=1)
+    else:
+        # Sunday
+        while dt.weekday() != 6:
+            dt = dt + timedelta(days=1)
+
+    # Hour distribution: peaks at 9-11am and 7-9pm
+    hour_weights = {
+        0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,
+        6: 0.02, 7: 0.04, 8: 0.08,
+        9: 0.12, 10: 0.14, 11: 0.10,
+        12: 0.06, 13: 0.05, 14: 0.06, 15: 0.05, 16: 0.04,
+        17: 0.03, 18: 0.04,
+        19: 0.06, 20: 0.05, 21: 0.03,
+        22: 0.01, 23: 0.005,
+    }
+    hours = list(hour_weights.keys())
+    h_weights = list(hour_weights.values())
+    hour = random.choices(hours, weights=h_weights)[0]
+    minute = random.randint(0, 59)
+    second = random.randint(0, 59)
+
+    return dt.replace(hour=hour, minute=minute, second=second)
+
+
+def _random_date_seasonal_month(start_str: str, end_str: str) -> str:
+    """
+    Generate a random date biased toward salary periods (1st-5th, 15th)
+    and month-end (25th-30th). Used for loan payments, standing orders.
+    """
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+    delta_days = (end - start).days
+    if delta_days <= 0:
+        return start_str
+
+    dt = start + timedelta(days=random.randint(0, delta_days))
+
+    # Bias toward salary periods: 1st-5th or 15th or 25th-28th
+    day_weights = {
+        1: 0.08, 2: 0.06, 3: 0.05, 4: 0.04, 5: 0.04,
+        15: 0.08,
+        25: 0.04, 26: 0.04, 27: 0.03, 28: 0.03,
+    }
+    if dt.day in day_weights:
+        # Higher chance of keeping this date
+        if random.random() < 0.7:
+            return dt.strftime("%Y-%m-%d")
+
+    return dt.strftime("%Y-%m-%d")

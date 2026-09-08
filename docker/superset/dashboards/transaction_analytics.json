@@ -1,0 +1,57 @@
+{
+  "dashboard_title": "Transaction Analytics",
+  "slug": "transaction-analytics",
+  "published": true,
+  "position_json": {
+    "DASHBOARD_VERSION_KEY": "v2",
+    "ROOT_ID": { "type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"] },
+    "GRID_ID": { "type": "GRID", "id": "GRID_ID", "children": ["ROW-1", "ROW-2", "ROW-3"], "parents": ["ROOT_ID"] },
+    "HEADER_ID": { "type": "HEADER", "id": "HEADER_ID", "meta": { "text": "Transaction Analytics" } },
+    "ROW-1": {
+      "type": "ROW", "id": "ROW-1",
+      "children": ["CHART-TXN-VOL", "CHART-TXN-COUNT"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-2": {
+      "type": "ROW", "id": "ROW-2",
+      "children": ["CHART-TXN-CHANNEL", "CHART-TXN-HOUR"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-3": {
+      "type": "ROW", "id": "ROW-3",
+      "children": ["CHART-TXN-TREND"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "CHART-TXN-VOL": {
+      "type": "CHART", "id": "CHART-TXN-VOL",
+      "meta": { "width": 12, "height": 40, "chartName": "Daily Transaction Volume" }
+    },
+    "CHART-TXN-COUNT": {
+      "type": "CHART", "id": "CHART-TXN-COUNT",
+      "meta": { "width": 12, "height": 40, "chartName": "Transaction Count by Type" }
+    },
+    "CHART-TXN-CHANNEL": {
+      "type": "CHART", "id": "CHART-TXN-CHANNEL",
+      "meta": { "width": 8, "height": 50, "chartName": "Channel Distribution" }
+    },
+    "CHART-TXN-HOUR": {
+      "type": "CHART", "id": "CHART-TXN-HOUR",
+      "meta": { "width": 8, "height": 50, "chartName": "Hourly Transaction Pattern" }
+    },
+    "CHART-TXN-TREND": {
+      "type": "CHART", "id": "CHART-TXN-TREND",
+      "meta": { "width": 16, "height": 50, "chartName": "Monthly Transaction Trend" }
+    }
+  },
+  "json_metadata": {
+    "timed_refresh_immune_slices": [],
+    "expanded_slices": {},
+    "refresh_frequency": 0,
+    "color_scheme": "supersetColors",
+    "cross_filters_enabled": true
+  },
+  "description": "Transaction analytics: daily volume, channel distribution, hourly patterns, and monthly trends."
+}

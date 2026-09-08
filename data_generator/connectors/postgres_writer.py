@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 PostgreSQL Batch Writer — Banking Data Platform
 Writes generated data to PostgreSQL using COPY for fast bulk inserts.
@@ -133,12 +134,15 @@ class PostgresWriter:
             ("digital_banking", "device"),
             ("digital_banking", "location"),
             ("digital_banking", "mcc_code"),
+            ("digital_banking", "merchant"),
             # card_crm
             ("card_crm", "crm_interaction"),
             ("card_crm", "card_txn"),
             ("card_crm", "card"),
             # core_banking (reverse FK order)
             ("core_banking", "txn_account"),
+            ("core_banking", "standing_order"),
+            ("core_banking", "loan_payment"),
             ("core_banking", "loan"),
             ("core_banking", "deposit"),
             ("core_banking", "account"),

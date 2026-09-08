@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Digital Banking Generator — 5 tables
 Generates realistic data for: device, location, online_transaction,
@@ -113,8 +114,15 @@ def generate_locations(count: int, config: dict) -> list[tuple]:
 
 
 def generate_online_transactions(count: int, config: dict, customer_ids: list[int],
-                                  device_ids: list[int], location_ids: list[int]) -> list[tuple]:
-    """Generate online transaction data."""
+                                  device_ids: list[int], location_ids: list[int],
+                                  high_risk_location_ids: list[int] | None = None) -> list[tuple]:
+    """
+    Generate online transaction data with seasonal patterns and enriched fraud.
+
+    Args:
+        high_risk_location_ids: List of location_ids where is_high_risk_area=1
+                                for correlating fraud with high-risk areas
+    """
     rows = []
     type_dist = config.get("type_distribution", {})
     channel_dist = config.get("channel_distribution", {})
@@ -129,9 +137,14 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
     statuses = list(status_dist.keys())
     s_weights = list(status_dist.values())
 
+    # Enriched fraud reasons (inspired by archive 10 dataset)
     fraud_reasons = [
         "Unusual location", "Velocity check failed", "Amount exceeds limit",
         "Known fraud pattern", "Device fingerprint mismatch",
+        "Geo-anomaly detected", "Device change detected",
+        "Amount anomaly", "IP blacklist match",
+        "Multiple failed attempts", "Suspicious merchant pattern",
+        "Cross-border anomaly", "Time-of-day anomaly",
     ]
 
     for i in range(1, count + 1):
@@ -142,9 +155,22 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
         channel = random.choices(channels, weights=ch_weights)[0]
         status = random.choices(statuses, weights=s_weights)[0]
         amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
-        is_fraud = 1 if random.random() < fraud_rate else 0
-        fraud_reason = random.choice(fraud_reasons) if is_fraud else None
-        txn_date = _random_datetime("2025-06-01", "2026-08-01")
+
+        # Fraud logic: 0.8% base rate, but higher if high-risk location
+        is_fraud = 0
+        fraud_reason = None
+        if random.random() < fraud_rate:
+            is_fraud = 1
+            # Correlate fraud with high-risk locations
+            if high_risk_location_ids and random.random() < 0.35:
+                location_id = random.choice(high_risk_location_ids)
+            # Fraud tends to be higher amounts
+            if random.random() < 0.4:
+                amount = round(random.uniform(amount_range[1] * 0.6, amount_range[1]), 2)
+            fraud_reason = random.choice(fraud_reasons)
+
+        # Use seasonal datetime
+        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
 
         rows.append((
             i,
@@ -259,6 +285,92 @@ def generate_mcc_codes(config: dict) -> list[tuple]:
     return rows
 
 
+def generate_merchants(count: int, config: dict, mcc_codes: list[str],
+                       cities: list[str] | None = None) -> list[tuple]:
+    """
+    Generate merchant directory data.
+
+    Inspired by Data12 (Indian Banking) merchants table.
+    Links merchants to MCC codes and geographic locations.
+    """
+    if cities is None:
+        cities = ["Hanoi", "HCM", "Da Nang", "Hai Phong", "Can Tho",
+                  "Bien Hoa", "Nha Trang", "Vung Tau", "Hue", "Quy Nhon"]
+
+    merchant_categories = [
+        "Fashion & Apparel", "Grocery & Supermarket", "Healthcare & Pharmacy",
+        "Financial Services", "Insurance", "Home & Furniture",
+        "Utilities & Bill Payment", "Telecom", "Food & Beverage",
+        "Travel & Hospitality", "Education", "Entertainment",
+        "Automotive", "Electronics", "Beauty & Personal Care",
+    ]
+
+    # Risk category: gambling and financial services are higher risk
+    risk_map = {
+        "Financial Services": "MEDIUM",
+        "Insurance": "MEDIUM",
+        "Automotive": "LOW",
+        "Electronics": "LOW",
+    }
+
+    # MCC code → category mapping for linking
+    cat_mcc = {
+        "Grocery & Supermarket": ["5411", "5422"],
+        "Food & Beverage": ["5812", "5814"],
+        "Travel & Hospitality": ["3000", "3351", "3501", "4121", "7011"],
+        "Electronics": ["5732", "5999"],
+        "Healthcare & Pharmacy": ["5912", "8011", "8041", "8062"],
+        "Education": ["8299"],
+        "Entertainment": ["7993", "7995"],
+        "Utilities & Bill Payment": ["4814", "4899"],
+        "Fashion & Apparel": ["5691", "5651"],
+        "Telecom": ["4814"],
+        "Insurance": ["6300"],
+    }
+
+    rows = []
+    used_names = set()
+
+    for i in range(1, count + 1):
+        cat = random.choice(merchant_categories)
+
+        # Generate unique merchant name
+        name_prefix = random.choice(MERCHANT_NAMES)
+        suffix = random.choice(["", " Corp", " LLC", " JSC", " Co", " Vietnam",
+                                 " Trading", " Services", " Express"])
+        name = f"{name_prefix}{suffix}"
+        while name in used_names:
+            name = f"{name_prefix} {random.choice(['A', 'B', 'C', 'D', 'E'])}{suffix}"
+        used_names.add(name)
+
+        city = random.choice(cities)
+        risk = risk_map.get(cat, random.choices(["LOW", "MEDIUM", "HIGH"],
+                                                 weights=[0.70, 0.20, 0.10])[0])
+
+        # Link to MCC code
+        mcc = None
+        if mcc_codes:
+            cat_mcns = cat_mcc.get(cat, [])
+            if cat_mcns:
+                mcc = random.choice(cat_mcns)
+            else:
+                mcc = random.choice(mcc_codes)
+
+        rows.append((
+            i,
+            name,
+            cat,
+            mcc,
+            city,
+            city,  # state = city for Vietnam
+            risk,
+            1 if random.random() < 0.95 else 0,  # 95% active
+            datetime.now(),
+        ))
+
+    return rows
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _random_datetime(start_str: str, end_str: str) -> datetime:
@@ -268,3 +380,42 @@ def _random_datetime(start_str: str, end_str: str) -> datetime:
     if delta <= 0:
         return start
     return start + timedelta(seconds=random.randint(0, int(delta)))
+
+
+def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
+    """Generate datetime with realistic banking hour/day-of-week patterns."""
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+    delta_days = (end - start).days
+    if delta_days <= 0:
+        return start
+
+    dt = start + timedelta(days=random.randint(0, delta_days))
+    weekday = dt.weekday()
+
+    day_roll = random.random()
+    if day_roll < 0.65:
+        if weekday >= 5:
+            shift = random.choice([-(weekday - 4), (7 - weekday)])
+            dt = dt + timedelta(days=shift)
+    elif day_roll < 0.85:
+        while dt.weekday() != 5:
+            dt = dt + timedelta(days=1)
+    else:
+        while dt.weekday() != 6:
+            dt = dt + timedelta(days=1)
+
+    hour_weights = {
+        0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,
+        6: 0.02, 7: 0.04, 8: 0.08,
+        9: 0.12, 10: 0.14, 11: 0.10,
+        12: 0.06, 13: 0.05, 14: 0.06, 15: 0.05, 16: 0.04,
+        17: 0.03, 18: 0.04,
+        19: 0.06, 20: 0.05, 21: 0.03,
+        22: 0.01, 23: 0.005,
+    }
+    hours = list(hour_weights.keys())
+    h_weights = list(hour_weights.values())
+    hour = random.choices(hours, weights=h_weights)[0]
+
+    return dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))

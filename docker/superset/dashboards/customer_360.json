@@ -1,0 +1,73 @@
+{
+  "dashboard_title": "Customer 360 View",
+  "slug": "customer-360",
+  "published": true,
+  "position_json": {
+    "DASHBOARD_VERSION_KEY": "v2",
+    "ROOT_ID": { "type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"] },
+    "GRID_ID": { "type": "GRID", "id": "GRID_ID", "children": ["ROW-1", "ROW-2", "ROW-3"], "parents": ["ROOT_ID"] },
+    "HEADER_ID": { "type": "HEADER", "id": "HEADER_ID", "meta": { "text": "Customer 360 View" } },
+    "ROW-1": {
+      "type": "ROW", "id": "ROW-1",
+      "children": ["BIG-CUST-TOTAL", "BIG-CUST-ACTIVE", "BIG-CUST-VIP", "BIG-CUST-KYC"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-2": {
+      "type": "ROW", "id": "ROW-2",
+      "children": ["CHART-CUST-SEGMENT", "CHART-CUST-CITY", "CHART-CUST-AGE"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-3": {
+      "type": "ROW", "id": "ROW-3",
+      "children": ["CHART-CUST-TREND", "CHART-CUST-CRM"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "BIG-CUST-TOTAL": {
+      "type": "CHART", "id": "BIG-CUST-TOTAL",
+      "meta": { "width": 6, "height": 30, "chartName": "Total Customers" }
+    },
+    "BIG-CUST-ACTIVE": {
+      "type": "CHART", "id": "BIG-CUST-ACTIVE",
+      "meta": { "width": 6, "height": 30, "chartName": "Active Rate (%)" }
+    },
+    "BIG-CUST-VIP": {
+      "type": "CHART", "id": "BIG-CUST-VIP",
+      "meta": { "width": 6, "height": 30, "chartName": "VIP Customers" }
+    },
+    "BIG-CUST-KYC": {
+      "type": "CHART", "id": "BIG-CUST-KYC",
+      "meta": { "width": 6, "height": 30, "chartName": "KYC Verified (%)" }
+    },
+    "CHART-CUST-SEGMENT": {
+      "type": "CHART", "id": "CHART-CUST-SEGMENT",
+      "meta": { "width": 8, "height": 50, "chartName": "Segment Distribution" }
+    },
+    "CHART-CUST-CITY": {
+      "type": "CHART", "id": "CHART-CUST-CITY",
+      "meta": { "width": 8, "height": 50, "chartName": "Customers by City" }
+    },
+    "CHART-CUST-AGE": {
+      "type": "CHART", "id": "CHART-CUST-AGE",
+      "meta": { "width": 8, "height": 50, "chartName": "Age Distribution" }
+    },
+    "CHART-CUST-TREND": {
+      "type": "CHART", "id": "CHART-CUST-TREND",
+      "meta": { "width": 8, "height": 50, "chartName": "New Customer Registration Trend" }
+    },
+    "CHART-CUST-CRM": {
+      "type": "CHART", "id": "CHART-CUST-CRM",
+      "meta": { "width": 8, "height": 50, "chartName": "CRM Interactions by Channel" }
+    }
+  },
+  "json_metadata": {
+    "timed_refresh_immune_slices": [],
+    "expanded_slices": {},
+    "refresh_frequency": 0,
+    "color_scheme": "supersetColors",
+    "cross_filters_enabled": true
+  },
+  "description": "Customer 360 view: segment distribution, demographics, registration trends, and CRM interactions."
+}

@@ -61,10 +61,10 @@ TBLPROPERTIES ('format-version' = '2');
 
 -- CDC Watermark (track consolidation progress)
 CREATE TABLE IF NOT EXISTS lakehouse.meta.cdc_watermark (
-    table_name               VARCHAR,
+    table_name               VARCHAR(100),
     last_cdc_timestamp_ms    BIGINT,
     last_spark_batch_id      BIGINT,
-    last_processed_at        TIMESTAMP,
-    PRIMARY KEY (table_name)
+    last_processed_at        TIMESTAMP
 )
-USING iceberg;
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');

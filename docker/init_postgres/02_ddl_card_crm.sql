@@ -66,8 +66,11 @@ CREATE TABLE IF NOT EXISTS card_crm.card_txn (
     currency            CHAR(3)         NOT NULL DEFAULT 'VND',
     merchant_name       VARCHAR(200),
     merchant_category   VARCHAR(50),                    -- GROCERY / RESTAURANT / TRAVEL / ECOM / FUEL / EDUCATION
+    mcc_code            VARCHAR(10),                    -- FK -> digital_banking.mcc_code (nullable)
     channel             VARCHAR(20)     NOT NULL,        -- POS / ECOM / ATM
     status              VARCHAR(20)     NOT NULL,        -- SUCCESS / FAILED / PENDING
+    processing_time_ms  INT,                             -- transaction processing time
+    reference_number    VARCHAR(30),                     -- CDN + sequential number
     created_ts          TIMESTAMP       NOT NULL,
     last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
     --

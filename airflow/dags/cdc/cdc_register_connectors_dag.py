@@ -77,7 +77,8 @@ def get_core_banking_config():
         "publication.name": "debezium_pub_core",
         "publication.autocreate.mode": "disabled",
         "heartbeat.interval.ms": "10000",
-        "snapshot.mode": "always",
+        # Snapshot once, then resume from the replication slot on restart.
+        "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
@@ -107,7 +108,8 @@ def get_card_crm_config():
         "publication.name": "debezium_pub_card",
         "publication.autocreate.mode": "disabled",
         "heartbeat.interval.ms": "10000",
-        "snapshot.mode": "always",
+        # Snapshot once, then resume from the replication slot on restart.
+        "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
@@ -137,7 +139,8 @@ def get_digital_banking_config():
         "publication.name": "debezium_pub_digital",
         "publication.autocreate.mode": "disabled",
         "heartbeat.interval.ms": "10000",
-        "snapshot.mode": "always",
+        # Snapshot once, then resume from the replication slot on restart.
+        "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",

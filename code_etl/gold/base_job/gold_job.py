@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from common_utils import get_target_table, load_source_df, parse_arguments
-from spark.iceberg_utils import table_exists
+from spark.iceberg_utils import create_iceberg_table_if_not_exists, table_exists
 from spark.spark_session import get_spark_session
 from utils.logger import get_logger
 from utils.yaml_loader import load_config
@@ -179,12 +179,12 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
 
     assert_non_empty(result_df, config, cob_dt, logger)
 
-    # Check table exists — if not, create with initial load
+    # Create the target explicitly before writing.  Iceberg's V2 writer cannot
+    # create a missing table with overwritePartitions(); it resolves the target
+    # relation before the write and fails with TABLE_OR_VIEW_NOT_FOUND.
     if not table_exists(spark, target):
-        logger.warning(f"[{job_type}] Target table {target} does not exist. Creating with initial load...")
-        result_df.writeTo(target).overwritePartitions()
-        logger.info(f"[{job_type}] Created {target} with initial data load")
-        return
+        logger.warning(f"[{job_type}] Target table {target} does not exist; creating from result schema")
+        create_iceberg_table_if_not_exists(result_df, target, logger)
 
     logger.info(f"[{job_type}] Đang ghi vào {target} bằng overwritePartitions (an toàn theo partition)")
     result_df.writeTo(target).overwritePartitions()

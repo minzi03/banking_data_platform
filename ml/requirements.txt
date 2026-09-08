@@ -1,0 +1,7 @@
+mlflow==2.16.0
+xgboost==2.1.1
+scikit-learn==1.5.2
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.14.1
+trino==0.327.0

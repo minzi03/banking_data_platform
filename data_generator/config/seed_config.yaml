@@ -140,6 +140,15 @@ core_banking:
     salary_range: [8000000, 80000000]            # VND monthly
     active_rate: 0.90
 
+  loan_payment:
+    late_payment_rate: 0.05                     # 5% chance of late payment
+    missed_payment_rate: 0.02                   # 2% chance of missed payment
+
+  standing_order:
+    row_count: 15000
+    frequency_distribution: {"MONTHLY": 0.60, "WEEKLY": 0.25, "QUARTERLY": 0.15}
+    status_distribution: {"ACTIVE": 0.70, "PAUSED": 0.15, "CANCELLED": 0.15}
+
 # -----------------------------------------------------------------------------
 # card_crm schema
 # -----------------------------------------------------------------------------
@@ -237,3 +246,6 @@ digital_banking:
       - {mcc: "8021", desc: "Dentists", group: "SERVICES", risk: 0}
       - {mcc: "8041", desc: "Chiropractors", group: "SERVICES", risk: 0}
       - {mcc: "8062", desc: "Hospitals", group: "SERVICES", risk: 0}
+
+  merchant:
+    row_count: 2000

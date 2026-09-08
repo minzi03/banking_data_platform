@@ -161,3 +161,31 @@ DROP TRIGGER IF EXISTS trg_mcc_code_last_upd ON digital_banking.mcc_code;
 CREATE TRIGGER trg_mcc_code_last_upd
     BEFORE UPDATE ON digital_banking.mcc_code
     FOR EACH ROW EXECUTE FUNCTION digital_banking.set_last_updated();
+
+-- =============================================================================
+-- 6. MERCHANT (merchant directory) — ~2,000 rows
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS digital_banking.merchant (
+    merchant_id         BIGINT          NOT NULL,
+    merchant_name       VARCHAR(200)    NOT NULL,
+    merchant_category   VARCHAR(50)     NOT NULL,
+    mcc_code            VARCHAR(10),                    -- FK -> digital_banking.mcc_code
+    city                VARCHAR(100),
+    state               VARCHAR(100),
+    risk_category       VARCHAR(20)     NOT NULL DEFAULT 'LOW',  -- LOW / MEDIUM / HIGH
+    is_active           SMALLINT        NOT NULL DEFAULT 1,
+    last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT pk_merchant PRIMARY KEY (merchant_id),
+    CONSTRAINT chk_merchant_risk CHECK (risk_category IN ('LOW', 'MEDIUM', 'HIGH')),
+    CONSTRAINT chk_merchant_active CHECK (is_active IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_merchant_category ON digital_banking.merchant(merchant_category);
+CREATE INDEX IF NOT EXISTS idx_merchant_city ON digital_banking.merchant(city);
+CREATE INDEX IF NOT EXISTS idx_merchant_upd ON digital_banking.merchant(last_updated);
+
+DROP TRIGGER IF EXISTS trg_merchant_last_upd ON digital_banking.merchant;
+CREATE TRIGGER trg_merchant_last_upd
+    BEFORE UPDATE ON digital_banking.merchant
+    FOR EACH ROW EXECUTE FUNCTION digital_banking.set_last_updated();

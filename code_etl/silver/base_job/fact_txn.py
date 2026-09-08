@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from common_utils import get_target_table, load_source_df, parse_arguments
-from spark.iceberg_utils import table_exists
+from spark.iceberg_utils import create_iceberg_table_if_not_exists, table_exists
 from spark.spark_session import get_spark_session
 from utils.logger import get_logger
 from utils.yaml_loader import load_config
@@ -47,12 +47,11 @@ def run_fact_txn(spark, config: dict, cob_dt: str, logger):
 
     fact_df = load_source_df(spark, config, cob_dt)
 
-    # Check table exists — if not, create with initial load
+    # Create the target explicitly before writing. Iceberg's V2 writer cannot
+    # resolve a missing table for overwritePartitions() by itself.
     if not table_exists(spark, target):
-        logger.warning(f"Target table {target} does not exist. Creating with initial load...")
-        fact_df.writeTo(target).overwritePartitions()
-        logger.info(f"Created {target} with initial data load ({fact_df.count()} rows)")
-        return
+        logger.warning(f"Target table {target} does not exist; creating from result schema")
+        create_iceberg_table_if_not_exists(fact_df, target, logger)
 
     logger.info(f"Đang ghi vào {target} bằng overwritePartitions (an toàn theo partition)")
     fact_df.writeTo(target).overwritePartitions()

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Card & CRM Generator — 3 tables
 Generates realistic data for: card, card_txn, crm_interaction
@@ -116,10 +117,15 @@ def generate_cards(count: int, config: dict, customer_ids: list[int],
     return rows
 
 
-def generate_card_txn(count: int, config: dict, card_data: list[tuple]) -> list[tuple]:
+def generate_card_txn(count: int, config: dict, card_data: list[tuple],
+                      mcc_codes: list[str] | None = None) -> list[tuple]:
     """
-    Generate card transaction data.
+    Generate card transaction data with merchant details.
+
     card_data: list of (card_id, customer_id, card_type, status) tuples
+    mcc_codes: list of valid MCC code strings from digital_banking.mcc_code
+
+    Enhanced with: processing_time_ms, reference_number, mcc_code FK
     """
     rows = []
     type_dist = config.get("type_distribution", {"PURCHASE": 0.70, "CASH_ADVANCE": 0.15, "REFUND": 0.10, "REVERSAL": 0.05})
@@ -138,6 +144,20 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple]) -> list[
     statuses = list(status_dist.keys())
     s_weights = list(status_dist.values())
 
+    # Merchant category → MCC code mapping (subset of 109 codes)
+    cat_mcc_map = {
+        "GROCERY": ["5411", "5422"],
+        "RESTAURANT": ["5812", "5814"],
+        "TRAVEL": ["3000", "3351", "3501", "4121"],
+        "ECOM": ["5999", "5732"],
+        "FUEL": ["5541"],
+        "EDUCATION": ["8299"],
+        "HEALTHCARE": ["8011", "8041", "8062"],
+        "ENTERTAINMENT": ["7993", "7995"],
+        "UTILITIES": ["4814", "4899"],
+        "FASHION": ["5691", "5651"],
+    }
+
     for i in range(1, count + 1):
         card_id, cust_id = random.choice(active_cards) if active_cards else (1, 1)
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
@@ -146,11 +166,30 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple]) -> list[
         amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
         merchant = random.choice(MERCHANT_NAMES)
         merchant_cat = random.choice(merchant_cats)
-        txn_date = _random_datetime("2025-06-01", "2026-08-01")
+        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
 
         # Refunds and reversals have negative amounts
         if txn_type in ("REFUND", "REVERSAL"):
             amount = -amount
+
+        # MCC code: pick from category mapping or use a random valid MCC
+        mcc = None
+        if mcc_codes:
+            cat_mcns = cat_mcc_map.get(merchant_cat, [])
+            if cat_mcns and random.random() < 0.8:
+                mcc = random.choice(cat_mcns)
+            else:
+                mcc = random.choice(mcc_codes)
+
+        # Processing time: POS fastest (50-200ms), ECOM slower (200-2000ms), ATM medium
+        if channel == "POS":
+            proc_time = random.randint(50, 300)
+        elif channel == "ATM":
+            proc_time = random.randint(500, 2000)
+        else:
+            proc_time = random.randint(200, 3000)
+
+        ref_number = f"CDN{i:010d}"
 
         rows.append((
             i,
@@ -162,8 +201,11 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple]) -> list[
             "VND",
             merchant,
             merchant_cat,
+            mcc,
             channel,
             status,
+            proc_time,
+            ref_number,
             txn_date,  # created_ts
             datetime.now(),
         ))
@@ -250,3 +292,44 @@ def _random_datetime(start_str: str, end_str: str) -> datetime:
     end = datetime.strptime(end_str, "%Y-%m-%d")
     delta = (end - start).total_seconds()
     return start + timedelta(seconds=random.randint(0, int(delta)))
+
+
+def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
+    """Generate datetime with realistic banking hour/day-of-week patterns."""
+    start = datetime.strptime(start_str, "%Y-%m-%d")
+    end = datetime.strptime(end_str, "%Y-%m-%d")
+    delta_days = (end - start).days
+    if delta_days <= 0:
+        return start
+
+    dt = start + timedelta(days=random.randint(0, delta_days))
+    weekday = dt.weekday()
+
+    # Bias toward weekdays
+    day_roll = random.random()
+    if day_roll < 0.65:
+        if weekday >= 5:
+            shift = random.choice([-(weekday - 4), (7 - weekday)])
+            dt = dt + timedelta(days=shift)
+    elif day_roll < 0.85:
+        while dt.weekday() != 5:
+            dt = dt + timedelta(days=1)
+    else:
+        while dt.weekday() != 6:
+            dt = dt + timedelta(days=1)
+
+    # Hour peaks: 9-11am and 7-9pm for card spending
+    hour_weights = {
+        0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,
+        6: 0.02, 7: 0.04, 8: 0.08,
+        9: 0.12, 10: 0.14, 11: 0.10,
+        12: 0.06, 13: 0.05, 14: 0.06, 15: 0.05, 16: 0.04,
+        17: 0.03, 18: 0.04,
+        19: 0.06, 20: 0.05, 21: 0.03,
+        22: 0.01, 23: 0.005,
+    }
+    hours = list(hour_weights.keys())
+    h_weights = list(hour_weights.values())
+    hour = random.choices(hours, weights=h_weights)[0]
+
+    return dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))

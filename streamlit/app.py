@@ -71,10 +71,10 @@ st.markdown("""
 def get_connection():
     """Create Trino connection"""
     return connect(
-        host="host.docker.internal",
+        host="trino",
         port=8085,
         user="admin",
-        catalog="lakehouse"
+        catalog="iceberg"
     )
 
 def query_data(sql: str) -> pd.DataFrame:
@@ -114,7 +114,7 @@ def load_customer_360():
                primary_channel, interaction_count_90d,
                rfm_recency_score, rfm_frequency_score, rfm_monetary_score,
                rfm_segment, churn_flag, cross_sell_credit_card_flag, cob_dt
-        FROM gold.mart_customer_360
+        FROM serving.mart_customer_360_current
     """)
 
 @st.cache_data(ttl=300)
@@ -122,7 +122,7 @@ def load_rfm():
     return query_data("""
         SELECT customer_id, customer_sk, recency_days, frequency, monetary,
                r_score, f_score, m_score, rfm_score, rfm_segment, cob_dt
-        FROM gold.rfm_segment
+        FROM serving.rfm_segment_current
     """)
 
 @st.cache_data(ttl=300)
@@ -131,7 +131,7 @@ def load_churn():
         SELECT customer_id, customer_sk, txn_cnt_30d, txn_cnt_90d,
                txn_amt_30d, txn_amt_90d, days_since_last_txn,
                churn_risk, is_churn_candidate, cob_dt
-        FROM gold.churn_prediction
+        FROM serving.churn_prediction_current
     """)
 
 @st.cache_data(ttl=300)
@@ -143,7 +143,7 @@ def load_campaign():
                customer_segment, aum_total, aum_bucket,
                primary_branch_code, primary_opportunity, no_credit_card,
                campaign_type, cob_dt
-        FROM gold.campaign_target
+        FROM serving.campaign_target_current
     """)
 
 @st.cache_data(ttl=300)
@@ -151,7 +151,7 @@ def load_cross_sell():
     return query_data("""
         SELECT customer_id, customer_sk, customer_segment,
                no_credit_card, no_debit_card, primary_opportunity, cob_dt
-        FROM gold.cross_sell_segment
+        FROM serving.cross_sell_segment_current
     """)
 
 @st.cache_data(ttl=300)
@@ -159,7 +159,7 @@ def load_balance():
     return query_data("""
         SELECT customer_id, customer_sk, total_account_balance,
                avg_account_balance, aum_total, aum_bucket, cob_dt
-        FROM gold.customer_balance_summary
+        FROM serving.customer_balance_summary_current
     """)
 
 @st.cache_data(ttl=300)
@@ -170,7 +170,7 @@ def load_transaction():
                card_txn_count_30d, card_txn_amount_30d,
                total_txn_count_30d, total_txn_amount_30d,
                last_txn_date, cob_dt
-        FROM gold.customer_transaction_summary
+        FROM serving.customer_transaction_summary_current
     """)
 
 @st.cache_data(ttl=300)
@@ -179,7 +179,7 @@ def load_product():
         SELECT customer_id, customer_sk, total_accounts, cnt_casa_active,
                cnt_td_active, total_cards, cnt_credit_cards, cnt_debit_cards,
                has_credit_card, has_savings, has_loan, cob_dt
-        FROM gold.customer_product_summary
+        FROM serving.customer_product_summary_current
     """)
 
 @st.cache_data(ttl=300)
@@ -190,7 +190,7 @@ def load_card():
                total_card_txn_count_30d, total_card_txn_amount_30d,
                avg_card_txn_amount_30d, distinct_merchant_categories,
                last_card_txn_date, cob_dt
-        FROM gold.customer_card_summary
+        FROM serving.customer_card_summary_current
     """)
 
 # =============================================================================
@@ -253,9 +253,9 @@ if st.sidebar.button("🔄 Refresh Data"):
 
 st.sidebar.markdown("---")
 st.sidebar.info("""
-**Data Source:** Trino → Iceberg → Gold
+**Data Source:** Trino → Iceberg → Serving (current snapshots)
 **Refresh:** 5 min cache
-**dbt:** 12 semantic models
+**Tables:** 9 serving tables, 10,000 customers
 """)
 
 # =============================================================================
@@ -833,15 +833,15 @@ elif page == "📋 Raw Data":
 
     # Select table
     table_options = [
-        "mart_customer_360",
-        "rfm_segment",
-        "churn_prediction",
-        "campaign_target",
-        "cross_sell_segment",
-        "customer_balance_summary",
-        "customer_transaction_summary",
-        "customer_product_summary",
-        "customer_card_summary"
+        "mart_customer_360_current",
+        "rfm_segment_current",
+        "churn_prediction_current",
+        "campaign_target_current",
+        "cross_sell_segment_current",
+        "customer_balance_summary_current",
+        "customer_transaction_summary_current",
+        "customer_product_summary_current",
+        "customer_card_summary_current"
     ]
 
     selected_table = st.selectbox("Select Table", table_options)
@@ -849,7 +849,7 @@ elif page == "📋 Raw Data":
     # Load data
     @st.cache_data(ttl=300)
     def load_table_data(table_name):
-        return query_data(f"SELECT * FROM gold.{table_name}")
+        return query_data(f"SELECT * FROM serving.{table_name}")
 
     df = load_table_data(selected_table)
 

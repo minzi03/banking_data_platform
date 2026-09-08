@@ -169,6 +169,8 @@ services:
         mc mb --ignore-existing local/${MINIO_BUCKET};
         mc mb --ignore-existing local/${MINIO_BUCKET}/airflow-logs;
         mc mb --ignore-existing local/${MINIO_BUCKET}/spark-logs;
+        mc mb --ignore-existing local/${MINIO_BUCKET}/mlflow;
+        mc mb --ignore-existing local/${MINIO_BUCKET}/mlflow/artifacts;
         echo 'MinIO buckets created successfully';
       "
     env_file: .env
@@ -398,7 +400,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: banking-kafka-ui
     ports:
-      - "8081:8080"
+      - "8089:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: banking
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -556,7 +558,7 @@ services:
       MYSQL_USER: ${OM_DB_USER}
       MYSQL_PASSWORD: ${OM_DB_PASSWORD}
     ports:
-      - "3307:3306"
+      - "3308:3306"
     volumes:
       - om-mysql-data:/var/lib/mysql
     mem_limit: 500m
@@ -657,7 +659,7 @@ services:
       om-elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8585/ || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8585 && echo -e \"GET / HTTP/1.0\r\n\r\n\" >&3 && cat <&3 | grep -q \"HTTP\"' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -681,7 +683,7 @@ services:
       - ../streamlit:/app
     mem_limit: 512m
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8501/_stcore/health || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -708,16 +710,151 @@ services:
     mem_limit: 1g
     networks:
       - lakehouse_net
-
-# =============================================================================
-# MONITORING LAYER (Prometheus + Grafana + Freshness Exporter)
-# =============================================================================
     # Chạy thường trực để Airflow `docker exec` vào, cùng pattern với
     # spark-worker mà DAG Silver/Gold đang dùng. Trước đây service này là
     # one-shot (CMD dbt run rồi exit) và nằm sau profile `tools`, nên DAG dbt
     # không thể gọi được — cộng thêm việc image Airflow KHÔNG cài dbt, tức là
     # DAG dbt cũ chưa từng chạy được.
     command: ["tail", "-f", "/dev/null"]
+
+# =============================================================================
+# API LAYER (Customer 360 API)
+# =============================================================================
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: banking-api
+    hostname: api
+    ports:
+      - "8000:8000"
+    environment:
+      - TRINO_HOST=trino
+      - TRINO_PORT=8080
+      - TRINO_USER=admin
+      - TRINO_CATALOG=iceberg
+      - TRINO_SCHEMA=serving
+      - TZ=Asia/Ho_Chi_Minh
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8000/health').raise_for_status()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - trino
+    networks:
+      - lakehouse_net
+
+# =============================================================================
+# BI LAYER (Apache Superset)
+# =============================================================================
+
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    container_name: banking-superset
+    hostname: superset
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY:-banking_platform_secret_key_2025}
+      - DATABASE_USER=${POSTGRES_USER}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_DB=superset
+      - FLASK_APP=superset.app:create_app()
+      - SUPERSET_ENV=production
+      - SUPERSET_HOME=/app/superset_home
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset/dashboards:/app/dashboards:ro
+    mem_limit: 1024m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8088/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lakehouse_net
+
+  superset-init:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    container_name: banking-superset-init
+    hostname: superset-init
+    environment:
+      - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY:-banking_platform_secret_key_2025}
+      - DATABASE_USER=${POSTGRES_USER}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_DB=superset
+      - FLASK_APP=superset
+      - SUPERSET_HOME=/app/superset_home
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - superset-home:/app/superset_home
+      - ./superset/dashboards:/app/dashboards:ro
+    entrypoint: /bin/bash
+    command: ["/app/docker/init.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lakehouse_net
+
+# =============================================================================
+# ML PIPELINE (MLflow)
+# =============================================================================
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    container_name: banking-mlflow
+    hostname: mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - BACKEND_STORE_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      - DEFAULT_ARTIFACT_ROOT=s3://${MINIO_BUCKET}/mlflow/artifacts
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    entrypoint: >
+      /bin/sh -c "pip install psycopg2-binary boto3 -q && mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      --default-artifact-root s3://${MINIO_BUCKET}/mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000"
+    mem_limit: 1024m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - lakehouse_net
+
+# =============================================================================
+# MONITORING LAYER (Prometheus + Grafana + Freshness Exporter)
+# =============================================================================
 
   prometheus:
     image: prom/prometheus:v2.51.0
@@ -786,6 +923,7 @@ volumes:
   om-es-data:
   prometheus-data:
   grafana-data:
+  superset-home:
 
 # =============================================================================
 # NETWORKS

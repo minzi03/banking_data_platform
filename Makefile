@@ -3,7 +3,7 @@
 # Quick commands for managing the data platform
 # =============================================================================
 
-.PHONY: help up down restart logs status clean seed
+.PHONY: help up down restart logs status clean seed superset superset-init
 
 COMPOSE_FILE := docker/docker-compose.yml
 DC := docker compose -f $(COMPOSE_FILE)
@@ -47,7 +47,14 @@ help:
 	@echo "  Tools:"
 	@echo "    make trino       Open Trino CLI"
 	@echo "    make psql        Open PostgreSQL CLI"
+	@echo "    make superset    Open Superset UI (http://localhost:8088)"
 	@echo "    make clean       Remove volumes and data"
+	@echo ""
+	@echo "  Infrastructure as Code:"
+	@echo "    make infra-init      terraform init"
+	@echo "    make infra-plan      terraform plan"
+	@echo "    make infra-apply     terraform apply"
+	@echo "    make infra-destroy   terraform destroy"
 	@echo ""
 	@echo "UI URLs:"
 	@echo "  Airflow:      http://localhost:8080 (admin/admin123)"
@@ -56,6 +63,9 @@ help:
 	@echo "  Spark Worker: http://localhost:9091"
 	@echo "  Trino:        http://localhost:8085"
 	@echo "  OpenMetadata: http://localhost:8585"
+	@echo "  Superset:     http://localhost:8088 (admin/admin123)"
+	@echo "  Prometheus:   http://localhost:9095"
+	@echo "  Grafana:      http://localhost:3000"
 	@echo ""
 
 # ---------------------------------------------------------------------------
@@ -139,6 +149,37 @@ seed-local:
 # ---------------------------------------------------------------------------
 trino:
 	$(DC) exec trino trino --catalog lakehouse
+
+# ---------------------------------------------------------------------------
+# Superset (BI Layer)
+# ---------------------------------------------------------------------------
+superset:
+	$(DC) up -d superset superset-init
+	@echo ""
+	@echo "Superset starting... http://localhost:8088"
+	@echo "Login: admin / admin123"
+
+superset-logs:
+	$(DC) logs -f superset superset-init --tail=30
+
+# ---------------------------------------------------------------------------
+# Infrastructure as Code (Terraform)
+# ---------------------------------------------------------------------------
+infra-init:
+	cd terraform && terraform init
+	@echo "Terraform initialized"
+
+infra-plan:
+	cd terraform && terraform plan
+	@echo "Terraform plan complete"
+
+infra-apply:
+	cd terraform && terraform apply -auto-approve
+	@echo "Terraform apply complete"
+
+infra-destroy:
+	cd terraform && terraform destroy -auto-approve
+	@echo "Terraform destroy complete"
 
 # ---------------------------------------------------------------------------
 # Cleanup
@@ -274,3 +315,35 @@ gold-job:
 		--config $(CONFIG) \
 		--cob_dt $(COB_DT)
 	@echo "Gold job completed"
+
+# ---------------------------------------------------------------------------
+# Validation and end-to-end execution
+# ---------------------------------------------------------------------------
+validate-pipeline:
+	@echo "Validating Bronze/Silver/Gold counts and grain..."
+	$(DC) exec spark-worker-1 spark-submit \
+		--master spark://spark-master:7077 \
+		--deploy-mode client \
+		/opt/project/code_etl/scripts/validate_pipeline.py \
+		--cob_dt $(COB_DT)
+
+serving-bootstrap:
+	@echo "Publishing current serving snapshots..."
+	$(DC) exec spark-worker-1 spark-submit \
+		--master spark://spark-master:7077 \
+		--deploy-mode client \
+		/opt/project/code_etl/serving/bootstrap/run_serving.py \
+		--cob_dt $(COB_DT)
+
+full-batch:
+	@$(MAKE) bronze-bootstrap COB_DT=$(COB_DT)
+	@$(MAKE) silver-bootstrap COB_DT=$(COB_DT)
+	@$(MAKE) gold-bootstrap COB_DT=$(COB_DT)
+	@$(MAKE) serving-bootstrap COB_DT=$(COB_DT)
+	@$(MAKE) validate-pipeline COB_DT=$(COB_DT)
+	@echo "Full batch pipeline completed successfully"
+
+.PHONY: validate-pipeline serving-bootstrap full-batch
+.DEFAULT_GOAL := help
+
+# End

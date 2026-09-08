@@ -114,7 +114,9 @@ def main():
                 "publication.name": "debezium_pub_core",
                 "publication.autocreate.mode": "disabled",
                 "heartbeat.interval.ms": "10000",
-                "snapshot.mode": "always",
+                # Take the initial snapshot once; restarts resume from the
+                # replication slot/offset instead of duplicating the source.
+                "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
@@ -144,7 +146,9 @@ def main():
                 "publication.name": "debezium_pub_card",
                 "publication.autocreate.mode": "disabled",
                 "heartbeat.interval.ms": "10000",
-                "snapshot.mode": "always",
+                # Take the initial snapshot once; restarts resume from the
+                # replication slot/offset instead of duplicating the source.
+                "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
@@ -174,7 +178,9 @@ def main():
                 "publication.name": "debezium_pub_digital",
                 "publication.autocreate.mode": "disabled",
                 "heartbeat.interval.ms": "10000",
-                "snapshot.mode": "always",
+                # Take the initial snapshot once; restarts resume from the
+                # replication slot/offset instead of duplicating the source.
+                "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",

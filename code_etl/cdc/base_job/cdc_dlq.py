@@ -176,6 +176,14 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
             "__cdc_timestamp",
             F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000)
         )
+        # Preserve immutable Kafka coordinates and the raw envelope for audit,
+        # replay, reconciliation, and regulatory investigation.
+        .withColumn("source_topic", F.col("_kafka_topic"))
+        .withColumn("kafka_partition", F.col("_kafka_partition"))
+        .withColumn("kafka_offset", F.col("_kafka_offset"))
+        .withColumn("kafka_timestamp", F.col("_kafka_timestamp"))
+        .withColumn("raw_payload", F.col("_raw_payload"))
+        .withColumn("payload_hash", F.sha2(F.col("_raw_payload"), 256))
         .drop("_cdc_key", "_raw_op", "_raw_ts_ms", "_raw_deleted",
               "_kafka_topic", "_kafka_partition", "_kafka_offset", "_kafka_timestamp",
               "_raw_payload", "_is_valid", "_error_type", "_error_message")

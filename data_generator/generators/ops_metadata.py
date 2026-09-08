@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Ops Metadata Generator — source_table_registry
 Populates the source table registry with metadata for all source tables.
@@ -26,6 +27,10 @@ def generate_source_registry() -> list[tuple]:
          "lakehouse.bronze.core_deposit", "lakehouse.silver.dim_deposit", 1),
         ("core_banking", "loan", "postgresql", "postgres-banking",
          "lakehouse.bronze.core_loan", "lakehouse.silver.dim_loan", 1),
+        ("core_banking", "loan_payment", "postgresql", "postgres-banking",
+         "lakehouse.bronze.core_loan_payment", "lakehouse.silver.fact_loan_payment", 1),
+        ("core_banking", "standing_order", "postgresql", "postgres-banking",
+         "lakehouse.bronze.core_standing_order", None, 1),
         ("core_banking", "txn_account", "postgresql", "postgres-banking",
          "lakehouse.bronze.core_txn_account", "lakehouse.silver.fact_txn_account", 1),
         ("core_banking", "employee", "postgresql", "postgres-banking",
@@ -46,6 +51,8 @@ def generate_source_registry() -> list[tuple]:
          "lakehouse.bronze.digi_support_ticket", "lakehouse.silver.fact_support_ticket", 1),
         ("digital_banking", "mcc_code", "postgresql", "postgres-banking",
          "lakehouse.bronze.digi_mcc_code", None, 1),
+        ("digital_banking", "merchant", "postgresql", "postgres-banking",
+         "lakehouse.bronze.digi_merchant", None, 1),
     ]
 
     rows = []

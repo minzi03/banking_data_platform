@@ -1,0 +1,65 @@
+{
+  "dashboard_title": "Loan Portfolio Analytics",
+  "slug": "loan-portfolio",
+  "published": true,
+  "position_json": {
+    "DASHBOARD_VERSION_KEY": "v2",
+    "ROOT_ID": { "type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"] },
+    "GRID_ID": { "type": "GRID", "id": "GRID_ID", "children": ["ROW-1", "ROW-2", "ROW-3"], "parents": ["ROOT_ID"] },
+    "HEADER_ID": { "type": "HEADER", "id": "HEADER_ID", "meta": { "text": "Loan Portfolio Analytics" } },
+    "ROW-1": {
+      "type": "ROW", "id": "ROW-1",
+      "children": ["BIG-LOAN-TOTAL", "BIG-LOAN-NPL", "BIG-LOAN-RATE"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-2": {
+      "type": "ROW", "id": "ROW-2",
+      "children": ["CHART-LOAN-STATUS", "CHART-LOAN-TYPE"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-3": {
+      "type": "ROW", "id": "ROW-3",
+      "children": ["CHART-LOAN-PAYMENT", "CHART-LOAN-REGION"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "BIG-LOAN-TOTAL": {
+      "type": "CHART", "id": "BIG-LOAN-TOTAL",
+      "meta": { "width": 8, "height": 30, "chartName": "Total Outstanding Loans" }
+    },
+    "BIG-LOAN-NPL": {
+      "type": "CHART", "id": "BIG-LOAN-NPL",
+      "meta": { "width": 8, "height": 30, "chartName": "NPL Ratio (%)" }
+    },
+    "BIG-LOAN-RATE": {
+      "type": "CHART", "id": "BIG-LOAN-RATE",
+      "meta": { "width": 8, "height": 30, "chartName": "Avg Interest Rate" }
+    },
+    "CHART-LOAN-STATUS": {
+      "type": "CHART", "id": "CHART-LOAN-STATUS",
+      "meta": { "width": 8, "height": 50, "chartName": "Loan Status Distribution" }
+    },
+    "CHART-LOAN-TYPE": {
+      "type": "CHART", "id": "CHART-LOAN-TYPE",
+      "meta": { "width": 8, "height": 50, "chartName": "Loans by Product Type" }
+    },
+    "CHART-LOAN-PAYMENT": {
+      "type": "CHART", "id": "CHART-LOAN-PAYMENT",
+      "meta": { "width": 8, "height": 50, "chartName": "Payment Status (Last 30 Days)" }
+    },
+    "CHART-LOAN-REGION": {
+      "type": "CHART", "id": "CHART-LOAN-REGION",
+      "meta": { "width": 8, "height": 50, "chartName": "Loan Portfolio by Region" }
+    }
+  },
+  "json_metadata": {
+    "timed_refresh_immune_slices": [],
+    "expanded_slices": {},
+    "refresh_frequency": 0,
+    "color_scheme": "supersetColors",
+    "cross_filters_enabled": true
+  },
+  "description": "Loan portfolio analytics: outstanding amounts, NPL ratio, payment status, and regional distribution."
+}

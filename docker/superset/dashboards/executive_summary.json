@@ -1,0 +1,94 @@
+{
+  "dashboard_title": "Executive Summary — Banking Overview",
+  "slug": "executive-summary",
+  "published": true,
+  "position_json": {
+    "DASHBOARD_VERSION_KEY": "v2",
+    "ROOT_ID": { "type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"] },
+    "GRID_ID": { "type": "GRID", "id": "GRID_ID", "children": ["ROW-1", "ROW-2"], "parents": ["ROOT_ID"] },
+    "HEADER_ID": { "type": "HEADER", "id": "HEADER_ID", "meta": { "text": "Executive Summary — Banking Overview" } },
+    "ROW-1": {
+      "type": "ROW", "id": "ROW-1",
+      "children": ["BIG-1", "BIG-2", "BIG-3", "BIG-4"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-2": {
+      "type": "ROW", "id": "ROW-2",
+      "children": ["CHART-1", "CHART-2"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "BIG-1": {
+      "type": "CHART", "id": "BIG-1",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+      "meta": {
+        "width": 6, "height": 40,
+        "chartName": "Total Customers",
+        "sliceName": "Total Customers"
+      }
+    },
+    "BIG-2": {
+      "type": "CHART", "id": "BIG-2",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+      "meta": {
+        "width": 6, "height": 40,
+        "chartName": "Total Accounts",
+        "sliceName": "Total Accounts"
+      }
+    },
+    "BIG-3": {
+      "type": "CHART", "id": "BIG-3",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+      "meta": {
+        "width": 6, "height": 40,
+        "chartName": "Total Transaction Volume",
+        "sliceName": "Total Transaction Volume"
+      }
+    },
+    "BIG-4": {
+      "type": "CHART", "id": "BIG-4",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-1"],
+      "meta": {
+        "width": 6, "height": 40,
+        "chartName": "Active Loans",
+        "sliceName": "Active Loans"
+      }
+    },
+    "CHART-1": {
+      "type": "CHART", "id": "CHART-1",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-2"],
+      "meta": {
+        "width": 12, "height": 50,
+        "chartName": "Customer Segment Distribution",
+        "sliceName": "Customer Segment Distribution"
+      }
+    },
+    "CHART-2": {
+      "type": "CHART", "id": "CHART-2",
+      "children": [],
+      "parents": ["ROOT_ID", "GRID_ID", "ROW-2"],
+      "meta": {
+        "width": 12, "height": 50,
+        "chartName": "Accounts by Branch Region",
+        "sliceName": "Accounts by Branch Region"
+      }
+    }
+  },
+  "json_metadata": {
+    "timed_refresh_immune_slices": [],
+    "expanded_slices": {},
+    "refresh_frequency": 0,
+    "color_scheme": "supersetColors",
+    "label_colors": {},
+    "shared_label_colors": {},
+    "color_scheme_domain": [],
+    "cross_filters_enabled": true
+  },
+  "description": "Executive dashboard showing key banking metrics: customers, accounts, transaction volume, and loan portfolio."
+}

@@ -1,0 +1,55 @@
+{
+  "dashboard_title": "Fraud Monitoring",
+  "slug": "fraud-monitoring",
+  "published": true,
+  "position_json": {
+    "DASHBOARD_VERSION_KEY": "v2",
+    "ROOT_ID": { "type": "ROOT", "id": "ROOT_ID", "children": ["GRID_ID"] },
+    "GRID_ID": { "type": "GRID", "id": "GRID_ID", "children": ["ROW-1", "ROW-2"], "parents": ["ROOT_ID"] },
+    "HEADER_ID": { "type": "HEADER", "id": "HEADER_ID", "meta": { "text": "Fraud Monitoring" } },
+    "ROW-1": {
+      "type": "ROW", "id": "ROW-1",
+      "children": ["BIG-FRAUD-RATE", "BIG-FRAUD-COUNT", "BIG-FRAUD-AMOUNT"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "ROW-2": {
+      "type": "ROW", "id": "ROW-2",
+      "children": ["CHART-FRAUD-REASON", "CHART-FRAUD-LOCATION", "CHART-FRAUD-TREND"],
+      "parents": ["ROOT_ID", "GRID_ID"],
+      "meta": { "background": "BACKGROUND_TRANSPARENT" }
+    },
+    "BIG-FRAUD-RATE": {
+      "type": "CHART", "id": "BIG-FRAUD-RATE",
+      "meta": { "width": 8, "height": 30, "chartName": "Fraud Rate (%)" }
+    },
+    "BIG-FRAUD-COUNT": {
+      "type": "CHART", "id": "BIG-FRAUD-COUNT",
+      "meta": { "width": 8, "height": 30, "chartName": "Total Fraud Transactions" }
+    },
+    "BIG-FRAUD-AMOUNT": {
+      "type": "CHART", "id": "BIG-FRAUD-AMOUNT",
+      "meta": { "width": 8, "height": 30, "chartName": "Total Fraud Amount" }
+    },
+    "CHART-FRAUD-REASON": {
+      "type": "CHART", "id": "CHART-FRAUD-REASON",
+      "meta": { "width": 8, "height": 50, "chartName": "Top Fraud Reasons" }
+    },
+    "CHART-FRAUD-LOCATION": {
+      "type": "CHART", "id": "CHART-FRAUD-LOCATION",
+      "meta": { "width": 8, "height": 50, "chartName": "Fraud by Location" }
+    },
+    "CHART-FRAUD-TREND": {
+      "type": "CHART", "id": "CHART-FRAUD-TREND",
+      "meta": { "width": 8, "height": 50, "chartName": "Fraud Trend (Monthly)" }
+    }
+  },
+  "json_metadata": {
+    "timed_refresh_immune_slices": [],
+    "expanded_slices": {},
+    "refresh_frequency": 300,
+    "color_scheme": "supersetColors",
+    "cross_filters_enabled": true
+  },
+  "description": "Real-time fraud monitoring: fraud rate, top reasons, geographic distribution, and trend analysis."
+}
