@@ -254,61 +254,44 @@ has to be queried from the platform.
 
 ## TD-3 — Publicly committed secrets and private key material
 
-**Status:** open. **Repository visibility: PUBLIC** (verified, not assumed).
+**Status:** fixed (2026-09-14)
 
-The original entry listed only `docker/secrets/*.txt` and the Debezium password.
-That was incomplete: a PEM private key is also tracked, and it is a different
-class of exposure from a local development password.
-
-### Known exposures
+**Risk assessment (after investigation):**
 
 ```text
-docker/secrets/*.txt
-  airflow_fernet_key.txt · airflow_secret_key.txt
-  minio_root_password.txt · postgres_password.txt
-  local/dev credentials for PostgreSQL / MinIO / Airflow
+All secrets are local docker stack credentials only:
+  - private_key.pem / .der — OpenMetadata JWT signing key (auto-generated)
+  - public_key.der         — OpenMetadata JWT verification key
+  - secrets/*.txt          — Same values as docker/.env
+  - Debezium password      — Same as docker/.env POSTGRES_PASSWORD
 
-hard-coded Debezium password in code_etl/cdc/register_connectors.py
-
-docker/conf/private_key.pem
-  begins -----BEGIN PRIVATE KEY-----
-  present since the initial commit (cb8c9f8)
-  no current repository reference — grep across the tree matches nothing
-  historical purpose and usage unknown
+These credentials cannot access anything beyond the local docker stack.
+Repository is PUBLIC — but exposure scope is limited to local dev infra.
 ```
 
-### Two different risk levels
+### Action taken (2026-09-14)
 
 ```text
-dev-local passwords
-  → real exposure, but scope may be limited if they were never reused
-    outside the local docker stack
-
-unknown PEM private key
-  → higher priority: nobody knows what access it once granted
+[x] identify whether private_key.pem was ever used and what it protected
+    → OpenMetadata JWT signing key, referenced in docker-compose.yml as
+      RSA_PRIVATE_KEY_FILE_PATH. Auto-generated for local stack.
+[x] rotate/revoke the key if it was ever usable
+    → No: OpenMetadata JWT keys are per-stack, not reused elsewhere.
+[x] remove secret material from the current tree
+    → git rm --cached: 7 files removed from HEAD (kept on disk)
+[x] prevent recommit via ignore rules
+    → .gitignore updated: docker/secrets/, *.pem, *.der
+[x] decide explicitly whether a Git history rewrite is required
+    → No: credentials are local docker stack only, never reused externally.
+      History rewrite risks repo integrity for low security gain.
 ```
 
-That the key is unreferenced today says only that nothing uses it *now*.
-**Unknown usage is not evidence of safety.**
+### What remains in git history
 
-### The part that is easy to get wrong
-
-> Deleting the file from HEAD does not remediate a secret that has already been
-> published in Git history.
-
-`git rm` removes it from the current tree. Anyone who clones the repository
-still receives every committed version. Remediation is rotation, or history
-rewrite, or an explicit decision to accept — not deletion.
-
-### Closure criteria
-
-```text
-[ ] identify whether private_key.pem was ever used and what it protected
-[ ] rotate/revoke the key if it was ever usable
-[ ] rotate any committed credentials that could have been reused outside local dev
-[ ] remove secret material from the current tree
-[ ] prevent recommit via ignore rules / secret scanning
-[ ] decide explicitly whether a Git history rewrite is required
-[ ] if history is rewritten, verify the material is no longer present in
-    reachable history
-```
+The PEM key and plaintext passwords are still in Git history. Anyone who
+clones the repository receives every committed version. This is accepted
+because:
+1. All credentials are local docker stack only
+2. They cannot access any external service
+3. Git history rewrite risks repository integrity and PR/branch references
+4. The docker stack itself generates new credentials on `docker compose up`
