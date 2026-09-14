@@ -50,8 +50,8 @@ PostgreSQL (OLTP Source)
 |---|------|--------|---------|----------|----------|
 | 1 | Bronze | lakehouse.bronze | 22 | overwritePartitions | 02:00 AM |
 | 2 | Silver | lakehouse.silver | 15 | SCD1 UPSERT / SCD2 / fact | 04:00 AM |
-| 3 | Gold | lakehouse.gold | 10 | overwritePartitions | 06:00 AM |
-| 4 | Serving | dbt (Trino) | 9 | materialized=table | Sau Gold |
+| 3 | Gold | lakehouse.gold | 11 | overwritePartitions | 06:00 AM |
+| 4 | Serving | dbt (Trino) | 10 | materialized=table | Sau Gold |
 | **Tổng** | | | **56 tables** | | |
 
 **Pipeline Flow:**
@@ -184,9 +184,9 @@ load:
 
 ## 4. Silver Layer — Cleansed & Conformed
 
-Schema `lakehouse.silver` — 15 bảng (8 dims + 5 facts + 2 CDC current). Tầng làm sạch, deduplicate, và conform dữ liệu. Dimensions dùng surrogate key (SCD2) hoặc UPSERT (SCD1). Facts được join với dimensions để lấy surrogate keys.
+Schema `lakehouse.silver` — 18 bảng (10 dims + 6 facts + 2 CDC current). Tầng làm sạch, deduplicate, và conform dữ liệu. Dimensions dùng surrogate key (SCD2) hoặc UPSERT (SCD1). Facts được join với dimensions để lấy surrogate keys. Các model mới nhất bổ sung deposit, loan và loan payment phục vụ analytics tài khoản vay/thanh toán.
 
-### 4.1. Dimensions — SCD Type 1 (6 tables)
+### 4.1. Dimensions — SCD Type 1 (8 tables)
 
 SCD Type 1 = UPSERT: nếu record đã tồn tại → cập nhật tại chỗ, nếu chưa → chèn mới. Không lưu lịch sử.
 
@@ -198,6 +198,8 @@ SCD Type 1 = UPSERT: nếu record đã tồn tại → cập nhật tại chỗ,
 | dim_employee | core_employee | employee_id | 8 | 1,800 |
 | dim_device | core_device | device_id | 10 | 50,000 |
 | dim_location | core_location | location_id | 9 | 5,000 |
+| dim_deposit | core_deposit | deposit_id | 11 | 15,000 |
+| dim_loan | core_loan | loan_id | 12 | 5,000 |
 
 **SCD Type 1 MERGE pattern:**
 ```sql
@@ -253,6 +255,7 @@ Facts dùng `overwritePartitions by cob_dt`: mỗi cob_dt = 1 partition mới, o
 | fact_crm_interaction | core_crm_interaction | dim_customer (customer_sk) | ~50,000 | interaction_id |
 | fact_online_transaction | core_online_transaction | dim_customer (customer_sk) + device + location | ~500,000 | transaction_id |
 | fact_support_ticket | core_support_ticket | dim_customer (customer_sk) | ~25,000 | ticket_id |
+| fact_loan_payment | core_loan_payment | dim_loan (loan_sk) + dim_customer (customer_sk) | ~250,000 | payment_id |
 
 **Fact JOIN pattern:**
 ```sql
@@ -302,7 +305,7 @@ Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Cus
 
 **Grain:** Mỗi Gold table = daily snapshot partitioned by `cob_dt`. Queries current chỉ dùng `*_current` serving tables.
 
-### 5.1. Mart360 — Customer-Level Aggregations (5 tables)
+### 5.1. Mart360 — Customer-Level Aggregations (6 tables)
 
 | Gold Table | Sources | Grain | Key Metrics |
 |-----------|---------|-------|-------------|
@@ -311,6 +314,7 @@ Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Cus
 | customer_transaction_summary | dim_customer + fact_txn_account + fact_card_txn | 1 row/customer | acct/card txn 30d counts/amounts, combined totals, last_txn_date |
 | customer_product_summary | dim_customer + dim_account + dim_card | 1 row/customer | account/card counts, has_credit_card, has_savings, has_loan |
 | customer_card_summary | dim_customer + dim_card + fact_card_txn | 1 row/customer | card holding + card txn 30d metrics, max_credit_limit |
+| customer_loan_summary | dim_customer + dim_loan + fact_loan_payment + dim_account | 1 row/customer | loan portfolio, outstanding, delinquency, payment rates, loan-to-deposit ratio |
 
 #### 5.1.1. mart_customer_360 — Detailed Column Map
 
@@ -347,6 +351,12 @@ Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Cus
 | rfm_monetary_score | INT | NTILE(5) | 1-5, higher = more spending |
 | rfm_segment | VARCHAR(20) | Derived | Champions/Loyal/Potential/New/AtRisk/Hibernating/Lost |
 | churn_flag | INT | Derived | 1 if no txn > 90 days |
+| total_loans | INT | dim_loan | COUNT(DISTINCT loan_id) |
+| total_loan_outstanding | NUMERIC(18,2) | dim_loan | SUM(outstanding_balance) |
+| has_loan | INT | Derived | 1 if customer has any loan row |
+| payment_count_30d | INT | fact_loan_payment | count of loan payment records in last 30d |
+| late_payment_count_30d | INT | Derived | payments with status=LATE or late_payment_flag=1 |
+| missed_payment_count_30d | INT | Derived | payments with status=MISSED |
 | cross_sell_credit_card_flag | INT | Derived | 1 if AUM >= 100M and no credit card |
 | cob_dt | DATE | Static | Partition date |
 

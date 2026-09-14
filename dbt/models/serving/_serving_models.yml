@@ -94,6 +94,26 @@ models:
         data_tests:
           - not_null
 
+  - name: customer_loan_summary_current
+    description: "Loan portfolio and repayment behaviour — current serving, wave 2, do dbt/Trino sở hữu."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+      - name: total_loans
+        data_tests:
+          - not_null
+      - name: total_loan_outstanding
+        data_tests:
+          - not_null
+      - name: late_payment_rate
+        data_tests:
+          - not_null
+      - name: missed_payment_rate
+        data_tests:
+          - not_null
+
   - name: customer_product_summary_current
     description: "Product holding — current serving, wave 2, do dbt/Trino sở hữu."
     columns:

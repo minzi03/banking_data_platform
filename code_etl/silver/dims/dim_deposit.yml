@@ -1,0 +1,31 @@
+# Silver: dim_deposit (SCD Type 1 — current deposit state)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_deposit
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_deposit
+
+business_key:
+  - deposit_id
+
+sql: |
+  SELECT
+      deposit_id,
+      account_id,
+      customer_id,
+      product_code,
+      principal_amount,
+      interest_rate,
+      term_months,
+      open_date,
+      maturity_date,
+      status,
+      last_updated
+  FROM lakehouse.bronze.core_deposit
+  WHERE cob_dt = DATE '{{ cob_dt }}'

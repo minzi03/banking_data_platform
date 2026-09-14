@@ -114,6 +114,22 @@ sources:
     - name: has_savings
     - name: has_loan
     - name: cob_dt
+  - name: customer_loan_summary
+    description: Customer loan portfolio and repayment behaviour (history by cob_dt)
+    columns:
+    - name: customer_id
+      data_tests:
+      - not_null
+    - name: total_loans
+    - name: active_loans
+    - name: overdue_loans
+    - name: written_off_loans
+    - name: total_loan_amount
+    - name: total_loan_outstanding
+    - name: late_payment_rate
+    - name: missed_payment_rate
+    - name: loan_to_deposit_ratio
+    - name: cob_dt
   - name: customer_card_summary
     description: Customer card portfolio — card counts, transaction volume (history
       by cob_dt)

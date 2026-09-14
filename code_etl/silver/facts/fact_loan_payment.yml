@@ -1,0 +1,46 @@
+# Silver: fact_loan_payment (overwritePartitions by cob_dt)
+# Joins: dim_loan (loan_sk) + dim_customer (customer_sk)
+job:
+  type: fact_txn
+
+source:
+  tables:
+    - bronze.core_loan_payment
+    - silver.dim_loan
+    - silver.dim_customer
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: fact_loan_payment
+
+business_key:
+  - payment_id
+
+sql: |
+  SELECT
+      p.payment_id,
+      p.loan_id,
+      l.loan_sk,
+      l.product_code,
+      l.customer_id,
+      c.customer_sk,
+      p.payment_date,
+      p.scheduled_amount,
+      p.amount_paid,
+      p.principal_component,
+      p.interest_component,
+      p.penalty,
+      p.outstanding_after,
+      p.days_late,
+      p.payment_method,
+      p.payment_status,
+      p.late_payment_flag,
+      p.cob_dt
+  FROM lakehouse.bronze.core_loan_payment p
+  LEFT JOIN lakehouse.silver.dim_loan l
+      ON p.loan_id = l.loan_id
+  LEFT JOIN lakehouse.silver.dim_customer c
+      ON l.customer_id = c.customer_id
+      AND c.is_current = 1
+  WHERE p.cob_dt = DATE '{{ cob_dt }}'

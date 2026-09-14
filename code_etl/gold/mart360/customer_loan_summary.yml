@@ -1,0 +1,98 @@
+# Gold: customer_loan_summary — loan portfolio and repayment behaviour per customer
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_customer
+    - silver.dim_loan
+    - silver.fact_loan_payment
+    - silver.dim_account
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: customer_loan_summary
+
+upstream_flags:
+  - silver.dim_customer
+  - silver.dim_loan
+  - silver.fact_loan_payment
+  - silver.dim_account
+
+validation:
+  require_non_empty: true
+  require_snapshots:
+    - silver.fact_loan_payment
+
+sql: |
+  WITH customers AS (
+      SELECT customer_id, customer_sk
+      FROM lakehouse.silver.dim_customer
+      WHERE is_current = 1
+  ),
+  loans AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT loan_id) AS total_loans,
+          COUNT(DISTINCT CASE WHEN loan_status = 'ACTIVE' THEN loan_id END) AS active_loans,
+          COUNT(DISTINCT CASE WHEN loan_status = 'OVERDUE' THEN loan_id END) AS overdue_loans,
+          COUNT(DISTINCT CASE WHEN loan_status = 'WRITTEN_OFF' THEN loan_id END) AS written_off_loans,
+          COALESCE(SUM(loan_amount), 0) AS total_loan_amount,
+          COALESCE(SUM(outstanding_balance), 0) AS total_loan_outstanding,
+          COALESCE(AVG(interest_rate), 0) AS avg_loan_interest_rate,
+          COALESCE(MAX(term_months), 0) AS max_loan_term_months
+      FROM lakehouse.silver.dim_loan
+      WHERE is_current = 1
+      GROUP BY customer_id
+  ),
+  payments AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT payment_id) AS payment_count,
+          COUNT(DISTINCT CASE WHEN payment_status = 'LATE' OR late_payment_flag = 1 THEN payment_id END) AS late_payment_count,
+          COUNT(DISTINCT CASE WHEN payment_status = 'MISSED' THEN payment_id END) AS missed_payment_count,
+          COALESCE(SUM(amount_paid), 0) AS total_amount_paid,
+          COALESCE(SUM(penalty), 0) AS total_penalty
+      FROM lakehouse.silver.fact_loan_payment
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  deposits AS (
+      SELECT
+          customer_id,
+          COALESCE(SUM(CASE WHEN status = 'ACTIVE' THEN balance END), 0) AS total_deposit_balance
+      FROM lakehouse.silver.dim_account
+      WHERE is_current = 1
+      GROUP BY customer_id
+  )
+  SELECT
+      c.customer_id,
+      c.customer_sk,
+      COALESCE(l.total_loans, 0) AS total_loans,
+      COALESCE(l.active_loans, 0) AS active_loans,
+      COALESCE(l.overdue_loans, 0) AS overdue_loans,
+      COALESCE(l.written_off_loans, 0) AS written_off_loans,
+      ROUND(COALESCE(l.total_loan_amount, 0), 2) AS total_loan_amount,
+      ROUND(COALESCE(l.total_loan_outstanding, 0), 2) AS total_loan_outstanding,
+      ROUND(COALESCE(l.avg_loan_interest_rate, 0), 4) AS avg_loan_interest_rate,
+      COALESCE(l.max_loan_term_months, 0) AS max_loan_term_months,
+      COALESCE(p.payment_count, 0) AS payment_count,
+      COALESCE(p.late_payment_count, 0) AS late_payment_count,
+      COALESCE(p.missed_payment_count, 0) AS missed_payment_count,
+      ROUND(COALESCE(p.total_amount_paid, 0), 2) AS total_amount_paid,
+      ROUND(COALESCE(p.total_penalty, 0), 2) AS total_penalty,
+      CASE WHEN COALESCE(p.payment_count, 0) = 0 THEN 0.0
+           ELSE CAST(p.late_payment_count AS DOUBLE) / p.payment_count END AS late_payment_rate,
+      CASE WHEN COALESCE(p.payment_count, 0) = 0 THEN 0.0
+           ELSE CAST(p.missed_payment_count AS DOUBLE) / p.payment_count END AS missed_payment_rate,
+      ROUND(
+          CASE WHEN COALESCE(d.total_deposit_balance, 0) = 0 THEN NULL
+               ELSE COALESCE(l.total_loan_outstanding, 0) / d.total_deposit_balance END,
+          6
+      ) AS loan_to_deposit_ratio,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM customers c
+  LEFT JOIN loans l ON c.customer_id = l.customer_id
+  LEFT JOIN payments p ON c.customer_id = p.customer_id
+  LEFT JOIN deposits d ON c.customer_id = d.customer_id

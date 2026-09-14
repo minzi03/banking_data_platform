@@ -50,6 +50,7 @@ PHASE1_JOBS = [
     ("customer_transaction_summary", "mart360/customer_transaction_summary.yml"),
     ("customer_product_summary",     "mart360/customer_product_summary.yml"),
     ("customer_card_summary",        "mart360/customer_card_summary.yml"),
+    ("customer_loan_summary",        "mart360/customer_loan_summary.yml"),
     # segments (independent)
     ("rfm_segment",          "segmentation/rfm_segment.yml"),
     ("churn_prediction",     "segmentation/churn_prediction.yml"),

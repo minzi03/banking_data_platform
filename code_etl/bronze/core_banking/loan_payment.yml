@@ -1,0 +1,31 @@
+# Bronze Ingestion: loan_payment (fact — full snapshot)
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 50000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_loan_payment
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    payment_id,
+    loan_id,
+    payment_date,
+    scheduled_amount,
+    amount_paid,
+    principal_component,
+    interest_component,
+    penalty,
+    outstanding_after,
+    days_late,
+    payment_method,
+    payment_status,
+    late_payment_flag,
+    last_updated
+  FROM core_banking.loan_payment

@@ -1,0 +1,32 @@
+# Silver: dim_loan (SCD Type 1 — current loan state)
+job:
+  type: scd_type1
+
+source:
+  tables:
+    - bronze.core_loan
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_loan
+
+business_key:
+  - loan_id
+
+sql: |
+  SELECT
+      loan_id,
+      customer_id,
+      product_code,
+      branch_code,
+      loan_amount,
+      outstanding_balance,
+      interest_rate,
+      term_months,
+      disbursement_date,
+      maturity_date,
+      loan_status,
+      last_updated
+  FROM lakehouse.bronze.core_loan
+  WHERE cob_dt = DATE '{{ cob_dt }}'

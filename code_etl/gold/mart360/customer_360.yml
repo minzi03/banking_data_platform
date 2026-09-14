@@ -27,6 +27,8 @@ source:
     - silver.dim_customer
     - silver.dim_account
     - silver.dim_card
+    - silver.dim_loan
+    - silver.fact_loan_payment
     - silver.fact_txn_account
     - silver.fact_card_txn
     - silver.fact_crm_interaction
@@ -41,6 +43,8 @@ upstream_flags:
   - silver.dim_customer
   - silver.dim_account
   - silver.dim_card
+  - silver.dim_loan
+  - silver.fact_loan_payment
   - silver.fact_txn_account
   - silver.fact_card_txn
   - silver.fact_crm_interaction
@@ -132,6 +136,28 @@ sql: |
       SELECT customer_id, channel AS primary_channel
       FROM channel_rank WHERE rn = 1
   ),
+  -- Loans
+  loan_agg AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT loan_id) AS total_loans,
+          COALESCE(SUM(outstanding_balance), 0) AS total_loan_outstanding
+      FROM lakehouse.silver.dim_loan
+      GROUP BY customer_id
+  ),
+  -- Payment behavior 30d
+  pmt AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT payment_id) AS payment_count_30d,
+          COUNT(DISTINCT CASE WHEN payment_status = 'LATE' OR late_payment_flag = 1 THEN payment_id END) AS late_payment_count_30d,
+          COUNT(DISTINCT CASE WHEN payment_status = 'MISSED' THEN payment_id END) AS missed_payment_count_30d
+      FROM lakehouse.silver.fact_loan_payment
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND payment_date >= DATE_ADD(DATE '{{ cob_dt }}', -30)
+        AND payment_date <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
   -- CRM 90d
   crm_agg AS (
       SELECT
@@ -153,13 +179,13 @@ sql: |
           c.kyc_status, c.register_date,
           COALESCE(a.total_accounts, 0) AS total_accounts,
           COALESCE(crd.total_cards, 0) AS total_cards,
-          0 AS total_loans,
+          COALESCE(la.total_loans, 0) AS total_loans,
           CASE WHEN COALESCE(crd.cnt_credit_cards, 0) > 0 THEN 1 ELSE 0 END AS has_credit_card,
-          1 AS has_savings,
-          0 AS has_loan,
+          CASE WHEN COALESCE(a.total_account_balance, 0) > 0 THEN 1 ELSE 0 END AS has_savings,
+          CASE WHEN COALESCE(la.total_loans, 0) > 0 THEN 1 ELSE 0 END AS has_loan,
           COALESCE(a.total_account_balance, 0) AS total_deposit_balance,
-          0 AS total_loan_outstanding,
-          COALESCE(a.total_account_balance, 0) AS aum_total,
+          COALESCE(la.total_loan_outstanding, 0) AS total_loan_outstanding,
+          COALESCE(a.total_account_balance, 0) + COALESCE(la.total_loan_outstanding, 0) AS aum_total,
           COALESCE(ta.txn_count_30d, 0) + COALESCE(tc.card_txn_count_30d, 0) AS txn_count_30d,
           COALESCE(ta.txn_amount_30d, 0) + COALESCE(tc.card_txn_amount_30d, 0) AS txn_amount_30d,
           GREATEST(
@@ -172,6 +198,7 @@ sql: |
       FROM cust c
       LEFT JOIN acct a ON c.customer_id = a.customer_id
       LEFT JOIN crd crd ON c.customer_id = crd.customer_id
+      LEFT JOIN loan_agg la ON c.customer_id = la.customer_id
       LEFT JOIN txn_acct ta ON c.customer_id = ta.customer_id
       LEFT JOIN txn_card tc ON c.customer_id = tc.customer_id
       LEFT JOIN primary_channel pc ON c.customer_id = pc.customer_id

@@ -51,6 +51,8 @@ DIM_JOBS = [
     ("dim_location", "scd_type1.py", "dims/dim_location.yml"),
     ("dim_customer", "scd_type2.py", "dims/dim_customer.yml"),
     ("dim_account",  "scd_type2.py", "dims/dim_account.yml"),
+    ("dim_deposit",  "scd_type1.py", "dims/dim_deposit.yml"),
+    ("dim_loan",     "scd_type1.py", "dims/dim_loan.yml"),
 ]
 
 # (table_name, job_script, config_file)
@@ -60,6 +62,7 @@ FACT_JOBS = [
     ("fact_crm_interaction",      "fact_txn.py", "facts/fact_crm_interaction.yml"),
     ("fact_online_transaction",   "fact_txn.py", "facts/fact_online_transaction.yml"),
     ("fact_support_ticket",       "fact_txn.py", "facts/fact_support_ticket.yml"),
+    ("fact_loan_payment",         "fact_txn.py", "facts/fact_loan_payment.yml"),
 ]
 
 # Bronze DAG IDs cần check
@@ -84,7 +87,7 @@ def _check_dag_flag_sql(upstream_dag_id: str) -> str:
 dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
-    description="Silver layer — 8 dims + 5 facts",
+    description="Silver layer — 10 dims + 6 facts",
     schedule_interval="0 4 * * *",  # Daily at 4:00 AM (Production)
     catchup=False,
     max_active_tasks=1,
