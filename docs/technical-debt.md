@@ -56,7 +56,7 @@ Gold Spark Regression
 
 ## TD-2 — `Performance Benchmark` workflow has been failing on schedule
 
-**Status:** open (recorded at `portfolio-v1.1`)
+**Status:** disabled (2026-09-14, acceptance criterion: "disabled with reason")
 
 `.github/workflows/benchmark.yml` runs on a schedule and has failed every week
 since at least `2026-08-23`. It is not a required check for any release commit,
@@ -64,10 +64,20 @@ so it did not block `v1.1` — but a permanently red scheduled workflow makes th
 repository's health signal meaningless, which is how a real regression gets
 ignored.
 
-### Acceptance
+**Action taken:** Disabled the weekly schedule trigger (`cron: '0 2 * * 0'` removed)
+so the workflow is now manual-only (`workflow_dispatch`). A red scheduled workflow
+is worse than no schedule — the CI workflow's `trino-integration` job already
+validates the same ETL pipeline on every PR.
 
-Either the workflow passes, or it is disabled with the reason recorded here.
-Leaving it red is not an outcome.
+**Root cause (suspected, not runtime-proven):** The benchmark workflow's seed
+data step uses `requirements-ci-seed.txt` which may not include dependencies
+added by later commits (loan/AML generators). The 60-min timeout is also tight
+for cold Docker pull + build + full ETL on free-tier runners. These are
+hypotheses — the workflow hasn't run successfully since at least `2026-08-23`,
+so it cannot be tested locally.
+
+**To re-enable:** Remove `workflow_dispatch`-only trigger, restore schedule,
+and verify on a `workflow_dispatch` run first.
 
 ---
 
@@ -140,7 +150,7 @@ a cross-engine naming contract that needs a static check.
 
 ## TD-6 — Two workflows build the same lakehouse fixture
 
-**Status:** open (recorded at TD-1)
+**Status:** deliberate (recorded at TD-1, 2026-09-14: fixed TD-2 → benchmark no longer runs on schedule)
 
 `ci.yml`'s `trino-integration` job and `benchmark.yml` both run the same
 sequence: pull, build, start the `ci-trino` stack, create schemas, seed, then

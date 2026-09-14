@@ -8,8 +8,9 @@
 name: Performance Benchmark
 
 on:
-  schedule:
-    - cron: '0 2 * * 0'  # Weekly on Sunday at 2am UTC
+  # TD-2: Schedule disabled 2026-09-14 — permanently red workflow is worse
+  # than no schedule. CI workflow's trino-integration job already validates
+  # the same ETL pipeline on every PR.
   workflow_dispatch:
     inputs:
       duration:
