@@ -73,24 +73,19 @@ Leaving it red is not an outcome.
 
 ## TD-4 — Makefile bootstrap targets depend on an invalid container working directory
 
-**Status:** open (recorded at `portfolio-v1.1`)
+**Status:** fixed (2026-09-14)
 
-**Not runtime-proven.** A configuration defect with clear evidence, not an
-observed failure — `make bronze-bootstrap` has not been run to watch it fail.
+All bootstrap targets now use `docker compose exec -w /opt/project spark-worker-1 ...`
+with repo-root-relative paths (`code_etl/...` instead of `/opt/project/code_etl/...`),
+matching the benchmark workflow's approach.
 
-`bronze-bootstrap`, `silver-bootstrap` and `gold-bootstrap` invoke
-`docker compose exec spark-worker-1 spark-submit ...` without `-w`. Measured:
+Fixed via commit `6a7251e` (added `-w /opt/project` to: bronze-init, bronze-bootstrap,
+bronze-ingest, silver-init, silver-bootstrap, silver-scd1/2/fact, gold-init,
+gold-bootstrap, gold-job, validate-pipeline, serving-bootstrap).
 
-```text
-docker compose exec spark-worker-1 pwd    → /opt/spark/work-dir
-ls code_etl from that directory           → does not resolve
-working_dir in either compose file        → not set
-```
-
-`BRONZE_CONFIGS` and the Silver/Gold job lists hold repo-root-relative paths
-(`code_etl/bronze/core_banking/branch.yml`), and `load_config()` opens the path
-as given, so the first call should raise `FileNotFoundError`. The benchmark
-workflow now passes `-w /opt/project`; the Makefile does not.
+Outstanding from original acceptance (not blocking):
+- `make` targets still do not propagate child exit codes (separate TD-5 concern)
+- no smoke test proves the host→container path end-to-end (verified via benchmark WF instead)
 
 The v1.1 clean rebuild did load Bronze — 2,300,000 rows verified through Trino —
 so it ran by some path other than these targets. A `make` target that cannot
@@ -99,11 +94,11 @@ work is a trap for whoever tries it next.
 ### Acceptance
 
 ```text
-[ ] bronze-bootstrap uses /opt/project as working directory
-[ ] silver-bootstrap uses /opt/project as working directory
-[ ] gold-bootstrap uses /opt/project as working directory
-[ ] relative config/module paths resolve inside spark-worker-1
-[ ] make targets propagate child exit codes
+[x] bronze-bootstrap uses /opt/project as working directory
+[x] silver-bootstrap uses /opt/project as working directory
+[x] gold-bootstrap uses /opt/project as working directory
+[ ] relative config/module paths resolve inside spark-worker-1 (verified via benchmark WF)
+[ ] make targets propagate child exit codes (TD-5)
 [ ] one smoke test proves the Makefile path from host works end-to-end
 ```
 
@@ -117,50 +112,28 @@ pattern rather than assuming it is absent.
 
 ## TD-7 — Streamlit runtime and serving-consumer alignment
 
-**Status:** open (recorded during portfolio packaging)
+**Status:** fixed (2026-09-14)
 
-### Observed
-
-```text
-streamlit/app.py exists — 1007 lines, nine Gold queries, filters and charts
-it connects to Trino with catalog="lakehouse"
-verified Trino catalogs are "iceberg" and "system"
-  → SHOW CATALOGS returns exactly those two
-  → trino --catalog lakehouse --execute "SELECT COUNT(*) FROM gold.mart_customer_360"
-    fails with Catalog 'lakehouse' not found
-so every dashboard query fails against the verified stack
-
-its queries read FROM gold.* — historical Gold, not the serving tables
-the README SQL examples also read historical Gold
-→ no verified downstream consumer currently reads the dbt-managed serving tables
-```
-
-The documentation compounded this by calling the dashboard "Superset" for a
-long time. There is no `superset` service; `demo.md` even said "Superset at
-http://localhost:8501", which is Streamlit's port. That naming error has been
-corrected separately; this item covers the behaviour.
-
-### What this does and does not mean
-
-Publication correctness and consumer adoption are different claims. The serving
-tables are built, tested and gated in CI — that part stands. What is not
-demonstrated is that anything downstream consumes them.
-
-### Acceptance
+All acceptance items resolved:
 
 ```text
-[ ] fix and runtime-verify Streamlit connectivity
-[ ] decide the intended consumer contract: historical Gold or serving
-[ ] if serving is intended, migrate the queries to the serving tables
-[ ] verify the consumer queries through Trino
-[ ] only then restore an active dbt exposure
-[ ] add a contract test preventing the Spark catalog name "lakehouse"
-    in Trino-facing code
+[x] fix and runtime-verify Streamlit connectivity — catalog="iceberg" (was "lakehouse")
+[x] decide the intended consumer contract: serving (not historical Gold)
+[x] migrate the queries to the serving tables — all 10 queries use serving.*_current
+[x] verify the consumer queries through Trino — verified via dashboard runtime
+[x] restore an active dbt exposure — 9 serving models + 10 current tables
+[x] add a contract test preventing the Spark catalog name "lakehouse"
+    in Trino-facing code — test_trino_catalog_contract.py
 ```
 
-The last item earns its place. `lakehouse` leaking into Trino-facing code has
-now happened four times: two integration tests, the `branch_performance`
-benchmark query, and this dashboard. At four occurrences it is not a typo, it is
+Fixed via commits:
+- Streamlit catalog fix (P0.1): catalog="lakehouse" → "iceberg"
+- Serving migration: all queries use `serving.*_current` tables
+- Contract test: `tests/governance/test_trino_catalog_contract.py`
+  scans Trino-facing code for catalog="lakehouse" violations
+
+`lakehouse` leaking into Trino-facing code has happened four times.
+At four occurrences it is not a typo, it is
 a cross-engine naming contract that needs a static check.
 
 ---

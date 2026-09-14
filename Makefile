@@ -219,17 +219,17 @@ spark-submit:
 # ---------------------------------------------------------------------------
 bronze-init:
 	@echo "Creating Iceberg Bronze tables..."
-	$(DC) exec spark-worker-1 spark-sql \
+	$(DC) exec -w /opt/project spark-worker-1 spark-sql \
 		--master spark://spark-master:7077 \
 		-f /opt/project/docker/init_iceberg/01_ddl_bronze.sql
 	@echo "Bronze tables created"
 
 bronze-bootstrap:
 	@echo "Running Bronze bootstrap (full load from PostgreSQL)..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
-		/opt/project/code_etl/bronze/bootstrap/initial_load.py \
+		code_etl/bronze/bootstrap/initial_load.py \
 		--jdbc_url "jdbc:postgresql://postgres:5432/banking_db" \
 		--db_user banking_admin \
 		--db_password BankingAdmin123 \
@@ -238,7 +238,7 @@ bronze-bootstrap:
 
 bronze-ingest:
 	@echo "Running Bronze incremental ingestion..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/bronze/base_job/ingestion_jdbc.py \
@@ -254,23 +254,23 @@ bronze-ingest:
 # ---------------------------------------------------------------------------
 silver-init:
 	@echo "Creating Iceberg Silver tables..."
-	$(DC) exec spark-worker-1 spark-sql \
+	$(DC) exec -w /opt/project spark-worker-1 spark-sql \
 		--master spark://spark-master:7077 \
 		-f /opt/project/docker/init_iceberg/02_ddl_silver.sql
 	@echo "Silver tables created"
 
 silver-bootstrap:
 	@echo "Running Silver bootstrap (all dims + facts)..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
-		/opt/project/code_etl/silver/bootstrap/initial_load.py \
+		code_etl/silver/bootstrap/initial_load.py \
 		--cob_dt $(COB_DT)
 	@echo "Silver bootstrap completed"
 
 silver-scd1:
 	@echo "Running Silver SCD Type 1 job..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type1 \
@@ -280,7 +280,7 @@ silver-scd1:
 
 silver-scd2:
 	@echo "Running Silver SCD Type 2 job..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type2 \
@@ -290,7 +290,7 @@ silver-scd2:
 
 silver-fact:
 	@echo "Running Silver Fact job..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.fact_txn \
@@ -303,23 +303,23 @@ silver-fact:
 # ---------------------------------------------------------------------------
 gold-init:
 	@echo "Creating Iceberg Gold tables..."
-	$(DC) exec spark-worker-1 spark-sql \
+	$(DC) exec -w /opt/project spark-worker-1 spark-sql \
 		--master spark://spark-master:7077 \
 		-f /opt/project/docker/init_iceberg/03_ddl_gold.sql
 	@echo "Gold tables created"
 
 gold-bootstrap:
 	@echo "Running Gold bootstrap (all marts + segments)..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
-		/opt/project/code_etl/gold/bootstrap/initial_load.py \
+		code_etl/gold/bootstrap/initial_load.py \
 		--cob_dt $(COB_DT)
 	@echo "Gold bootstrap completed"
 
 gold-job:
 	@echo "Running Gold job..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.gold.base_job.gold_job \
@@ -332,7 +332,7 @@ gold-job:
 # ---------------------------------------------------------------------------
 validate-pipeline:
 	@echo "Validating Bronze/Silver/Gold counts and grain..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/scripts/validate_pipeline.py \
@@ -340,7 +340,7 @@ validate-pipeline:
 
 serving-bootstrap:
 	@echo "Publishing current serving snapshots..."
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/serving/bootstrap/run_serving.py \
