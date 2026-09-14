@@ -84,13 +84,13 @@ jobs:
       - name: Run ruff check
         run: |
           echo "=== Running ruff check ==="
-          ruff check governance/ code_etl/ tests/ --output-format=github || true
+          ruff check governance/ code_etl/ tests/ --output-format=github
           echo "=== Ruff check complete ==="
 
       - name: Run ruff format check
         run: |
           echo "=== Running ruff format check ==="
-          ruff format --check governance/ code_etl/ tests/ || true
+          ruff format --check governance/ code_etl/ tests/
           echo "=== Format check complete ==="
 
   # ===========================================================================
@@ -456,8 +456,8 @@ jobs:
         run: |
           echo "=== Running Bandit security scan ==="
           pip install bandit
-          bandit -r code_etl/ governance/ -f json -o bandit-report.json --severity-level medium || true
-          bandit -r code_etl/ governance/ -f screen --severity-level medium || true
+          bandit -r code_etl/ governance/ -f json -o bandit-report.json --severity-level medium
+          bandit -r code_etl/ governance/ -f screen --severity-level medium
           echo "✅ Bandit scan complete"
 
       - name: Check for hardcoded secrets
