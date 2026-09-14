@@ -244,7 +244,7 @@ balance, status, close_date
 
 **Rows:** dim_customer ~10,000 (1x source, each cob_dt snapshots current), dim_account ~30,000
 
-### 4.3. Facts (5 tables)
+### 4.3. Facts (6 tables)
 
 Facts dùng `overwritePartitions by cob_dt`: mỗi cob_dt = 1 partition mới, overwrite nếu tồn tại.
 
@@ -289,19 +289,20 @@ CDC streaming jobs tạo 2 bảng mutable current-state từ CDC events.
 ```
 silver_all_dag (04:00 AM):
   1. Check Bronze DAGs complete (3 sensors)
-  2. Run 8 dim jobs parallel:
-     ├── SCD1: dim_branch, dim_product, dim_card, dim_employee, dim_device, dim_location
+  2. Run 10 dim jobs parallel:
+     ├── SCD1: dim_branch, dim_product, dim_card, dim_employee, dim_device, dim_location, dim_deposit, dim_loan
      └── SCD2: dim_customer, dim_account
-  3. Run 5 fact jobs parallel:
+  3. Run 6 fact jobs parallel:
      ├── fact_txn_account, fact_card_txn, fact_crm_interaction
-     └── fact_online_transaction, fact_support_ticket
+     ├── fact_online_transaction, fact_support_ticket
+     └── fact_loan_payment
 ```
 
 ---
 
 ## 5. Gold Layer — Business-Ready Marts
 
-Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Customer 360, RFM segmentation, churn prediction, cross-sell, campaign targeting, branch analytics.
+Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Customer 360, loan portfolio, RFM segmentation, churn prediction, cross-sell, campaign targeting, branch analytics.
 
 **Grain:** Mỗi Gold table = daily snapshot partitioned by `cob_dt`. Queries current chỉ dùng `*_current` serving tables.
 
@@ -331,13 +332,13 @@ Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Cus
 | register_date | DATE | dim_customer | Registration date |
 | total_accounts | INT | dim_account | COUNT(DISTINCT account_id) |
 | total_cards | INT | dim_card | COUNT(DISTINCT card_id) |
-| total_loans | INT | Hardcoded 0 | Placeholder (no Silver loan fact yet) |
+| total_loans | INT | dim_loan | COUNT(DISTINCT loan_id) |
 | has_credit_card | INT | dim_card | 0/1 flag |
 | has_savings | INT | Hardcoded 1 | Assumption: all customers have savings |
-| has_loan | INT | Hardcoded 0 | Placeholder |
+| has_loan | INT | Derived | 1 if customer has any loan row |
 | total_deposit_balance | NUMERIC(18,2) | dim_account | SUM(balance) where ACTIVE |
-| total_loan_outstanding | NUMERIC(18,2) | Hardcoded 0 | Placeholder |
-| aum_total | NUMERIC(18,2) | dim_account | = total_deposit_balance |
+| total_loan_outstanding | NUMERIC(18,2) | dim_loan | SUM(outstanding_balance) |
+| aum_total | NUMERIC(18,2) | dim_account + dim_loan | total_deposit_balance + total_loan_outstanding |
 | aum_bucket | VARCHAR(20) | Derived | VIP / PRIORITY / AFFLUENT / MASS |
 | txn_count_30d | INT | facts | Account + card txn count last 30 days |
 | txn_amount_30d | NUMERIC(18,2) | facts | Account + card txn amount last 30 days |
@@ -351,9 +352,6 @@ Schema `lakehouse.gold` — 10 bảng. Tầng aggregates và business logic: Cus
 | rfm_monetary_score | INT | NTILE(5) | 1-5, higher = more spending |
 | rfm_segment | VARCHAR(20) | Derived | Champions/Loyal/Potential/New/AtRisk/Hibernating/Lost |
 | churn_flag | INT | Derived | 1 if no txn > 90 days |
-| total_loans | INT | dim_loan | COUNT(DISTINCT loan_id) |
-| total_loan_outstanding | NUMERIC(18,2) | dim_loan | SUM(outstanding_balance) |
-| has_loan | INT | Derived | 1 if customer has any loan row |
 | payment_count_30d | INT | fact_loan_payment | count of loan payment records in last 30d |
 | late_payment_count_30d | INT | Derived | payments with status=LATE or late_payment_flag=1 |
 | missed_payment_count_30d | INT | Derived | payments with status=MISSED |
@@ -470,7 +468,7 @@ gold_all_dag (06:00 AM):
 
 ## 6. Serving Layer — Current Snapshot (dbt + Trino)
 
-Schema `dbt (iceberg.serving)` — 9 tables. Tầng current-serving: mỗi Gold historical table có phiên bản `*_current` filter by `var('cob_dt')`. Grain: exactly 1 row per customer.
+Schema `dbt (iceberg.serving)` — 10 tables. Tầng current-serving: mỗi Gold historical table có phiên bản `*_current` filter by `var('cob_dt')`. Grain: exactly 1 row per customer.
 
 ### 6.1. Serving Tables
 
@@ -484,6 +482,7 @@ Schema `dbt (iceberg.serving)` — 9 tables. Tầng current-serving: mỗi Gold 
 | customer_product_summary_current | gold.customer_product_summary | Wave 2 | table |
 | cross_sell_segment_current | gold.cross_sell_segment | Wave 2 | table |
 | campaign_target_current | gold.campaign_target | Wave 2 | table |
+| customer_loan_summary_current | gold.customer_loan_summary | Wave 2 | table |
 | mart_customer_360_current | gold.mart_customer_360 | Wave 3 | table |
 
 ### 6.2. Serving Model Pattern
@@ -545,8 +544,8 @@ Runs after Gold DAG completes. Custom `generate_schema_name` macro routes to `se
 |-----------|------|-------------------|----------|
 | Bronze (Raw) | Full snapshot JDBC + CDC streaming | CDC + micro-batch + real-time streaming | ~70% |
 | Silver (Cleansed) | SCD1 UPSERT + SCD2 history + facts | SCD + dedup + data quality + quarantine | ~60% |
-| Gold (Business) | 5 mart360 + 4 segments + 1 time_analytics | Hundreds of marts, cubes, aggregate tables | ~20% |
-| Serving | 9 current tables via dbt | Data services layer (APIs, materialized views, OLAP cubes) | ~30% |
+| Gold (Business) | 6 mart360 + 4 segments + 1 time_analytics | Hundreds of marts, cubes, aggregate tables | ~20% |
+| Serving | 10 current tables via dbt | Data services layer (APIs, materialized views, OLAP cubes) | ~30% |
 
 ### 7.2. What the Project Models Well
 
@@ -593,7 +592,7 @@ Runs after Gold DAG completes. Custom `generate_schema_name` macro routes to `se
 1. **Full snapshot Bronze:** Simplifies initial load; real banks use CDC for incremental (already implemented separately).
 2. **SCD2 on customer/account only:** These are the only dimensions that change meaningfully; others are effectively static.
 3. **customer_id as grain:** Most Gold tables grain to customer — aligns with retail banking's customer-centric analytics.
-4. **Hardcoded placeholders (total_loans, has_loan):** Loan fact not yet in Silver; fields reserved for future expansion.
+4. **Loan analytics (P0.2):** dim_loan + dim_deposit + fact_loan_payment in Silver → customer_loan_summary in Gold → customer_loan_summary_current in Serving. Replaces previous hardcoded placeholders.
 5. **campaign_target as Phase 2:** Depends on all other Gold tables; ensures campaign targets are based on complete data.
 
 ---
@@ -605,13 +604,13 @@ Runs after Gold DAG completes. Custom `generate_schema_name` macro routes to `se
 ```
 Layer           Tables    Rows (approx)    Storage Pattern
 ─────────────   ──────    ────────────     ──────────────────────
-Bronze (batch)  16        ~1,932,830       Full snapshot per cob_dt
+Bronze (batch)  17        ~1,957,830       Full snapshot per cob_dt
 Bronze (CDC)    6         ~2,426,014       Append-only events
-Silver (dims)   8         ~102,930         UPSERT / SCD2
-Silver (facts)  5         ~2,375,000       OverwritePartitions
+Silver (dims)   10        ~122,930         UPSERT / SCD2
+Silver (facts)  6         ~2,625,000       OverwritePartitions
 Silver (CDC)    2         ~40,000          Mutable current-state
-Gold            10        ~10,000+         OverwritePartitions
-Serving         9         ~90,000          Table (refreshed daily)
+Gold            11        ~10,000+         OverwritePartitions
+Serving         10        ~100,000         Table (refreshed daily)
 ```
 
 ### 8.2. Foreign Key Relationships (Cross-Layer)
@@ -627,7 +626,7 @@ Bronze Layer:
   core_customer ←── core_loan (customer_id)
   core_product ←── core_loan (product_code)
   core_branch ←── core_loan (branch_code)
-  core_loan ←── (no Silver fact yet)
+  core_loan ←── core_loan_payment (loan_id)
   core_account ←── core_txn_account (account_id)
   core_card ←── core_card_txn (card_id)
   core_mcc_code ←── core_card_txn (mcc_code, nullable)
@@ -639,6 +638,8 @@ Silver Layer:
   dim_customer (is_current=1) ←── fact_crm_interaction (customer_sk)
   dim_customer (is_current=1) ←── fact_online_transaction (customer_sk)
   dim_customer (is_current=1) ←── fact_support_ticket (customer_sk)
+  dim_loan (is_current=1) ←── fact_loan_payment (loan_sk)
+  dim_customer (is_current=1) ←── fact_loan_payment (customer_sk)
 
 Gold Layer:
   rfm_segment + churn_prediction + cross_sell_segment + mart_customer_360

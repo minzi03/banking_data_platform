@@ -193,6 +193,18 @@ def load_card():
         FROM serving.customer_card_summary_current
     """)
 
+@st.cache_data(ttl=300)
+def load_loan_summary():
+    return query_data("""
+        SELECT customer_id, customer_sk, total_loans, active_loans, overdue_loans,
+               written_off_loans, total_loan_amount, total_loan_outstanding,
+               avg_loan_interest_rate, max_loan_term_months,
+               payment_count, late_payment_count, missed_payment_count,
+               total_amount_paid, total_penalty, late_payment_rate, missed_payment_rate,
+               loan_to_deposit_ratio, cob_dt
+        FROM serving.customer_loan_summary_current
+    """)
+
 # =============================================================================
 # SIDEBAR - FILTERS
 # =============================================================================
@@ -263,7 +275,7 @@ st.sidebar.info("""
 # =============================================================================
 page = st.selectbox(
     "📌 Navigation",
-    ["📊 Overview", "👥 Customer 360", "📈 RFM Analysis", "⚠️ Churn Risk",
+    ["📊 Overview", "👥 Customer 360", "🏦 Loan Analytics", "📈 RFM Analysis", "⚠️ Churn Risk",
      "🎯 Campaign Target", "💰 Balance & AUM", "💳 Card Analytics",
      "📊 Transaction Analytics", "📋 Raw Data", "ℹ️ About"]
 )
@@ -517,6 +529,113 @@ elif page == "👥 Customer 360":
                     st.metric("Days Since Last Txn", f"{cust['days_since_last_txn']} days")
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
+
+# =============================================================================
+# PAGE: LOAN ANALYTICS
+# =============================================================================
+elif page == "🏦 Loan Analytics":
+    st.title("🏦 Loan Analytics")
+    st.markdown("---")
+
+    try:
+        df_loan = load_loan_summary()
+
+        # KPI Cards
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Total Customers", f"{len(df_loan):,}")
+        col2.metric("Customers with Loans", f"{len(df_loan[df_loan['total_loans'] > 0]):,}")
+        col3.metric("Total Loans", f"{df_loan['total_loans'].sum():,}")
+        col4.metric("Total Outstanding", f"₫{df_loan['total_loan_outstanding'].sum():,.0f}")
+        col5.metric("Avg Interest Rate", f"{df_loan['avg_loan_interest_rate'].mean():.2%}")
+
+        st.markdown("---")
+
+        # Charts Row 1
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("📊 Loan Portfolio Status")
+            has_loan = df_loan[df_loan['total_loans'] > 0]
+            portfolio_status = pd.DataFrame({
+                'Status': ['Active Loans', 'Overdue Loans', 'Written Off'],
+                'Count': [
+                    has_loan['active_loans'].sum(),
+                    has_loan['overdue_loans'].sum(),
+                    has_loan['written_off_loans'].sum()
+                ]
+            })
+            fig = px.pie(portfolio_status, values='Count', names='Status',
+                         color_discrete_sequence=['#2ecc71', '#f39c12', '#e74c3c'],
+                         hole=0.4)
+            fig.update_traces(textposition='inside', textinfo='percent+label',
+                             textfont_size=12, textfont_color='white')
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.subheader("📈 Loan-to-Deposit Ratio Distribution")
+            ldr_data = df_loan[df_loan['loan_to_deposit_ratio'] > 0]['loan_to_deposit_ratio']
+            if len(ldr_data) > 0:
+                fig = px.histogram(ldr_data, nbins=30, color_discrete_sequence=['#3498db'])
+                fig.update_layout(xaxis_title="Loan-to-Deposit Ratio", yaxis_title="Count")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No loan-to-deposit data available")
+
+        # Charts Row 2
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("⚠️ Late Payment Rate Distribution")
+            late_data = df_loan[df_loan['payment_count'] > 0]['late_payment_rate']
+            if len(late_data) > 0:
+                fig = px.histogram(late_data, nbins=20, color_discrete_sequence=['#e74c3c'],
+                                  range_x=[0, 1])
+                fig.update_layout(xaxis_title="Late Payment Rate", yaxis_title="Count")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No payment data available")
+
+        with col2:
+            st.subheader("💰 Penalties by Risk Level")
+            penalty_data = df_loan[df_loan['total_penalty'] > 0].copy()
+            if len(penalty_data) > 0:
+                penalty_data['risk_level'] = pd.cut(
+                    penalty_data['late_payment_rate'],
+                    bins=[0, 0.1, 0.3, 1.0],
+                    labels=['Low', 'Medium', 'High']
+                )
+                penalty_by_risk = penalty_data.groupby('risk_level', observed=True)['total_penalty'].sum().reset_index()
+                fig = px.bar(penalty_by_risk, x='risk_level', y='total_penalty',
+                            color='risk_level', color_discrete_map={'Low': '#2ecc71', 'Medium': '#f39c12', 'High': '#e74c3c'})
+                fig.update_layout(xaxis_title="Risk Level", yaxis_title="Total Penalties (₫)")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No penalty data available")
+
+        # Loan Details
+        st.markdown("---")
+        st.subheader("📋 Loan Details (Customers with Loans)")
+
+        loan_customers = df_loan[df_loan['total_loans'] > 0].sort_values('total_loan_outstanding', ascending=False)
+        if len(loan_customers) > 0:
+            display_df = loan_customers[[
+                'customer_id', 'total_loans', 'active_loans', 'overdue_loans',
+                'total_loan_amount', 'total_loan_outstanding', 'avg_loan_interest_rate',
+                'payment_count', 'late_payment_count', 'late_payment_rate',
+                'total_penalty', 'loan_to_deposit_ratio'
+            ]].copy()
+            display_df['total_loan_amount'] = display_df['total_loan_amount'].apply(lambda x: f"₫{x:,.0f}")
+            display_df['total_loan_outstanding'] = display_df['total_loan_outstanding'].apply(lambda x: f"₫{x:,.0f}")
+            display_df['avg_loan_interest_rate'] = display_df['avg_loan_interest_rate'].apply(lambda x: f"{x:.2%}")
+            display_df['late_payment_rate'] = display_df['late_payment_rate'].apply(lambda x: f"{x:.1%}")
+            display_df['total_penalty'] = display_df['total_penalty'].apply(lambda x: f"₫{x:,.0f}")
+            display_df['loan_to_deposit_ratio'] = display_df['loan_to_deposit_ratio'].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "N/A")
+            st.dataframe(display_df, use_container_width=True, height=400)
+        else:
+            st.info("No customers with loans found")
+
+    except Exception as e:
+        st.error(f"Error loading loan data: {str(e)}")
 
 # =============================================================================
 # PAGE: RFM ANALYSIS
