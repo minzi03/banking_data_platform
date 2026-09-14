@@ -122,6 +122,33 @@ sql: |
         AND status = 'SUCCESS'
       GROUP BY customer_id
   ),
+  -- RFM: Account txn 90d (canonical window, matches rfm_segment.yml)
+  rfm_txn_acct AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT txn_id) AS rfm_acct_txn_count,
+          COALESCE(SUM(ABS(txn_amount)), 0) AS rfm_acct_txn_amount,
+          MAX(txn_date) AS rfm_acct_last_txn_date
+      FROM lakehouse.silver.fact_txn_account
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
+      GROUP BY customer_id
+  ),
+  -- RFM: Card txn 90d (canonical window, matches rfm_segment.yml)
+  rfm_txn_card AS (
+      SELECT
+          customer_id,
+          COUNT(DISTINCT txn_id) AS rfm_card_txn_count,
+          COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS rfm_card_txn_amount,
+          MAX(txn_date) AS rfm_card_last_txn_date
+      FROM lakehouse.silver.fact_card_txn
+      WHERE cob_dt = DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
+        AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
+        AND status = 'SUCCESS'
+      GROUP BY customer_id
+  ),
   -- Primary channel (30d)
   channel_rank AS (
       SELECT customer_id, channel, COUNT(txn_id) AS cnt,
@@ -194,7 +221,14 @@ sql: |
           ) AS last_txn_date,
           COALESCE(pc.primary_channel, 'UNKNOWN') AS primary_channel,
           COALESCE(crm.interaction_count_90d, 0) AS interaction_count_90d,
-          crm.last_interaction_date
+          crm.last_interaction_date,
+          -- RFM 90-day aggregates (canonical, matches rfm_segment.yml)
+          COALESCE(rfa.rfm_acct_txn_count, 0) + COALESCE(rfc.rfm_card_txn_count, 0) AS rfm_frequency_90d,
+          COALESCE(rfa.rfm_acct_txn_amount, 0) + COALESCE(rfc.rfm_card_txn_amount, 0) AS rfm_monetary_90d,
+          GREATEST(
+              COALESCE(rfa.rfm_acct_last_txn_date, TIMESTAMP '1900-01-01 00:00:00'),
+              COALESCE(rfc.rfm_card_last_txn_date, TIMESTAMP '1900-01-01 00:00:00')
+          ) AS rfm_last_txn_date_90d
       FROM cust c
       LEFT JOIN acct a ON c.customer_id = a.customer_id
       LEFT JOIN crd crd ON c.customer_id = crd.customer_id
@@ -203,6 +237,8 @@ sql: |
       LEFT JOIN txn_card tc ON c.customer_id = tc.customer_id
       LEFT JOIN primary_channel pc ON c.customer_id = pc.customer_id
       LEFT JOIN crm_agg crm ON c.customer_id = crm.customer_id
+      LEFT JOIN rfm_txn_acct rfa ON c.customer_id = rfa.customer_id
+      LEFT JOIN rfm_txn_card rfc ON c.customer_id = rfc.customer_id
   )
   SELECT
       customer_id, customer_sk, full_name_masked,
@@ -226,28 +262,29 @@ sql: |
       DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) AS days_since_last_txn,
       primary_channel,
       interaction_count_90d, last_interaction_date,
-      NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC) AS rfm_recency_score,
-      NTILE(5) OVER (ORDER BY txn_count_30d DESC) AS rfm_frequency_score,
-      NTILE(5) OVER (ORDER BY txn_amount_30d DESC) AS rfm_monetary_score,
+      -- RFM scoring: 90-day window (canonical, matches rfm_segment.yml exactly)
+      NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC) AS rfm_recency_score,
+      NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC) AS rfm_frequency_score,
+      NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC) AS rfm_monetary_score,
       CASE
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 13 THEN 'Champions'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 10 THEN 'Loyal Customers'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 7 THEN 'Potential Loyalists'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 5 THEN 'New Customers'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 3 THEN 'At Risk'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY txn_count_30d DESC)
-               + NTILE(5) OVER (ORDER BY txn_amount_30d DESC)) >= 2 THEN 'Hibernating'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 13 THEN 'Champions'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 10 THEN 'Loyal Customers'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 7 THEN 'Potential Loyalists'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 6 THEN 'New Customers'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 4 THEN 'At Risk'
+          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
+               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
+               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 2 THEN 'Hibernating'
           ELSE 'Lost'
       END AS rfm_segment,
       CASE

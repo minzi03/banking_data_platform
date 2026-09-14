@@ -347,10 +347,10 @@ Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Cus
 | primary_channel | VARCHAR(20) | fact_txn_account | Most-used channel last 30d |
 | interaction_count_90d | INT | fact_crm_interaction | CRM interactions last 90 days |
 | last_interaction_date | TIMESTAMP | fact_crm_interaction | Most recent CRM interaction |
-| rfm_recency_score | INT | NTILE(5) | 1-5, lower = more recent |
-| rfm_frequency_score | INT | NTILE(5) | 1-5, higher = more frequent |
-| rfm_monetary_score | INT | NTILE(5) | 1-5, higher = more spending |
-| rfm_segment | VARCHAR(20) | Derived | Champions/Loyal/Potential/New/AtRisk/Hibernating/Lost |
+| rfm_recency_score | INT | NTILE(5) | 1-5, lower = more recent (90-day window) |
+| rfm_frequency_score | INT | NTILE(5) | 1-5, higher = more frequent (90-day window) |
+| rfm_monetary_score | INT | NTILE(5) | 1-5, higher = more spending (90-day window) |
+| rfm_segment | VARCHAR(20) | Derived | Champions/Loyal/Potential/New/AtRisk/Hibernating/Lost (90-day, matches rfm_segment.yml) |
 | churn_flag | INT | Derived | 1 if no txn > 90 days |
 | payment_count_30d | INT | fact_loan_payment | count of loan payment records in last 30d |
 | late_payment_count_30d | INT | Derived | payments with status=LATE or late_payment_flag=1 |
@@ -367,16 +367,16 @@ Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Cus
 | AFFLUENT | >= 100,000,000 | >= 100 trieu |
 | MASS | < 100,000,000 | < 100 trieu |
 
-**RFM Segment Logic:**
+**RFM Segment Logic (90-day window, canonical — shared by rfm_segment + mart_customer_360):**
 
 | Segment | Score Range (R+F+M) | Mo ta |
 |---------|---------------------|-------|
 | Champions | >= 13 | Khach hang tot nhat |
 | Loyal Customers | 10-12 | Khach trung thanh |
 | Potential Loyalists | 7-9 | Tiem nang trung thanh |
-| New Customers | 5-6 | Khach moi |
-| At Risk | 3-4 | Co nguy roi bo |
-| Hibernating | 2 | Dang ngu dong |
+| New Customers | 6 | Khach moi |
+| At Risk | 4-5 | Co nguy roi bo |
+| Hibernating | 2-3 | Dang ngu dong |
 | Lost | 1 | Da mat |
 
 ### 5.2. Segmentation (4 tables)
@@ -593,7 +593,8 @@ Runs after Gold DAG completes. Custom `generate_schema_name` macro routes to `se
 2. **SCD2 on customer/account only:** These are the only dimensions that change meaningfully; others are effectively static.
 3. **customer_id as grain:** Most Gold tables grain to customer — aligns with retail banking's customer-centric analytics.
 4. **Loan analytics (P0.2):** dim_loan + dim_deposit + fact_loan_payment in Silver → customer_loan_summary in Gold → customer_loan_summary_current in Serving. Replaces previous hardcoded placeholders.
-5. **campaign_target as Phase 2:** Depends on all other Gold tables; ensures campaign targets are based on complete data.
+5. **RFM canonical definition (P0.3):** Both rfm_segment.yml and mart_customer_360.yml use the same 90-day lookback window and identical NTILE(5) + CASE thresholds (>=13 Champions ... >=2 Hibernating, else Lost). Ensures consistent customer segmentation across standalone RFM table and Customer 360.
+6. **campaign_target as Phase 2:** Depends on all other Gold tables; ensures campaign targets are based on complete data.
 
 ---
 
