@@ -8,49 +8,39 @@ looks like — a vague item cannot be closed honestly.
 
 ## TD-1 — Execute the Trino integration suite in CI
 
-**Status:** open (recorded at `portfolio-v1.1`)
+**Status:** fixed (2026-09-14, verified against current `.github/workflows/ci.yml`)
 
-34 existing tests are not run by any workflow:
+The original entry (recorded at `portfolio-v1.1`) said the 34 tests were not run
+by any workflow. That was true then — it is no longer true. Implemented by
+commits `6821404` (PR-blocking gate), `c40f6ae`, `14b72c9` (baseline the three
+failures), `9ee73f7` (negative proof), `1ba4316` (revert) via PR #2.
 
-```text
-tests/integration/test_data_quality.py      18
-tests/integration/test_etl_validation.py    16
-                                            ──
-                                            34
-```
-
-They query Trino through a container named `ci-trino`, which only
-`.github/workflows/benchmark.yml` ever creates — and that workflow runs its own
-SQL rather than pytest. So these tests pass only if someone stands the topology
-up by hand. **They are not claimed as passing in CI, and CI coverage figures in
-the release notes exclude them.**
-
-Not fixed for `v1.1` because it needs a new docker-compose CI topology, which is
-a larger change than the release itself and would have made the release a CI
-infrastructure PR.
-
-### Acceptance
+Current state — the `trino-integration` job in `ci.yml` (line 486):
 
 ```text
-docker-compose CI Trino stack
-→ readiness check (Trino answers SELECT 1, catalogs registered)
-→ 34 tests execute
-→ failures block the PR
-→ teardown runs even when the job fails
+docker-compose.ci.yml stack (postgres, minio, spark, iceberg-rest, trino)
+→ 5-phase startup with readiness gates (catalog queryable via
+  SHOW SCHEMAS FROM iceberg — stronger than "SELECT 1")
+→ Iceberg DDL + seed data (post-condition: source tables non-empty)
+→ full Bronze → Silver → Gold ETL with per-layer row assertions + grain check
+→ SCD2 fixture (second snapshot, tracked customer_segment change)
+→ 34 tests collected (count verified == 34 before running), executed with
+  -m integration, JUnit XML matrix reported to the step summary
+→ trino-integration-gate job (if: always()) maps the result to a stable
+  branch-protection status; skipped is only accepted when the path filter
+  says not relevant — every other non-success fails
+→ Cleanup step with if: always() runs teardown even on failure
 ```
 
-Not done until failures actually block. A job that runs the suite with
-`continue-on-error` restates the problem rather than fixing it.
+No `continue-on-error` anywhere in the chain — failures block the PR. The
+gate was deliberately negative-tested: an intentional data assertion failure
+was pushed, the PR went red, and the revert restored it (commit `9ee73f7`).
 
-### What CI does cover today
-
-```text
-Gold Spark Regression
-├── tests/gold/test_gold_fanout_regression.py     23
-└── tests/gold/test_business_date_semantics.py     9
-                                                  ──
-                                                  32
-```
+Remaining related items, recorded separately:
+- TD-6 — the same stack/seed/ETL fixture is built twice (ci.yml + benchmark.yml,
+  deliberate while the two profiles are expected to diverge).
+- The tests query Trino via `docker exec ci-trino` subprocess calls rather than
+  a Trino Python client — a portability note, not part of TD-1 acceptance.
 
 ---
 
