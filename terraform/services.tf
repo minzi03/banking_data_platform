@@ -612,6 +612,39 @@ resource "docker_container" "prometheus" {
   }
 }
 
+# ── Alertmanager ─────────────────────────────────────────────────────────────
+resource "docker_container" "alertmanager" {
+  name  = "${var.project_name}-alertmanager"
+  image = "prom/alertmanager:v0.27.0"
+  hostname = "alertmanager"
+
+  ports {
+    internal = 9093
+    external = var.ports.alertmanager
+  }
+
+  command = [
+    "--config.file=/etc/alertmanager/alertmanager.yml",
+  ]
+
+  volumes {
+    host_path      = abspath("${path.module}/../docker/monitoring/alertmanager.yml")
+    container_path = "/etc/alertmanager/alertmanager.yml"
+    read_only      = true
+  }
+
+  volumes {
+    container_path = "/alertmanager"
+    volume_name    = docker_volume.alertmanager_data.name
+  }
+
+  memory = 128
+
+  networks_advanced {
+    name = docker_network.lakehouse_net.name
+  }
+}
+
 # ── Grafana ─────────────────────────────────────────────────────────────────
 resource "docker_container" "grafana" {
   name  = "${var.project_name}-grafana"

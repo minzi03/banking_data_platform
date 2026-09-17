@@ -85,6 +85,10 @@ resource "docker_volume" "grafana_data" {
   name = "${var.project_name}_grafana_data"
 }
 
+resource "docker_volume" "alertmanager_data" {
+  name = "${var.project_name}_alertmanager_data"
+}
+
 resource "docker_volume" "superset_home" {
   name = "${var.project_name}_superset_home"
 }

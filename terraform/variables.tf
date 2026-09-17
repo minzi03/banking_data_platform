@@ -113,6 +113,7 @@ variable "ports" {
     streamlit        = number
     prometheus       = number
     grafana          = number
+    alertmanager     = number
   })
   default = {
     postgres         = 5432
@@ -127,5 +128,6 @@ variable "ports" {
     streamlit        = 8501
     prometheus       = 9095
     grafana          = 3000
+    alertmanager     = 9093
   }
 }
