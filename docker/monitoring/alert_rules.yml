@@ -1,0 +1,35 @@
+groups:
+  - name: pipeline_alerts
+    rules:
+      - alert: DAGFailure
+        expr: airflow_dag_run_state{state="failed"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: DAG {{ $labels.dag_id }} has failed
+          description: Pipeline {{ $labels.dag_id }} failed at {{ $value }}
+      - alert: DataFreshnessBreach
+        expr: cdc_freshness_seconds > 3600
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: CDC data freshness SLA breach
+          description: CDC freshness {{ $value }}s exceeds 1h SLA
+      - alert: DQFailure
+        expr: dq_check_status{status="FAIL"} == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Data quality check failed on {{ $labels.table_name }}
+          description: Check {{ $labels.check_name }} failed: {{ $value }}
+      - alert: RowCountAnomaly
+        expr: abs(delta(table_row_count[1h])) / table_row_count > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Row count anomaly detected
+          description: Table {{ $labels.table_name }} row count changed by {{ $value | humanizePercentage }}

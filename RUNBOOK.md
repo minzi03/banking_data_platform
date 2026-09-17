@@ -202,3 +202,112 @@ cat backup.sql | docker exec -i banking-postgres psql -U banking_admin banking_d
 - [README.md](README.md) — Quick start
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Architecture details
 - [DEMO_GUIDE.md](DEMO_GUIDE.md) — Demo walkthrough
+
+
+---
+
+## Incident Severity Matrix
+
+| Level | Name | Examples | Response Time | Resolution Target |
+|-------|------|----------|---------------|-------------------|
+| P0 | Critical | Gold data corrupt, pipeline down 4h+, security breach | 15 min | 2 hours |
+| P1 | High | Silver/Gold not updating, DQ failures blocking downstream | 30 min | 4 hours |
+| P2 | Medium | Single domain delayed, warning alerts, partial failures | 1 hour | 8 hours |
+| P3 | Low | Non-blocking warnings, documentation gaps, cosmetic issues | 4 hours | Next business day |
+
+### Escalation Path
+1. On-call engineer detects alert
+2. P0/P1: Notify team lead within 15 min
+3. P0: Escalate to data platform manager within 1 hour
+4. Post-incident review required for P0/P1 within 48 hours
+
+---
+
+## RCA Template (Root Cause Analysis)
+
+```text
+Incident: [Brief title]
+Date: [YYYY-MM-DD]
+Severity: P0/P1/P2/P3
+Author: [Name]
+
+1. Timeline
+   - Detection: [when alert fired]
+   - Investigation: [key findings]
+   - Mitigation: [what was done]
+   - Resolution: [when fixed]
+
+2. Impact
+   - Tables affected: [list]
+   - Rows/reports affected: [count]
+   - Downstream impact: [what broke]
+
+3. Root Cause
+   Why 1: [first why]
+   Why 2: [second why]
+   Why 3: [third why]
+   Why 4: [fourth why]
+   Why 5: [root cause]
+
+4. Fix
+   - Immediate: [what was done now]
+   - Permanent: [preventive action]
+
+5. Prevention
+   - Add monitoring/check
+   - Update runbook
+   - Add test
+```
+
+---
+
+## Backfill Playbook
+
+### Prerequisites
+1. Verify Silver source tables exist for target dates
+2. Check Iceberg snapshots are retained
+3. Notify downstream consumers of reprocessing
+
+### Steps
+1. Trigger Bronze for target dates:
+   docker compose exec airflow-scheduler airflow dags trigger bronze_core_banking_dag
+2. Wait for Bronze completion (check flag_job_etl)
+3. Trigger Silver:
+   docker compose exec airflow-scheduler airflow dags trigger silver_all_dag
+4. Wait for Silver completion
+5. Trigger Gold:
+   docker compose exec airflow-scheduler airflow dags trigger gold_all_dag
+6. Verify via reconciliation queries
+7. Rebuild serving tables via dbt
+
+### Iceberg Snapshot Rollback (Emergency)
+If bad data was written, rollback to previous snapshot:
+```sql
+-- List snapshots
+SELECT * FROM lakehouse.gold.mart_customer_360.snapshots
+ORDER BY committed_at DESC LIMIT 5;
+-- Restore previous version
+CALL iceberg_rest.system.rollback_to_snapshot('gold', 'mart_customer_360', snapshot_id);
+```
+---
+
+## SLA Definitions
+
+| Pipeline | Schedule | SLA | Retry | Alert On |
+|----------|----------|-----|-------|----------|
+| Bronze Core Banking | 02:00 daily | 2h | 2 | Failure |
+| Bronze Card CRM | 02:00 daily | 2h | 2 | Failure |
+| Bronze Digital Banking | 02:00 daily | 2h | 2 | Failure |
+| Silver All | 04:00 daily | 3h | 2 | Failure + SLA |
+| Gold Mart360 | 06:00 daily | 3h | 2 | Failure + SLA |
+| Ops Data Quality | 08:00 daily | 4h | 2 | Failure |
+| CDC Streaming | Continuous | 1h freshness | 3 | Failure + Freshness |
+| dbt Run | 07:00 daily | 2h | 1 | Failure |
+
+### Data Freshness SLAs
+| Layer | Max Latency | Check |
+|-------|-------------|-------|
+| Bronze | 2h from source | freshness_check in dq_rules.yml |
+| Silver | 1h after Bronze | Silver DAG completion |
+| Gold | 1h after Silver | Gold DAG completion |
+| Serving | 30min after Gold | dbt run completion |

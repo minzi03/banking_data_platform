@@ -864,12 +864,27 @@ services:
       - "9095:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
     mem_limit: 256m
+    networks:
+      - lakehouse_net
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: banking-alertmanager
+    hostname: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    mem_limit: 128m
     networks:
       - lakehouse_net
 
@@ -923,6 +938,7 @@ volumes:
   om-es-data:
   prometheus-data:
   grafana-data:
+  alertmanager-data:
   superset-home:
 
 # =============================================================================

@@ -27,9 +27,11 @@ COB_DT            = "{{ ds }}"
 DEFAULT_ARGS = {
     "owner": "data-engineering",
     "start_date": pendulum.datetime(2025, 1, 1, tz="Asia/Ho_Chi_Minh"),
-    "retries": 0,
+    "retries": 2,
     "retry_delay": timedelta(minutes=5),
-    "email_on_failure": False,
+    "email_on_failure": True,
+    "email": ["data-eng-alerts@banking.local"],
+    "sla": timedelta(hours=2),
 }
 
 dag = DAG(

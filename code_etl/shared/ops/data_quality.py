@@ -263,6 +263,30 @@ def check_schema_drift(spark, table: str, rule: dict) -> tuple[str, str, str]:
         return "FAIL", "N/A", f"Error: {e}"
 
 
+def check_reconciliation(spark, table: str, rule: dict) -> tuple[str, str, str]:
+    """Reconcile source vs target: compare row count or distinct key count."""
+    try:
+        source_table = rule.get("source_table")
+        source_key = rule.get("source_key_column", "customer_id")
+        target_key = rule.get("target_key_column", "customer_id")
+        compare = rule.get("compare", "distinct_key_count")
+        tolerance_pct = rule.get("tolerance_pct", 0)
+
+        if not source_table:
+            return "FAIL", "N/A", "Missing source_table in rule"
+
+        source_count = spark.table(source_table).select(source_key).distinct().count()
+        target_count = spark.table(table).select(target_key).distinct().count()
+        diff_pct = abs(source_count - target_count) / max(source_count, 1) * 100
+
+        details = f"Source({source_table}): {source_count}, Target({table}): {target_count}, Diff: {diff_pct:.1f}%"
+        if diff_pct <= tolerance_pct:
+            return "PASS", str(source_count), details
+        return "FAIL", str(source_count), details
+    except Exception as e:
+        return "FAIL", "N/A", f"Error: {e}"
+
+
 # Dispatcher
 CHECK_DISPATCH = {
     "row_count": check_row_count,
@@ -274,6 +298,7 @@ CHECK_DISPATCH = {
     "anomaly_detection": check_anomaly_detection,
     "freshness_check": check_freshness,
     "schema_drift": check_schema_drift,
+    "reconciliation": check_reconciliation,
 }
 
 

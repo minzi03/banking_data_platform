@@ -1,0 +1,47 @@
+job:
+  type: risk
+source:
+  tables: [silver.dim_loan, silver.dim_branch, silver.fact_loan_payment]
+target:
+  catalog: lakehouse
+  schema: gold
+  table: loan_portfolio_risk
+upstream_flags: [silver.dim_loan, silver.dim_branch, silver.fact_loan_payment]
+validation:
+  require_non_empty: true
+  require_snapshots: [silver.fact_loan_payment]
+sql: |
+  WITH l AS (
+    SELECT branch_code, product_code, loan_id, loan_amount, outstanding_balance, loan_status
+    FROM lakehouse.silver.dim_loan WHERE is_current=1
+  ), agg AS (
+    SELECT branch_code, product_code,
+      COUNT(DISTINCT loan_id) AS total_loans,
+      COUNT(DISTINCT CASE WHEN loan_status='ACTIVE' THEN loan_id END) AS active_loans,
+      COUNT(DISTINCT CASE WHEN loan_status='OVERDUE' THEN loan_id END) AS overdue_loans,
+      COALESCE(SUM(loan_amount),0) AS total_amount,
+      COALESCE(SUM(outstanding_balance),0) AS total_outstanding
+    FROM l GROUP BY branch_code, product_code
+  ), pm AS (
+    SELECT l.branch_code, l.product_code,
+      COUNT(DISTINCT py.payment_id) AS pmt_count,
+      COUNT(DISTINCT CASE WHEN py.payment_status='LATE' THEN py.payment_id END) AS late_count,
+      COALESCE(SUM(py.penalty),0) AS total_penalty
+    FROM l LEFT JOIN lakehouse.silver.fact_loan_payment py
+      ON l.loan_id=py.loan_id AND py.cob_dt=DATE '{{ cob_dt }}'
+    GROUP BY l.branch_code, l.product_code
+  )
+  SELECT a.branch_code, COALESCE(b.branch_name,'UNK') AS branch_name,
+    a.product_code, a.total_loans, a.active_loans, a.overdue_loans,
+    ROUND(a.total_amount,2) AS total_amount,
+    ROUND(a.total_outstanding,2) AS total_outstanding,
+    ROUND(CASE WHEN a.total_loans=0 THEN 0 ELSE CAST(a.overdue_loans AS DOUBLE)/a.total_loans END,4) AS overdue_rate,
+    ROUND(CASE WHEN a.total_outstanding=0 THEN 0 ELSE a.total_outstanding END,2) AS npl_proxy,
+    COALESCE(pm.pmt_count,0) AS payment_count,
+    COALESCE(pm.late_count,0) AS late_payment_count,
+    ROUND(CASE WHEN COALESCE(pm.pmt_count,0)=0 THEN 0 ELSE CAST(pm.late_count AS DOUBLE)/pm.pmt_count END,4) AS late_payment_rate,
+    COALESCE(pm.total_penalty,0) AS total_penalty,
+    DATE '{{ cob_dt }}' AS cob_dt
+  FROM agg a
+  LEFT JOIN lakehouse.silver.dim_branch b ON a.branch_code=b.branch_code
+  LEFT JOIN pm ON a.branch_code=pm.branch_code AND a.product_code=pm.product_code

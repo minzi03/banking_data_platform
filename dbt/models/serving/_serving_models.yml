@@ -216,3 +216,21 @@ models:
       - name: aum_total
         data_tests:
           - not_null
+
+  - name: loan_portfolio_risk_current
+    description: "Loan portfolio risk by branch/product — current serving, risk layer."
+    columns:
+      - name: branch_code
+        data_tests: [not_null]
+      - name: product_code
+        data_tests: [not_null]
+      - name: total_loans
+        data_tests: [not_null]
+      - name: overdue_loans
+        data_tests: [not_null]
+      - name: overdue_rate
+        data_tests: [not_null]
+      - name: late_payment_rate
+        data_tests: [not_null]
+      - name: cob_dt
+        data_tests: [not_null]

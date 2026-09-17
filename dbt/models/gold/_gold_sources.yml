@@ -237,3 +237,21 @@ sources:
     - name: total_debit_amount
     - name: top_channel
     - name: cob_dt
+  - name: loan_portfolio_risk
+    description: Loan portfolio risk by branch/product (overdue, NPL proxy, late payment)
+    columns:
+    - name: branch_code
+    - name: branch_name
+    - name: product_code
+    - name: total_loans
+    - name: active_loans
+    - name: overdue_loans
+    - name: total_amount
+    - name: total_outstanding
+    - name: overdue_rate
+    - name: npl_proxy
+    - name: payment_count
+    - name: late_payment_count
+    - name: late_payment_rate
+    - name: total_penalty
+    - name: cob_dt

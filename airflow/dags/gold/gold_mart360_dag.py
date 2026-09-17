@@ -30,9 +30,11 @@ GOLD_BASE_JOB    = f"{GOLD_BASE}/base_job"
 DEFAULT_ARGS = {
     "owner": "data-engineering",
     "start_date": pendulum.datetime(2025, 1, 1, tz="Asia/Ho_Chi_Minh"),
-    "retries": 0,
+    "retries": 2,
     "retry_delay": timedelta(minutes=5),
-    "email_on_failure": False,
+    "email_on_failure": True,
+    "email": ["data-eng-alerts@banking.local"],
+    "sla": timedelta(hours=3),
 }
 
 SPARK_CONF = {
@@ -57,6 +59,8 @@ PHASE1_JOBS = [
     ("cross_sell_segment",   "segmentation/cross_sell_segment.yml"),
     # time_analytics
     ("branch_monthly_summary", "time_analytics/branch_monthly_summary.yml"),
+    # risk
+    ("loan_portfolio_risk",    "risk/loan_portfolio_risk.yml"),
 ]
 
 # Phase 2: Depends on Phase 1

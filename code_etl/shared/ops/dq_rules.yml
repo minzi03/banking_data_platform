@@ -37,6 +37,13 @@ tables:
         column: branch_code
         ref_table: lakehouse.silver.dim_branch
         ref_column: branch_code
+      - name: reconciliation
+        severity: FAIL
+        source_table: lakehouse.bronze.core_customer
+        source_key_column: customer_id
+        target_key_column: customer_id
+        compare: distinct_key_count
+        tolerance_pct: 5
 
   # --- dim_account (SCD2) ---
   lakehouse.silver.dim_account:
@@ -203,6 +210,13 @@ tables:
         column: customer_id
         ref_table: lakehouse.silver.dim_customer
         ref_column: customer_id
+      - name: reconciliation
+        severity: WARN
+        source_table: lakehouse.bronze.core_txn_account
+        source_key_column: txn_id
+        target_key_column: txn_id
+        compare: distinct_key_count
+        tolerance_pct: 5
 
   # --- fact_card_txn ---
   lakehouse.silver.fact_card_txn:
