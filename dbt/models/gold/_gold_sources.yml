@@ -255,3 +255,17 @@ sources:
     - name: late_payment_rate
     - name: total_penalty
     - name: cob_dt
+  - name: fraud_risk_txn
+    description: Transaction-level fraud risk scoring (rule-based)
+    columns:
+    - name: txn_id
+    - name: account_id
+    - name: customer_id
+    - name: txn_amount
+    - name: risk_score
+    - name: risk_level
+    - name: night_flag
+    - name: high_amount_flag
+    - name: neg_balance_flag
+    - name: anomaly_flag
+    - name: cob_dt

@@ -61,6 +61,7 @@ PHASE1_JOBS = [
     ("branch_monthly_summary", "time_analytics/branch_monthly_summary.yml"),
     # risk
     ("loan_portfolio_risk",    "risk/loan_portfolio_risk.yml"),
+    ("fraud_risk_txn",         "risk/fraud_risk_txn.yml"),
 ]
 
 # Phase 2: Depends on Phase 1

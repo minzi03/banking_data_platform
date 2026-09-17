@@ -1,0 +1,45 @@
+job:
+  type: risk
+source:
+  tables: [silver.fact_txn_account, silver.dim_customer]
+target:
+  catalog: lakehouse
+  schema: gold
+  table: fraud_risk_txn
+upstream_flags: [silver.fact_txn_account, silver.dim_customer]
+validation:
+  require_non_empty: true
+  require_snapshots: [silver.fact_txn_account]
+sql: |
+  WITH txn AS (
+    SELECT t.txn_id, t.account_id, t.customer_id, t.txn_date,
+      t.txn_amount, t.txn_type, t.debit_credit, t.balance_after,
+      t.channel, t.description, t.counter_account, c.customer_segment
+    FROM lakehouse.silver.fact_txn_account t
+    LEFT JOIN lakehouse.silver.dim_customer c
+      ON t.customer_id=c.customer_id AND c.is_current=1
+    WHERE t.cob_dt = DATE '{{ cob_dt }}'
+  ),
+  stats AS (
+    SELECT customer_id, AVG(txn_amount) AS avg_amt, STDDEV(txn_amount) AS std_amt
+    FROM txn GROUP BY customer_id
+  ),
+  flagged AS (
+    SELECT t.*, s.avg_amt, s.std_amt,
+      CASE WHEN HOUR(t.txn_date)<6 OR HOUR(t.txn_date)>22 THEN 1 ELSE 0 END AS night_flag,
+      CASE WHEN t.txn_amount>100000000 THEN 1 ELSE 0 END AS high_amount_flag,
+      CASE WHEN t.balance_after<0 THEN 1 ELSE 0 END AS neg_balance_flag,
+      CASE WHEN s.avg_amt>0 AND t.txn_amount>s.avg_amt+3*COALESCE(s.std_amt,0) THEN 1 ELSE 0 END AS anomaly_flag
+    FROM txn t LEFT JOIN stats s ON t.customer_id=s.customer_id
+  )
+  SELECT txn_id, account_id, customer_id, customer_segment,
+    txn_amount, txn_type, debit_credit, balance_after,
+    channel, description, counter_account, txn_date,
+    night_flag, high_amount_flag, neg_balance_flag, anomaly_flag,
+    (night_flag*2+high_amount_flag*3+neg_balance_flag*2+anomaly_flag*3) AS risk_score,
+    CASE WHEN (night_flag+high_amount_flag+neg_balance_flag+anomaly_flag)>=3 THEN 3
+      WHEN (night_flag+high_amount_flag+neg_balance_flag+anomaly_flag)>=2 THEN 2
+      WHEN (night_flag+high_amount_flag+neg_balance_flag+anomaly_flag)>=1 THEN 1
+      ELSE 0 END AS risk_level,
+    DATE '{{ cob_dt }}' AS cob_dt
+  FROM flagged

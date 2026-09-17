@@ -234,3 +234,20 @@ models:
         data_tests: [not_null]
       - name: cob_dt
         data_tests: [not_null]
+
+  - name: fraud_risk_txn_current
+    description: Transaction fraud risk scoring — current serving, risk layer."
+    columns:
+      - name: txn_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: risk_level
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3]
+      - name: risk_score
+        data_tests: [not_null]
+      - name: cob_dt
+        data_tests: [not_null]
