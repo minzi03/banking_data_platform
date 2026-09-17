@@ -1,0 +1,60 @@
+job:
+  type: risk
+source:
+  tables: [silver.fact_txn_account, silver.dim_customer, silver.dim_account]
+target:
+  catalog: lakehouse
+  schema: gold
+  table: aml_monitoring
+upstream_flags: [silver.fact_txn_account, silver.dim_customer, silver.dim_account]
+validation:
+  require_non_empty: true
+  require_snapshots: [silver.fact_txn_account]
+sql: |
+  WITH txn AS (
+    SELECT t.txn_id, t.account_id, t.customer_id, t.txn_date,
+      t.txn_amount, t.txn_type, t.debit_credit, t.balance_after,
+      t.channel, t.description, t.counter_account,
+      c.customer_segment, a.branch_code
+    FROM lakehouse.silver.fact_txn_account t
+    LEFT JOIN lakehouse.silver.dim_customer c ON t.customer_id=c.customer_id AND c.is_current=1
+    LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND a.is_current=1
+    WHERE t.cob_dt = DATE '{{ cob_dt }}'
+  ),
+  customer_stats AS (
+    SELECT customer_id,
+      SUM(CASE WHEN debit_credit='CREDIT' THEN txn_amount ELSE 0 END) AS total_credit,
+      SUM(CASE WHEN debit_credit='DEBIT' THEN txn_amount ELSE 0 END) AS total_debit,
+      COUNT(txn_id) AS txn_count,
+      COUNT(DISTINCT channel) AS channel_count
+    FROM txn GROUP BY customer_id
+  ),
+  daily_agg AS (
+    SELECT customer_id, CAST(txn_date AS DATE) AS txn_day,
+      COUNT(txn_id) AS daily_txn_count,
+      SUM(txn_amount) AS daily_total_amount,
+      COUNT(CASE WHEN txn_amount BETWEEN 50000000 AND 99999999 THEN 1 END) AS structured_count
+    FROM txn GROUP BY customer_id, CAST(txn_date AS DATE)
+  )
+  flagged AS (
+    SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count, cs.channel_count,
+      da.daily_txn_count, da.daily_total_amount, da.structured_count,
+      CASE WHEN t.txn_amount >= 200000000 THEN 1 ELSE 0 END AS high_value_flag,
+      CASE WHEN da.structured_count >= 3 THEN 1 ELSE 0 END AS structuring_flag,
+      CASE WHEN da.daily_txn_count >= 10 THEN 1 ELSE 0 END AS velocity_flag,
+      CASE WHEN cs.channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag
+    FROM txn t
+    LEFT JOIN customer_stats cs ON t.customer_id=cs.customer_id
+    LEFT JOIN daily_agg da ON t.customer_id=da.customer_id AND CAST(t.txn_date AS DATE)=da.txn_day
+  )
+  SELECT txn_id, account_id, customer_id, customer_segment, branch_code,
+    txn_amount, txn_type, debit_credit, channel, description, counter_account, txn_date,
+    high_value_flag, structuring_flag, velocity_flag, multi_channel_flag,
+    (high_value_flag*3+structuring_flag*4+velocity_flag*2+multi_channel_flag*1) AS alert_score,
+    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=3 THEN 3
+      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=2 THEN 2
+      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=1 THEN 1
+      ELSE 0 END AS risk_level,
+    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=2 THEN 1 ELSE 0 END AS alert_generated,
+    DATE '{{ cob_dt }}' AS cob_dt
+  FROM flagged

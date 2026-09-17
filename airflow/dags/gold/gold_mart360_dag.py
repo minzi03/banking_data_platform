@@ -62,6 +62,7 @@ PHASE1_JOBS = [
     # risk
     ("loan_portfolio_risk",    "risk/loan_portfolio_risk.yml"),
     ("fraud_risk_txn",         "risk/fraud_risk_txn.yml"),
+    ("aml_monitoring",         "risk/aml_monitoring.yml"),
 ]
 
 # Phase 2: Depends on Phase 1

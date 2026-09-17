@@ -269,3 +269,17 @@ sources:
     - name: neg_balance_flag
     - name: anomaly_flag
     - name: cob_dt
+  - name: aml_monitoring
+    description: AML monitoring alerts (high-value, structuring, velocity)
+    columns:
+    - name: txn_id
+    - name: customer_id
+    - name: txn_amount
+    - name: alert_score
+    - name: risk_level
+    - name: high_value_flag
+    - name: structuring_flag
+    - name: velocity_flag
+    - name: multi_channel_flag
+    - name: alert_generated
+    - name: cob_dt

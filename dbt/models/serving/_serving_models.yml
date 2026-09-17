@@ -251,3 +251,23 @@ models:
         data_tests: [not_null]
       - name: cob_dt
         data_tests: [not_null]
+
+  - name: aml_monitoring_current
+    description: "AML monitoring alerts — current serving, risk layer."
+    columns:
+      - name: txn_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: risk_level
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1, 2, 3]
+      - name: alert_generated
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+      - name: cob_dt
+        data_tests: [not_null]
