@@ -2,13 +2,13 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 0817d0c95706bd895c7c418129fb8db1e342b173
-    git_branch: docs/portfolio-executive-summary
+    git_commit: 03c8971490cc6100bafe8ea080f32436c42aea0f
+    git_branch: fix/materialize-risk-marts-and-dbt-tests
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T19:26:20Z'
-    requested_cob_dt: '2026-09-06'
+    generated_at_utc: '2026-09-18T16:47:46Z'
+    requested_cob_dt: '2026-09-16'
     verification_scope: full
   environment:
     execution_mode: local-docker-compose
@@ -36,10 +36,10 @@ manifest:
 
       '
   snapshot:
-    requested_cob_dt: '2026-09-06'
-    bronze_max_cob_dt: '2026-09-06'
-    silver_max_cob_dt: '2026-09-06'
-    gold_max_cob_dt: '2026-09-06'
+    requested_cob_dt: '2026-09-16'
+    bronze_max_cob_dt: '2026-09-16'
+    silver_max_cob_dt: '2026-09-16'
+    gold_max_cob_dt: '2026-09-16'
     bronze_partition_exists: true
     silver_partition_exists: true
     gold_partition_exists: true
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 1
+      value: 3
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
@@ -251,9 +251,9 @@ metrics:
       declared: 14
       metric_type: static
       provenance: collector:gold_ddl_tables
-      definition: '14 bảng history partitioned by cob_dt (6 mart360 + 4 segment + 1
-        time_analytics + 3 risk), đếm từ CREATE TABLE trong
-        docker/init_iceberg/03_ddl_gold.sql. Serving objects thuộc dbt, không đếm ở đây.
+      definition: '14 bảng history partitioned by cob_dt (6 mart360 + 4 segment +
+        1 time_analytics + 3 risk), đếm từ CREATE TABLE trong docker/init_iceberg/03_ddl_gold.sql.
+        Serving objects thuộc dbt, không đếm ở đây.
 
         '
     legacy_gold_current_objects:
@@ -296,7 +296,7 @@ metrics:
         mismatched_customers: 0
         tolerance: 0
       branch_monthly_recompute:
-        compared_buckets: 1500
+        compared_buckets: 1600
         mismatched_buckets: 0
         tolerance: 0
         definition: 'Cross-engine reconciliation cho CALENDAR bucket. branch_monthly_summary
@@ -372,7 +372,7 @@ metrics:
         '
     trino:
       visible_gold_objects:
-        value: 10
+        value: 14
         declared: null
         metric_type: runtime
         note: 'OBSERVATION, không còn invariant chặn. Nó ghi lại sự thật rằng DDL
@@ -424,12 +424,12 @@ metrics:
     collection_reason: null
     current_state:
       dim_customer_current:
-        rows: 10000
-        distinct_customer_id: 10000
+        rows: 0
+        distinct_customer_id: 0
         duplicate_keys: 0
       dim_account_current:
-        rows: 30000
-        distinct_account_id: 30000
+        rows: 0
+        distinct_account_id: 0
         duplicate_keys: 0
     timestamp_semantics:
       technical_timestamps:
@@ -542,7 +542,7 @@ metrics:
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 568
+        value: null
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -601,7 +601,7 @@ metrics:
       definition: 'Tất cả materialized: ephemeral — không tạo object vật lý.'
     business_vs_utc_date_rows:
       total_rows: 1200000
-      divergent_date_rows: 350099
+      divergent_date_rows: 263417
       metric_type: runtime
       declared: null
       provenance: query:platform.business_vs_utc_date_rows

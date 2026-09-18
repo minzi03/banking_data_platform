@@ -47,7 +47,7 @@ Operational banking data is ingested from PostgreSQL through both a batch and a 
 
 The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Spark owns history: **10 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **9 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+Spark owns history: **14 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **13 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
 
 Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
@@ -238,7 +238,7 @@ counts are ambiguous without them.
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
 | Data contracts             |             33 | Governance contract YAMLs                                                       |
-| Data-quality check types   |              8 | Supported DQ rule categories                                                    |
+| Data-quality check types   |              9 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
@@ -539,8 +539,8 @@ Gold is produced from the **batch Silver analytical model**.
 Current portfolio baseline:
 
 ```text
-10 historical Gold tables   (Spark, partitioned by cob_dt)
- 9 current-serving tables   (dbt via Trino, iceberg.serving.*)
+14 historical Gold tables   (Spark, partitioned by cob_dt)
+13 current-serving tables   (dbt via Trino, iceberg.serving.*)
 ```
 
 The 8 `gold.*_current` CTAS tables and the Spark-only
