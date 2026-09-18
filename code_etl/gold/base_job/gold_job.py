@@ -9,6 +9,7 @@ Hỗ trợ các loại job (job.type trong YAML):
   - mart360        : Bảng Customer 360 mart (tổng hợp thông tin khách hàng)
   - segment        : Bảng phân khúc khách hàng
   - time_analytics : Bảng phân tích theo chiều thời gian
+  - risk           : Bảng rủi ro (loan portfolio, fraud, AML monitoring)
 
 Đây là job chạy hàng ngày trên production — bảng đích phải đã tồn tại.
 """
@@ -26,7 +27,7 @@ from utils.logger import get_logger
 from utils.yaml_loader import load_config
 
 # Danh sách loại job hợp lệ trong tầng Gold
-VALID_JOB_TYPES = {"mart360", "segment", "time_analytics"}
+VALID_JOB_TYPES = {"mart360", "segment", "time_analytics", "risk"}
 
 # Z-Ordering columns for frequently queried tables
 # Key: table name, Value: list of columns to Z-Order by
@@ -40,6 +41,10 @@ ZORDER_COLUMNS = {
     "customer_transaction_summary": ["customer_id"],
     "customer_product_summary": ["customer_id"],
     "customer_card_summary": ["customer_id"],
+    "customer_loan_summary": ["customer_id"],
+    "loan_portfolio_risk": ["branch_code", "product_code"],
+    "fraud_risk_txn": ["risk_level", "customer_id"],
+    "aml_monitoring": ["alert_generated", "customer_id"],
 }
 
 

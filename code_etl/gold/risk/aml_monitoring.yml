@@ -35,7 +35,7 @@ sql: |
       SUM(txn_amount) AS daily_total_amount,
       COUNT(CASE WHEN txn_amount BETWEEN 50000000 AND 99999999 THEN 1 END) AS structured_count
     FROM txn GROUP BY customer_id, CAST(txn_date AS DATE)
-  )
+  ),
   flagged AS (
     SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count, cs.channel_count,
       da.daily_txn_count, da.daily_total_amount, da.structured_count,

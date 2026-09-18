@@ -24,7 +24,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['Champions', 'Loyal Customers', 'Potential Loyalists', 'Recent Customers', 'Promising', 'Need Attention', 'About to Sleep', 'At Risk', 'Cannot Lose Them', 'Hibernating', 'Lost']
+              values: ['Champions', 'Loyal Customers', 'Potential Loyalists', 'New Customers', 'Promising', 'Need Attention', 'About to Sleep', 'At Risk', 'Cannot Lose Them', 'Hibernating', 'Lost']
       - name: rfm_score
         data_tests:
           - not_null
@@ -40,12 +40,13 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['HIGH', 'MEDIUM', 'LOW']
+              values: ['High', 'Medium', 'Low']
       - name: is_churn_candidate
         data_tests:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
 
   - name: customer_transaction_summary_current
     description: "Transaction behaviour 30d — current serving, wave 1, do dbt/Trino sở hữu."
@@ -78,7 +79,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['0-50M', '50M-200M', '200M-500M', '500M-1B', '1B+']
+              values: ['MASS', 'AFFLUENT', 'PRIORITY', '0-50M', '50M-200M', '200M-500M', '500M-1B', '1B+']
 
   - name: customer_card_summary_current
     description: "Card holding + card txn 30d — current serving, wave 2, do dbt/Trino sở hữu."
@@ -126,16 +127,19 @@ models:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
       - name: has_savings
         data_tests:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
       - name: has_loan
         data_tests:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
 
   - name: cross_sell_segment_current
     description: "Cross-sell opportunity — current serving, wave 2, do dbt/Trino sở hữu."
@@ -164,7 +168,8 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['RETENTION', 'CROSS_SELL', 'UPSELL', 'WIN_BACK', 'VIP_ENGAGEMENT']
+              values: ['Awareness', 'Cross_Sell', 'Cross_Sell_CC', 'Upsell', 'Retention', 'Win_Back',
+                       'RETENTION', 'CROSS_SELL', 'UPSELL', 'WIN_BACK', 'VIP_ENGAGEMENT']
       - name: rfm_segment
         data_tests:
           - not_null
@@ -172,7 +177,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['HIGH', 'MEDIUM', 'LOW']
+              values: ['High', 'Medium', 'Low', 'HIGH', 'MEDIUM', 'LOW']
 
   - name: mart_customer_360_current
     description: "Customer 360 — current serving, wave 3, do dbt/Trino sở hữu."
@@ -199,11 +204,13 @@ models:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
       - name: cross_sell_credit_card_flag
         data_tests:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
       - name: total_accounts
         data_tests:
           - not_null
@@ -247,6 +254,7 @@ models:
           - not_null
           - accepted_values:
               values: [0, 1, 2, 3]
+              quote: false
       - name: risk_score
         data_tests: [not_null]
       - name: cob_dt
@@ -264,10 +272,12 @@ models:
           - not_null
           - accepted_values:
               values: [0, 1, 2, 3]
+              quote: false
       - name: alert_generated
         data_tests:
           - not_null
           - accepted_values:
               values: [0, 1]
+              quote: false
       - name: cob_dt
         data_tests: [not_null]

@@ -225,24 +225,27 @@ counts are ambiguous without them.
 
 | Metric                     | Verified value | Definition                                                                     |
 | -------------------------- | -------------: | ------------------------------------------------------------------------------ |
-| Source workloads           |             16 | Executable Bronze ingestion configurations; templates and registries excluded   |
-| Bronze batch tables        |             16 | One per ingestion workload                                                      |
+| Source workloads           |             17 | Executable Bronze ingestion configurations; templates and registries excluded   |
+| Bronze batch tables        |             17 | One per ingestion workload                                                      |
 | Bronze CDC tables          |              6 | Append-only change-history tables                                               |
 | Silver SCD Type 2 dims     |              2 | `dim_customer`, `dim_account`                                                   |
-| Silver SCD Type 1 dims     |              6 | Branch, product, card, employee, device, location                               |
-| Silver fact tables         |              5 | Transactional and interaction facts                                             |
+| Silver SCD Type 1 dims     |              8 | Branch, product, card, employee, device, location, deposit, loan                |
+| Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
-| Historical Gold tables     |             10 | Spark-managed Gold history, partitioned by `cob_dt`                             |
-| Current-serving tables     |              9 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Historical Gold tables     |             14 | Spark-managed Gold history, partitioned by `cob_dt`                             |
+| Current-serving tables     |             11 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
 | Data contracts             |             33 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              8 | Supported DQ rule categories                                                    |
-| Airflow DAG files          |             16 | Files defining at least one DAG (17 DAG objects — one file defines two)         |
-| Automated tests            |            472 | Python `def test_*` functions                                                   |
+| Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
+| Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
+| dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
+| dbt data tests             |            117 | `dbt test --target docker` → PASS=117, ERROR=0                                  |
+| Automated tests            |            476 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
-| Docker Compose services    |             24 | 20 long-running + 4 one-shot initialization/migration jobs                      |
+| Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
 **Curated transactions** replaces the previous `4.6M+` claim. That figure counted
@@ -452,10 +455,10 @@ Bronze Batch
 
 The batch Silver layer contains:
 
-- **8 dimensions**
+- **10 dimensions**
   - 2 SCD Type 2
-  - 6 SCD Type 1
-- **5 fact tables**
+  - 8 SCD Type 1
+- **6 fact tables**
 
 ### SCD Type 2
 
@@ -470,6 +473,8 @@ The batch Silver layer contains:
 - `dim_employee`
 - `dim_device`
 - `dim_location`
+- `dim_deposit`
+- `dim_loan`
 
 ### Fact Tables
 
@@ -478,6 +483,7 @@ The batch Silver layer contains:
 - `fact_online_transaction`
 - `fact_crm_interaction`
 - `fact_support_ticket`
+- `fact_loan_payment`
 
 Within one verified Silver snapshot the transaction facts hold:
 
@@ -1000,8 +1006,8 @@ Unknown __op = x
 
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
-| Historical Gold tables |    10 | Spark-managed marts, partitioned by `cob_dt`       |
-| Current-serving tables |     9 | dbt-managed, in `serving` schema, served via Trino |
+| Historical Gold tables |    14 | Spark-managed marts, partitioned by `cob_dt`       |
+| Current-serving tables |    11 | dbt-managed, in `serving` schema, served via Trino |
 
 ---
 
@@ -1112,13 +1118,13 @@ Spark
 │
 ├── Bronze
 ├── Silver
-└── Historical Gold (10 tables, partitioned by cob_dt)
+└── Historical Gold (14 tables, partitioned by cob_dt)
           │
           ▼
       dbt via Trino
           │
           ▼
-Current Serving Layer (9 materialized Iceberg tables)
+Current Serving Layer (11 materialized Iceberg tables)
           │
           ├── Trino
           └── SQL consumers
@@ -1222,12 +1228,13 @@ Examples:
 
 ## OpenMetadata
 
-Cataloged assets:
+OpenMetadata 1.5.6 runs healthy and serves the catalog UI on port 8585.
 
-```text
-53 production data tables
-22 lineage edges
-```
+Catalog population is a separate ingestion step that has **not been re-verified**
+after the last stack recreate: the `table_entity` count is currently 0. The
+lineage DAG (`ops_lineage_dag`) completes, but it logs lineage to stdout only —
+it does not yet persist to `opslakehouse.data_lineage`, which is why that table
+holds 0 rows. Both are tracked as known limitations rather than claimed metrics.
 
 Capabilities include:
 
@@ -1258,7 +1265,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-16 DAGs
+21 DAGs loaded (zero import errors)
 ```
 
 Representative responsibilities:
