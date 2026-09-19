@@ -61,6 +61,8 @@ validation:
     - silver.fact_txn_account
     - silver.fact_card_txn
     - silver.fact_crm_interaction
+    - silver.fact_online_transaction
+    - silver.fact_loan_payment
 
 sql: |
   WITH

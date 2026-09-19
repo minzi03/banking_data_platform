@@ -196,9 +196,9 @@ class TestDocsAgreeOnArchitecture:
             )
 
     def test_gold_counts_consistent_across_docs(self):
-        """10 historical + 9 serving phải xuất hiện nhất quán."""
+        """14 historical + 13 serving phải xuất hiện nhất quán."""
         for path in DOCS:
             text = path.read_text(encoding="utf-8")
-            assert "10 historical Gold" in text or "Historical Gold" in text, (
+            assert "14 historical Gold" in text or "Historical Gold" in text, (
                 f"{path.name}: thiếu số historical Gold table"
             )

@@ -114,12 +114,12 @@ class TestContractValidation:
 class TestRepoCollectors:
     def test_source_datasets_excludes_template_by_semantics(self, contract):
         """
-        Glob thô ra 17 file; đúng phải là 16 workload.
+        Glob thô ra 18 file; đúng phải là 17 workload.
         templates/source_registry.yml bị loại vì thiếu contract shape
         (source+target+load+sql), KHÔNG phải vì blacklist tên file.
         """
-        assert gen._bronze_ingestion_workloads(contract) == 16
-        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 17
+        assert gen._bronze_ingestion_workloads(contract) == 17
+        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 18
 
     def test_debezium_topics_reads_config_not_docstring(self, contract):
         """Docstring đầu register_connectors.py ghi 8/3/5 — sai. Config là 6/3/3."""
@@ -127,32 +127,33 @@ class TestRepoCollectors:
         assert gen._debezium_connectors(contract) == 3
 
     def test_silver_dimension_split(self):
-        assert gen._silver_dims(None) == 8
-        assert gen._silver_dims("scd_type1") == 6
+        assert gen._silver_dims(None) == 10
+        assert gen._silver_dims("scd_type1") == 8
         assert gen._silver_dims("scd_type2") == 2
 
     def test_dq_check_types(self, contract):
-        assert gen._dq_check_types(contract) == 8
+        assert gen._dq_check_types(contract) == 9
 
     def test_gold_ddl_tables(self, contract):
         """
-        10 bang lich su. 8 CTAS `*_current` da bi RETIRE khoi DDL — chung gio la
-        dbt serving model. Neu con so nay tang lai gan 18, nghia la co ai do
-        them lai CTAS vao DDL → dual ownership quay lai.
+        14 bang lich su (6 mart360 + 4 segment + 1 time_analytics + 3 risk).
+        KHONG co CTAS `*_current` trong DDL — chung la dbt serving model.
+        Neu con so nay nhay ve ~18 kem theo object `*_current`, nghia la co ai
+        do them lai CTAS vao DDL → dual ownership quay lai.
         """
-        assert gen._gold_ddl_tables(contract) == 10
+        assert gen._gold_ddl_tables(contract) == 14
 
     def test_docker_services_three_way_split(self, contract):
-        """24 = 20 long-running + 4 one-shot. Không còn tranh cãi 23 hay 24."""
+        """29 = 25 long-running + 4 one-shot."""
         defined, long_running, one_shot = gen._compose_services(contract)
-        assert defined == 24
+        assert defined == 29
         assert one_shot == 4
-        assert long_running == defined - one_shot == 20
+        assert long_running == defined - one_shot == 25
 
     def test_airflow_files_vs_objects_differ(self, contract):
         """cdc_streaming_dag.py định nghĩa 2 DAG — hai metric khác nhau."""
-        assert gen._airflow_dag_files(contract) == 16
-        assert gen._airflow_dag_objects(contract) == 17
+        assert gen._airflow_dag_files(contract) == 20
+        assert gen._airflow_dag_objects(contract) == 21
 
     def test_collect_repo_metrics_fills_every_static_node(self, contract):
         collected = gen.collect_repo_metrics(contract)
@@ -264,10 +265,10 @@ def _verified_manifest(contract: dict) -> dict:
     for node in m["metrics"]["cdc"]["current_state"].values():
         node["duplicate_keys"] = 0
     m["metrics"]["gold"]["legacy_gold_current_objects"]["value"] = 0
-    m["metrics"]["serving"]["gold_objects_declared"]["value"] = 19
-    m["metrics"]["serving"]["trino"]["visible_gold_objects"]["value"] = 19
+    m["metrics"]["serving"]["gold_objects_declared"]["value"] = 14
+    m["metrics"]["serving"]["trino"]["visible_gold_objects"]["value"] = 14
     m["metrics"]["serving"]["trino"]["mart_customer_360_current_visible"]["value"] = 0
-    m["metrics"]["serving"]["objects_present"]["value"] = 9
+    m["metrics"]["serving"]["objects_present"]["value"] = 13
     m["metrics"]["serving"]["current_snapshot_alignment"]["value"] = 0
     return m
 
@@ -530,11 +531,11 @@ class TestVerificationScope:
 class TestServingVisibility:
     def test_gold_ddl_declares_no_current_objects(self, contract):
         """
-        Sau retirement: 10 CREATE TABLE lich su, 0 CREATE VIEW.
+        Sau retirement: 14 CREATE TABLE lich su, 0 CREATE VIEW.
         Gold DDL khong con khai bao bat ky serving object nao.
         """
-        assert gen._gold_ddl_objects(contract) == 10
-        assert gen._gold_ddl_tables(contract) == 10
+        assert gen._gold_ddl_objects(contract) == 14
+        assert gen._gold_ddl_tables(contract) == 14
 
         ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(
             encoding="utf-8"

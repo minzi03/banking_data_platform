@@ -159,7 +159,7 @@ seed-local:
 # Trino queries
 # ---------------------------------------------------------------------------
 trino:
-	$(DC) exec trino trino --catalog lakehouse
+	$(DC) exec trino trino --catalog iceberg
 
 # ---------------------------------------------------------------------------
 # Superset (BI Layer)
