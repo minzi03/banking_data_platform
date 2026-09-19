@@ -10,6 +10,7 @@ from governance.contracts_registry import ContractRegistry
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def valid_contract_yaml(tmp_path):
     """Create a valid contract YAML file."""
@@ -78,7 +79,7 @@ physical_location:
   catalog: lakehouse
   namespace: silver
   table: dim_customer
-"""
+""",
         },
         {
             "filename": "account_silver.yaml",
@@ -91,7 +92,7 @@ physical_location:
   catalog: lakehouse
   namespace: silver
   table: dim_account
-"""
+""",
         },
         {
             "filename": "mart_gold.yaml",
@@ -104,7 +105,7 @@ physical_location:
   catalog: lakehouse
   namespace: gold
   table: mart_customer_360
-"""
+""",
         },
     ]
     for contract in contracts:
@@ -116,6 +117,7 @@ physical_location:
 # ---------------------------------------------------------------------------
 # Test ContractRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestContractRegistry:
     def test_load_valid_contracts(self, valid_contract_yaml):

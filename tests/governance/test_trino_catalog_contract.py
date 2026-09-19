@@ -28,8 +28,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _trino_connecting_files() -> list[Path]:
     """Find .py/.sql files that actually connect to or invoke Trino."""
     search_dirs = [
-        "streamlit", "api", "scripts", "dbt",
-        "docker/monitoring", "tests/integration",
+        "streamlit",
+        "api",
+        "scripts",
+        "dbt",
+        "docker/monitoring",
+        "tests/integration",
     ]
     trino_signatures = re.compile(
         r"trino\.dbapi\.connect|run_trino_query|--catalog|trino.*execute",
@@ -99,14 +103,15 @@ class TestSparkCatalogNameNeverReachesTrinoConsumers:
         text = app.read_text(encoding="utf-8")
         connect_match = re.search(
             r"def\s+get_connection\(.*?\).*?(?=\ndef\s|\Z)",
-            text, re.DOTALL,
+            text,
+            re.DOTALL,
         )
         assert connect_match, "get_connection() không tìm thấy"
         body = connect_match.group(0)
-        assert "catalog=\"iceberg\"" in body or "catalog='iceberg'" in body, (
+        assert 'catalog="iceberg"' in body or "catalog='iceberg'" in body, (
             "get_connection() phải dùng catalog='iceberg'"
         )
-        assert "catalog=\"lakehouse\"" not in body and "catalog='lakehouse'" not in body, (
+        assert 'catalog="lakehouse"' not in body and "catalog='lakehouse'" not in body, (
             "get_connection() chứa catalog='lakehouse' — phải là 'iceberg'"
         )
 
@@ -118,7 +123,4 @@ class TestSparkCatalogNameNeverReachesTrinoConsumers:
         text = makefile.read_text(encoding="utf-8")
         for line_no, line in enumerate(text.splitlines(), start=1):
             if "trino" in line.lower() and "--catalog" in line:
-                assert "lakehouse" not in line, (
-                    f"Makefile:{line_no}: Trino CLI dùng 'lakehouse' — "
-                    f"phải dùng 'iceberg'"
-                )
+                assert "lakehouse" not in line, f"Makefile:{line_no}: Trino CLI dùng 'lakehouse' — phải dùng 'iceberg'"

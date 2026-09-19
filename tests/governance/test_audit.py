@@ -8,6 +8,7 @@ from governance.audit import AuditAction, AuditLogger, AuditRecord
 # Test AuditAction
 # ---------------------------------------------------------------------------
 
+
 class TestAuditAction:
     def test_constants(self):
         assert AuditAction.INGEST == "ingest"
@@ -23,6 +24,7 @@ class TestAuditAction:
 # ---------------------------------------------------------------------------
 # Test AuditRecord
 # ---------------------------------------------------------------------------
+
 
 class TestAuditRecord:
     def test_creation(self):
@@ -74,6 +76,7 @@ class TestAuditRecord:
 # ---------------------------------------------------------------------------
 # Test AuditLogger
 # ---------------------------------------------------------------------------
+
 
 class TestAuditLogger:
     def test_log_action(self):

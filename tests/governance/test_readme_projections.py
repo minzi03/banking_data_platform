@@ -38,11 +38,7 @@ verifier = _load_verifier()
 
 @pytest.fixture(scope="module")
 def manifest() -> dict:
-    return yaml.safe_load(
-        (REPO_ROOT / "docs" / "evidence" / "metrics-manifest.yaml").read_text(
-            encoding="utf-8"
-        )
-    )
+    return yaml.safe_load((REPO_ROOT / "docs" / "evidence" / "metrics-manifest.yaml").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
@@ -57,13 +53,15 @@ class TestProjectionParsing:
         assert got == [("metrics_table", "X")]
 
     def test_multi_projection_reads_location_and_claim(self):
-        got = verifier.iter_projections({
-            "manifest_path": "a.b",
-            "readme_claims": [
-                {"location": "metrics_table", "claim": "| X | 10 |"},
-                {"location": "executive_summary", "claim": "10 X models"},
-            ],
-        })
+        got = verifier.iter_projections(
+            {
+                "manifest_path": "a.b",
+                "readme_claims": [
+                    {"location": "metrics_table", "claim": "| X | 10 |"},
+                    {"location": "executive_summary", "claim": "10 X models"},
+                ],
+            }
+        )
         assert got == [
             ("metrics_table", "| X | 10 |"),
             ("executive_summary", "10 X models"),
@@ -88,8 +86,7 @@ class TestDriftIsCaughtInEveryProjection:
             for location, _claim in verifier.iter_projections(binding)
         }
         assert "executive_summary" in locations, (
-            "executive summary đang nêu số mà không có projection nào — "
-            "văn xuôi sẽ trôi khỏi bảng mà CI không thấy"
+            "executive summary đang nêu số mà không có projection nào — văn xuôi sẽ trôi khỏi bảng mà CI không thấy"
         )
 
     def test_changing_a_metric_reddens_both_table_and_summary(self, manifest, readme):
@@ -105,9 +102,7 @@ class TestDriftIsCaughtInEveryProjection:
 
 
 class TestNumberFormatting:
-    @pytest.mark.parametrize(
-        "form", ["2300000", "2,300,000", "2.3M", "2.3 million"]
-    )
+    @pytest.mark.parametrize("form", ["2300000", "2,300,000", "2.3M", "2.3 million"])
     def test_millions_may_be_written_readably(self, form):
         """
         README được phép trình bày thân thiện, miễn là chiếu đúng giá trị đã

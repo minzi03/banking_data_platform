@@ -1,4 +1,5 @@
 """Quick JDBC test to check source data readability."""
+
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.appName("jdbc-test").getOrCreate()
@@ -13,13 +14,15 @@ tables = [
 
 for schema_table, pk in tables:
     try:
-        df = spark.read.format("jdbc") \
-            .option("url", "jdbc:postgresql://postgres:5432/banking_db") \
-            .option("dbtable", f"(SELECT {pk} FROM {schema_table}) t") \
-            .option("user", "banking_admin") \
-            .option("password", "BankingAdmin123") \
-            .option("driver", "org.postgresql.Driver") \
+        df = (
+            spark.read.format("jdbc")
+            .option("url", "jdbc:postgresql://postgres:5432/banking_db")
+            .option("dbtable", f"(SELECT {pk} FROM {schema_table}) t")
+            .option("user", "banking_admin")
+            .option("password", "BankingAdmin123")
+            .option("driver", "org.postgresql.Driver")
             .load()
+        )
         count = df.count()
         print(f"OK: {schema_table} -> {count} rows")
     except Exception as e:

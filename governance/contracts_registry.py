@@ -61,19 +61,18 @@ class ContractRegistry:
             except Exception as e:
                 error_msg = f"Failed to load {yaml_file.name}: {e}"
                 log.error(error_msg)
-                self._errors.append({
-                    "file": yaml_file.name,
-                    "error": str(e),
-                })
+                self._errors.append(
+                    {
+                        "file": yaml_file.name,
+                        "error": str(e),
+                    }
+                )
 
-        log.info(
-            f"Loaded {len(self._contracts)} contracts, "
-            f"{len(self._errors)} errors"
-        )
+        log.info(f"Loaded {len(self._contracts)} contracts, {len(self._errors)} errors")
 
     def _load_contract(self, yaml_path: Path) -> None:
         """Load a single YAML contract file."""
-        with open(yaml_path, "r", encoding="utf-8") as f:
+        with open(yaml_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         if raw is None:
@@ -84,10 +83,7 @@ class ContractRegistry:
 
         # Register by dataset_id
         if contract.dataset_id in self._contracts:
-            log.warning(
-                f"Duplicate dataset_id '{contract.dataset_id}' "
-                f"in {yaml_path.name} — overwriting"
-            )
+            log.warning(f"Duplicate dataset_id '{contract.dataset_id}' in {yaml_path.name} — overwriting")
 
         self._contracts[contract.dataset_id] = contract
         log.debug(f"  Loaded: {contract.dataset_id}")
@@ -114,17 +110,11 @@ class ContractRegistry:
 
     def get_contracts_by_layer(self, layer: str) -> dict[str, DatasetContract]:
         """Get all contracts for a specific layer (bronze, silver, gold)."""
-        return {
-            k: v for k, v in self._contracts.items()
-            if v.layer == layer
-        }
+        return {k: v for k, v in self._contracts.items() if v.layer == layer}
 
     def get_contracts_by_owner(self, owner: str) -> dict[str, DatasetContract]:
         """Get all contracts for a specific owner."""
-        return {
-            k: v for k, v in self._contracts.items()
-            if v.owner == owner
-        }
+        return {k: v for k, v in self._contracts.items() if v.owner == owner}
 
     @property
     def contract_count(self) -> int:
@@ -152,20 +142,26 @@ class ContractRegistry:
         for dataset_id, contract in self._contracts.items():
             # Check required fields
             if not contract.physical_location.table:
-                issues.append({
-                    "dataset_id": dataset_id,
-                    "issue": "Missing physical_location.table",
-                })
+                issues.append(
+                    {
+                        "dataset_id": dataset_id,
+                        "issue": "Missing physical_location.table",
+                    }
+                )
             if not contract.owner:
-                issues.append({
-                    "dataset_id": dataset_id,
-                    "issue": "Missing owner",
-                })
+                issues.append(
+                    {
+                        "dataset_id": dataset_id,
+                        "issue": "Missing owner",
+                    }
+                )
             if not contract.business_purpose:
-                issues.append({
-                    "dataset_id": dataset_id,
-                    "issue": "Missing business_purpose",
-                })
+                issues.append(
+                    {
+                        "dataset_id": dataset_id,
+                        "issue": "Missing business_purpose",
+                    }
+                )
         return issues
 
     def summary(self) -> str:

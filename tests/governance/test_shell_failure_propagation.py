@@ -67,9 +67,7 @@ def _find_masked_gate_steps(path: Path) -> list[str]:
                 if stripped.startswith("#"):
                     continue
                 if "|| true" in stripped and "--output-format" not in stripped:
-                    violations.append(
-                        f"  job={job_name} step=\"{name}\"\n    {stripped}"
-                    )
+                    violations.append(f'  job={job_name} step="{name}"\n    {stripped}')
     return violations
 
 
@@ -77,7 +75,4 @@ def _find_masked_gate_steps(path: Path) -> list[str]:
 def test_no_masked_gate_steps(wf_path):
     """Gate steps (lint, format, security) không được dùng `|| true`."""
     violations = _find_masked_gate_steps(wf_path)
-    assert not violations, (
-        f"{wf_path.name}: gate step dùng `|| true` — nuốt lỗi:\n"
-        + "\n".join(violations)
-    )
+    assert not violations, f"{wf_path.name}: gate step dùng `|| true` — nuốt lỗi:\n" + "\n".join(violations)

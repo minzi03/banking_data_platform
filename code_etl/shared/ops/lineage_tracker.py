@@ -30,13 +30,11 @@ from logging import getLogger
 log = getLogger("lineage_tracker")
 
 # Add governance to path
-_GOVERNANCE_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "governance"
-)
+_GOVERNANCE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "governance")
 if _GOVERNANCE_PATH not in sys.path:
     sys.path.insert(0, _GOVERNANCE_PATH)
 
-from governance.lineage import LineageTracker
+from governance.lineage import LineageTracker  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Singleton instance
@@ -52,7 +50,9 @@ def get_lineage_tracker() -> LineageTracker:
     Returns:
         LineageTracker instance
     """
-    global _tracker
+    # `global` is intentional: the tracker is a module-level singleton and the
+    # first caller must populate it for every later caller.
+    global _tracker  # noqa: PLW0603
     if _tracker is None:
         _tracker = LineageTracker()
     return _tracker
@@ -61,6 +61,7 @@ def get_lineage_tracker() -> LineageTracker:
 # ---------------------------------------------------------------------------
 # Convenience functions
 # ---------------------------------------------------------------------------
+
 
 def record_lineage(
     source_table: str,

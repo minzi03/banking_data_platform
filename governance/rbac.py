@@ -24,6 +24,7 @@ from enum import Enum
 
 class AccessLevel(Enum):
     """Access levels for resources."""
+
     NONE = "none"
     READ = "read"
     WRITE = "write"
@@ -32,6 +33,7 @@ class AccessLevel(Enum):
 
 class ResourceType(Enum):
     """Types of resources that can be protected."""
+
     CATALOG = "catalog"
     SCHEMA = "schema"
     TABLE = "table"
@@ -42,6 +44,7 @@ class ResourceType(Enum):
 @dataclass
 class Permission:
     """A single permission entry."""
+
     resource_type: ResourceType
     resource_path: str  # e.g., "iceberg.gold.mart_customer_360"
     access_level: AccessLevel
@@ -51,6 +54,7 @@ class Permission:
 @dataclass
 class Role:
     """A role with associated permissions."""
+
     name: str
     description: str
     permissions: list[Permission] = field(default_factory=list)
@@ -60,6 +64,7 @@ class Role:
 @dataclass
 class User:
     """A user with assigned roles."""
+
     username: str
     roles: list[str] = field(default_factory=list)
     groups: list[str] = field(default_factory=list)
@@ -103,20 +108,28 @@ ROLES = {
             Permission(ResourceType.TABLE, "iceberg.silver.*", AccessLevel.READ),
             # PII masking for analytics users
             Permission(
-                ResourceType.COLUMN, "iceberg.gold.mart_customer_360.full_name",
-                AccessLevel.READ, column_mask="concat(substr(%s, 1, 1), '**')"
+                ResourceType.COLUMN,
+                "iceberg.gold.mart_customer_360.full_name",
+                AccessLevel.READ,
+                column_mask="concat(substr(%s, 1, 1), '**')",
             ),
             Permission(
-                ResourceType.COLUMN, "iceberg.gold.mart_customer_360.phone",
-                AccessLevel.READ, column_mask="concat(substr(%s, 1, 3), '****', substr(%s, 8))"
+                ResourceType.COLUMN,
+                "iceberg.gold.mart_customer_360.phone",
+                AccessLevel.READ,
+                column_mask="concat(substr(%s, 1, 3), '****', substr(%s, 8))",
             ),
             Permission(
-                ResourceType.COLUMN, "iceberg.gold.mart_customer_360.email",
-                AccessLevel.READ, column_mask="concat(substr(%s, 1, 1), '*****', '@', split_part(%s, '@', 2))"
+                ResourceType.COLUMN,
+                "iceberg.gold.mart_customer_360.email",
+                AccessLevel.READ,
+                column_mask="concat(substr(%s, 1, 1), '*****', '@', split_part(%s, '@', 2))",
             ),
             Permission(
-                ResourceType.COLUMN, "iceberg.gold.mart_customer_360.cccd",
-                AccessLevel.READ, column_mask="concat('***********', substr(%s, -4))"
+                ResourceType.COLUMN,
+                "iceberg.gold.mart_customer_360.cccd",
+                AccessLevel.READ,
+                column_mask="concat('***********', substr(%s, -4))",
             ),
         ],
     ),
@@ -177,6 +190,7 @@ USERS = {
 # RBAC Manager
 # =============================================================================
 
+
 class RBACManager:
     """
     Manages role-based access control for the Banking Data Platform.
@@ -224,18 +238,20 @@ class RBACManager:
 
             # Check direct permissions
             for perm in role.permissions:
-                if self._matches_resource(perm.resource_path, schema, table):
-                    if perm.access_level in (required_level, AccessLevel.ADMIN):
-                        return True
+                if self._matches_resource(perm.resource_path, schema, table) and (
+                    perm.access_level in (required_level, AccessLevel.ADMIN)
+                ):
+                    return True
 
             # Check parent roles
             for parent_name in role.parent_roles:
                 parent = self.roles.get(parent_name)
                 if parent:
                     for perm in parent.permissions:
-                        if self._matches_resource(perm.resource_path, schema, table):
-                            if perm.access_level in (required_level, AccessLevel.ADMIN):
-                                return True
+                        if self._matches_resource(perm.resource_path, schema, table) and (
+                            perm.access_level in (required_level, AccessLevel.ADMIN)
+                        ):
+                            return True
 
         return False
 
@@ -268,9 +284,11 @@ class RBACManager:
                 continue
 
             for perm in role.permissions:
-                if (perm.resource_type == ResourceType.COLUMN and
-                    perm.column_mask and
-                    self._matches_column(perm.resource_path, schema, table)):
+                if (
+                    perm.resource_type == ResourceType.COLUMN
+                    and perm.column_mask
+                    and self._matches_column(perm.resource_path, schema, table)
+                ):
                     col_name = perm.resource_path.split(".")[-1]
                     masks[col_name] = perm.column_mask
 
@@ -282,16 +300,17 @@ class RBACManager:
         if len(parts) >= 2:
             schema_pattern = parts[-2]
             table_pattern = parts[-1]
-            if schema_pattern == "*" or schema_pattern == schema:
-                if table_pattern == "*" or table_pattern == table:
-                    return True
+            schema_ok = schema_pattern == "*" or schema_pattern == schema
+            table_ok = table_pattern == "*" or table_pattern == table
+            if schema_ok and table_ok:
+                return True
         return False
 
     def _matches_column(self, resource_path: str, schema: str, table: str) -> bool:
         """Check if a column resource path matches schema.table."""
         parts = resource_path.split(".")
         if len(parts) >= 3:
-            return (parts[-3] == schema and parts[-2] == table)
+            return parts[-3] == schema and parts[-2] == table
         return False
 
     def get_user_info(self, username: str) -> dict:
@@ -304,11 +323,13 @@ class RBACManager:
         for role_name in user.roles:
             role = self.roles.get(role_name)
             if role:
-                roles_info.append({
-                    "name": role.name,
-                    "description": role.description,
-                    "permission_count": len(role.permissions),
-                })
+                roles_info.append(
+                    {
+                        "name": role.name,
+                        "description": role.description,
+                        "permission_count": len(role.permissions),
+                    }
+                )
 
         return {
             "username": user.username,
@@ -322,7 +343,7 @@ class RBACManager:
         print("RBAC ROLES SUMMARY")
         print("=" * 70)
 
-        for role_name, role in self.roles.items():
+        for role in self.roles.values():
             print(f"\n{'─' * 70}")
             print(f"Role: {role.name}")
             print(f"Description: {role.description}")
@@ -346,6 +367,7 @@ class RBACManager:
 # =============================================================================
 # Convenience Functions
 # =============================================================================
+
 
 def check_access(username: str, schema: str, table: str, access_type: str = "read") -> bool:
     """Check if a user has access to a table."""

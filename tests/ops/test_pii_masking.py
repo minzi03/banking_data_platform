@@ -31,8 +31,7 @@ class TestPiiSaltInit:
         for _mod in ("pyspark", "pyspark.sql", "spark", "spark.spark_session"):
             monkeypatch.setitem(sys.modules, _mod, MagicMock())
         spec = importlib.util.spec_from_file_location(
-            "pii_masking_test",
-            str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
+            "pii_masking_test", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -45,8 +44,7 @@ class TestPiiSaltInit:
             monkeypatch.setitem(sys.modules, _mod, MagicMock())
         with pytest.raises(EnvironmentError, match="PII_HASH_SALT"):
             spec = importlib.util.spec_from_file_location(
-                "pii_masking_test2",
-                str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
+                "pii_masking_test2", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
             )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -59,12 +57,10 @@ class TestMaskNameUdf:
         """Helper to load pii_masking module with given salt."""
         # patch.dict tự khôi phục sys.modules khi thoát context — stub không
         # được rò rỉ sang test khác (xem tests/ops/test_data_quality.py).
-        stubs = {m: MagicMock() for m in
-                 ("pyspark", "pyspark.sql", "spark", "spark.spark_session")}
-        with patch.dict(os.environ, {"PII_HASH_SALT": salt}),              patch.dict(sys.modules, stubs):
+        stubs = {m: MagicMock() for m in ("pyspark", "pyspark.sql", "spark", "spark.spark_session")}
+        with patch.dict(os.environ, {"PII_HASH_SALT": salt}), patch.dict(sys.modules, stubs):
             spec = importlib.util.spec_from_file_location(
-                f"pii_masking_{salt}",
-                str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
+                f"pii_masking_{salt}", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
             )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
@@ -104,12 +100,10 @@ class TestParseArguments:
         """Helper to load pii_masking module."""
         # patch.dict tự khôi phục sys.modules khi thoát context — stub không
         # được rò rỉ sang test khác (xem tests/ops/test_data_quality.py).
-        stubs = {m: MagicMock() for m in
-                 ("pyspark", "pyspark.sql", "spark", "spark.spark_session")}
-        with patch.dict(os.environ, {"PII_HASH_SALT": salt}),              patch.dict(sys.modules, stubs):
+        stubs = {m: MagicMock() for m in ("pyspark", "pyspark.sql", "spark", "spark.spark_session")}
+        with patch.dict(os.environ, {"PII_HASH_SALT": salt}), patch.dict(sys.modules, stubs):
             spec = importlib.util.spec_from_file_location(
-                f"pii_masking_args_{salt}",
-                str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
+                f"pii_masking_args_{salt}", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "pii_masking.py")
             )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)

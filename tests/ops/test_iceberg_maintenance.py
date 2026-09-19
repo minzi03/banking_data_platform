@@ -29,8 +29,7 @@ _SAVED = {name: sys.modules.get(name) for name in _STUBBED}
 sys.modules.update(_STUBBED)
 
 _spec = importlib.util.spec_from_file_location(
-    "iceberg_maintenance_mod",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "iceberg_maintenance.py")
+    "iceberg_maintenance_mod", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "iceberg_maintenance.py")
 )
 _imod = importlib.util.module_from_spec(_spec)
 try:
@@ -102,10 +101,11 @@ class TestRunMaintenance:
         spark = MagicMock()
         tables = ["lakehouse.bronze.core_account"]
 
-        with patch.object(_imod, "rewrite_data_files") as mock_rewrite, \
-             patch.object(_imod, "expire_snapshots") as mock_expire, \
-             patch.object(_imod, "remove_orphan_files") as mock_orphan:
-
+        with (
+            patch.object(_imod, "rewrite_data_files") as mock_rewrite,
+            patch.object(_imod, "expire_snapshots") as mock_expire,
+            patch.object(_imod, "remove_orphan_files") as mock_orphan,
+        ):
             run_maintenance(spark, tables, mode="full")
 
             mock_rewrite.assert_called_once()
@@ -117,10 +117,11 @@ class TestRunMaintenance:
         spark = MagicMock()
         tables = ["lakehouse.bronze.core_account"]
 
-        with patch.object(_imod, "rewrite_data_files") as mock_rewrite, \
-             patch.object(_imod, "expire_snapshots") as mock_expire, \
-             patch.object(_imod, "remove_orphan_files") as mock_orphan:
-
+        with (
+            patch.object(_imod, "rewrite_data_files") as mock_rewrite,
+            patch.object(_imod, "expire_snapshots") as mock_expire,
+            patch.object(_imod, "remove_orphan_files") as mock_orphan,
+        ):
             run_maintenance(spark, tables, mode="expire_only")
 
             mock_rewrite.assert_not_called()
@@ -132,20 +133,22 @@ class TestRunMaintenance:
         spark = MagicMock()
         tables = ["table1", "table2", "table3"]
 
-        with patch.object(_imod, "rewrite_data_files", side_effect=[Exception("fail"), None, None]), \
-             patch.object(_imod, "expire_snapshots"), \
-             patch.object(_imod, "remove_orphan_files"):
-
-            with pytest.raises(RuntimeError, match="Maintenance failed"):
-                run_maintenance(spark, tables, mode="full")
+        with (
+            patch.object(_imod, "rewrite_data_files", side_effect=[Exception("fail"), None, None]),
+            patch.object(_imod, "expire_snapshots"),
+            patch.object(_imod, "remove_orphan_files"),
+            pytest.raises(RuntimeError, match="Maintenance failed"),
+        ):
+            run_maintenance(spark, tables, mode="full")
 
     def test_empty_table_list(self):
         """Should handle empty table list without error."""
         spark = MagicMock()
-        with patch.object(_imod, "rewrite_data_files"), \
-             patch.object(_imod, "expire_snapshots"), \
-             patch.object(_imod, "remove_orphan_files"):
-
+        with (
+            patch.object(_imod, "rewrite_data_files"),
+            patch.object(_imod, "expire_snapshots"),
+            patch.object(_imod, "remove_orphan_files"),
+        ):
             run_maintenance(spark, [], mode="full")  # Should not raise
 
 

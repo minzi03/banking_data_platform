@@ -38,17 +38,13 @@ def get_spark_session(app_name: str = "banking-lakehouse-job") -> SparkSession:
         minio_secret_key = os.environ.get("MINIO_SECRET_KEY", "Minioadmin123")
 
         builder = (
-            builder
-            .config("spark.sql.extensions",
-                    "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-            .config("spark.sql.catalog.lakehouse",
-                    "org.apache.iceberg.spark.SparkCatalog")
+            builder.config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+            .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
             .config("spark.sql.catalog.lakehouse.type", "rest")
             .config("spark.sql.catalog.lakehouse.uri", catalog_uri)
             .config("spark.sql.catalog.lakehouse.warehouse", warehouse)
             .config("spark.sql.defaultCatalog", "lakehouse")
-            .config("spark.sql.catalog.lakehouse.io-impl",
-                    "org.apache.iceberg.aws.s3.S3FileIO")
+            .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
             .config("spark.sql.catalog.lakehouse.s3.endpoint", minio_endpoint)
             .config("spark.sql.catalog.lakehouse.s3.path-style-access", "true")
             .config("spark.sql.catalog.lakehouse.s3.access-key-id", minio_access_key)
@@ -58,10 +54,10 @@ def get_spark_session(app_name: str = "banking-lakehouse-job") -> SparkSession:
             .config("spark.hadoop.fs.s3a.access.key", minio_access_key)
             .config("spark.hadoop.fs.s3a.secret.key", minio_secret_key)
             .config("spark.hadoop.fs.s3a.path.style.access", "true")
-            .config("spark.hadoop.fs.s3a.impl",
-                    "org.apache.hadoop.fs.s3a.S3AFileSystem")
-            .config("spark.hadoop.fs.s3a.aws.credentials.provider",
-                    "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
+            .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config(
+                "spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+            )
         )
 
     spark = builder.getOrCreate()

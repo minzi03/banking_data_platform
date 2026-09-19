@@ -46,10 +46,20 @@ def _skeleton(contract: dict) -> dict:
         if node.get("metric_type") == "manual":
             continue
         for key in list(node):
-            if key not in {"metric_type", "provenance", "definition", "declared",
-                           "required_keys", "note", "calculation", "superseded_claim",
-                           "tolerance", "status", "one_shot_services",
-                           "definition_binding"}:
+            if key not in {
+                "metric_type",
+                "provenance",
+                "definition",
+                "declared",
+                "required_keys",
+                "note",
+                "calculation",
+                "superseded_claim",
+                "tolerance",
+                "status",
+                "one_shot_services",
+                "definition_binding",
+            }:
                 node[key] = None
     return m
 
@@ -81,6 +91,7 @@ class FakeTrinoClient:
 # load_contract / validate_contract
 # ---------------------------------------------------------------------------
 
+
 class TestContractValidation:
     def test_shipped_contract_is_valid(self, contract):
         assert gen.validate_contract(contract) == []
@@ -88,8 +99,10 @@ class TestContractValidation:
     def test_detects_invariant_pointing_at_missing_metric(self, contract):
         broken = yaml.safe_load(yaml.safe_dump(contract))
         broken["invariants"]["bogus"] = {
-            "metric": "metrics.does.not.exist", "operator": "eq",
-            "expected": 0, "severity": "error",
+            "metric": "metrics.does.not.exist",
+            "operator": "eq",
+            "expected": 0,
+            "severity": "error",
         }
         errors = gen.validate_contract(broken)
         assert any("bogus" in e for e in errors)
@@ -101,15 +114,14 @@ class TestContractValidation:
 
     def test_detects_broken_readme_binding(self, contract):
         broken = yaml.safe_load(yaml.safe_dump(contract))
-        broken["readme_bindings"].append(
-            {"readme_claim": "x", "manifest_path": "metrics.nope.value"}
-        )
+        broken["readme_bindings"].append({"readme_claim": "x", "manifest_path": "metrics.nope.value"})
         assert any("readme_binding" in e for e in gen.validate_contract(broken))
 
 
 # ---------------------------------------------------------------------------
 # collect_repo_metrics — static sinh từ repo, không gõ tay
 # ---------------------------------------------------------------------------
+
 
 class TestRepoCollectors:
     def test_source_datasets_excludes_template_by_semantics(self, contract):
@@ -171,6 +183,7 @@ class TestRepoCollectors:
 # render_query_bundle
 # ---------------------------------------------------------------------------
 
+
 class TestQueryBundle:
     def test_template_expands_per_table(self, contract):
         queries = gen.render_query_bundle(contract, "2026-09-06")
@@ -206,6 +219,7 @@ class TestQueryBundle:
 # Error reporting
 # ---------------------------------------------------------------------------
 
+
 class TestQueryErrorReporting:
     def test_failure_names_query_id_and_sql(self, contract):
         """
@@ -231,33 +245,44 @@ class TestQueryErrorReporting:
 # evaluate_invariants
 # ---------------------------------------------------------------------------
 
+
 def _verified_manifest(contract: dict) -> dict:
     """Manifest đã điền đủ giá trị hợp lệ để mọi blocking invariant xanh."""
     m = yaml.safe_load(yaml.safe_dump(contract))
-    m["manifest"]["build"].update(
-        {"git_commit": "abc123", "git_branch": "main", "git_dirty": False}
-    )
+    m["manifest"]["build"].update({"git_commit": "abc123", "git_branch": "main", "git_dirty": False})
     snap = m["manifest"]["snapshot"]
-    snap.update({
-        "requested_cob_dt": "2026-09-06", "bronze_max_cob_dt": "2026-09-06",
-        "silver_max_cob_dt": "2026-09-06", "gold_max_cob_dt": "2026-09-06",
-        "bronze_partition_exists": True, "silver_partition_exists": True,
-        "gold_partition_exists": True, "layers_aligned": True,
-    })
+    snap.update(
+        {
+            "requested_cob_dt": "2026-09-06",
+            "bronze_max_cob_dt": "2026-09-06",
+            "silver_max_cob_dt": "2026-09-06",
+            "gold_max_cob_dt": "2026-09-06",
+            "bronze_partition_exists": True,
+            "silver_partition_exists": True,
+            "gold_partition_exists": True,
+            "layers_aligned": True,
+        }
+    )
     for dim in m["metrics"]["silver"]["scd2"].values():
-        dim.update({
-            "duplicate_current_keys": 0, "current_rows": 100,
-            "current_distinct_business_keys": 100, "overlapping_intervals": 0,
-        })
+        dim.update(
+            {
+                "duplicate_current_keys": 0,
+                "current_rows": 100,
+                "current_distinct_business_keys": 100,
+                "overlapping_intervals": 0,
+            }
+        )
     for name, node in m["metrics"]["silver"]["snapshot_rows"].items():
         key = next(k for k in node if k.startswith("distinct_"))
         node["rows"], node[key] = 500, 500
         assert name
     for node in m["metrics"]["gold"]["grain_checks"].values():
         node.update({"rows": 100, "distinct_customer_id": 100, "duplicate_customer_ids": 0})
-    for name in ("churn_vs_transaction_summary_30d",
-                 "churn_count_vs_transaction_summary_30d",
-                 "rfm_monetary_recompute_90d"):
+    for name in (
+        "churn_vs_transaction_summary_30d",
+        "churn_count_vs_transaction_summary_30d",
+        "rfm_monetary_recompute_90d",
+    ):
         m["metrics"]["gold"]["reconciliation"][name]["mismatched_customers"] = 0
     # Cross-engine calendar-bucket reconciliation (timezone migration)
     m["metrics"]["gold"]["reconciliation"]["branch_monthly_recompute"]["mismatched_buckets"] = 0
@@ -364,6 +389,7 @@ class TestInvariantEvaluation:
 # apply_results / promote
 # ---------------------------------------------------------------------------
 
+
 class TestAssemblyAndPromotion:
     def test_manual_metrics_preserved_not_overwritten(self, contract):
         """
@@ -382,9 +408,7 @@ class TestAssemblyAndPromotion:
         assert preserved["median_seconds"] == expected["median_seconds"]
         assert preserved["median_seconds"] is not None
         # Ngữ cảnh cũng phải sống sót; median không có cadence là số vô nghĩa.
-        assert preserved["consolidation_cadence_seconds"] == (
-            expected["consolidation_cadence_seconds"]
-        )
+        assert preserved["consolidation_cadence_seconds"] == (expected["consolidation_cadence_seconds"])
 
     def test_layers_aligned_computed_from_layer_values(self, contract):
         runtime = {
@@ -405,9 +429,7 @@ class TestAssemblyAndPromotion:
         assert result["manifest"]["snapshot"]["layers_aligned"] is False
 
     def test_multi_column_query_rows_merge_into_node(self, contract):
-        runtime = {
-            "silver.snapshot_rows.fact_txn_account": {"rows": 1200000, "distinct_txn_id": 1200000}
-        }
+        runtime = {"silver.snapshot_rows.fact_txn_account": {"rows": 1200000, "distinct_txn_id": 1200000}}
         result = gen.apply_results(contract, {}, runtime, {}, {}, "2026-09-06")
         node = result["metrics"]["silver"]["snapshot_rows"]["fact_txn_account"]
         assert node["rows"] == 1200000
@@ -452,6 +474,7 @@ class TestAssemblyAndPromotion:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 class TestCli:
     def test_validate_contract_mode_needs_no_cob_dt(self, capsys):
         assert gen.main(["--validate-contract"]) == 0
@@ -471,6 +494,7 @@ class TestCli:
 # ---------------------------------------------------------------------------
 # Verification scope — not_collected KHÁC verified
 # ---------------------------------------------------------------------------
+
 
 class TestVerificationScope:
     def test_batch_scope_skips_cdc_metrics(self, contract):
@@ -501,7 +525,7 @@ class TestVerificationScope:
         """
         m = _verified_manifest(contract)
         for node in m["metrics"]["cdc"]["current_state"].values():
-            node["duplicate_keys"] = None          # chưa đo
+            node["duplicate_keys"] = None  # chưa đo
         errors, _, skipped = gen.evaluate_invariants(m, ["cdc."])
         assert not any("cdc_current_state_unique" in e for e in errors)
         assert any("cdc_current_state_unique" in s for s in skipped)
@@ -518,8 +542,7 @@ class TestVerificationScope:
         m = yaml.safe_load(yaml.safe_dump(contract))
         m["manifest"]["runtime"]["verification_scope"] = "batch"
         skips = gen.scope_skips(m)
-        queries = [q for q in gen.render_query_bundle(m, "2026-09-06")
-                   if gen._in_scope(q.id, skips)]
+        queries = [q for q in gen.render_query_bundle(m, "2026-09-06") if gen._in_scope(q.id, skips)]
         assert not [q for q in queries if q.id.startswith("cdc.")]
         assert [q for q in queries if q.id.startswith("gold.")]
 
@@ -527,6 +550,7 @@ class TestVerificationScope:
 # ---------------------------------------------------------------------------
 # Serving visibility — Trino là serving engine
 # ---------------------------------------------------------------------------
+
 
 class TestServingVisibility:
     def test_gold_ddl_declares_no_current_objects(self, contract):
@@ -537,15 +561,10 @@ class TestServingVisibility:
         assert gen._gold_ddl_objects(contract) == 14
         assert gen._gold_ddl_tables(contract) == 14
 
-        ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(
-            encoding="utf-8"
-        )
-        created = re.findall(
-            r"CREATE (?:TABLE IF NOT EXISTS|OR REPLACE VIEW)\s+[\w.]*\.(\w+)", ddl
-        )
+        ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
+        created = re.findall(r"CREATE (?:TABLE IF NOT EXISTS|OR REPLACE VIEW)\s+[\w.]*\.(\w+)", ddl)
         assert not [c for c in created if c.endswith("_current")], (
-            "DDL Gold khong duoc tao lai object *_current — chung thuoc "
-            "dbt/models/serving/ va do dbt/Trino so huu"
+            "DDL Gold khong duoc tao lai object *_current — chung thuoc dbt/models/serving/ va do dbt/Trino so huu"
         )
 
     def test_legacy_query_uses_information_schema_not_per_table_counts(self):
@@ -616,8 +635,7 @@ class TestProvenanceIsNeverFalsified:
 
         params = inspect.signature(gen.collect_build_metadata).parameters
         assert not params, (
-            f"collect_build_metadata nhận tham số {list(params)} — provenance "
-            "phải được đo, không phải được truyền vào"
+            f"collect_build_metadata nhận tham số {list(params)} — provenance phải được đo, không phải được truyền vào"
         )
 
     def test_dirty_tree_blocks_promotion(self, tmp_path, monkeypatch):
@@ -628,9 +646,7 @@ class TestProvenanceIsNeverFalsified:
 
     def test_dirty_tree_can_be_overridden_explicitly(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
-        assert gen.promote_canonical_if_verified(
-            self._manifest(True), [], allow_dirty=True
-        ) is True
+        assert gen.promote_canonical_if_verified(self._manifest(True), [], allow_dirty=True) is True
 
     def test_clean_tree_promotes(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
@@ -638,9 +654,7 @@ class TestProvenanceIsNeverFalsified:
 
     def test_errors_still_block_even_on_a_clean_tree(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
-        assert gen.promote_canonical_if_verified(
-            self._manifest(False), ["some blocking error"]
-        ) is False
+        assert gen.promote_canonical_if_verified(self._manifest(False), ["some blocking error"]) is False
 
 
 class TestIntegrationTestsCollector:
@@ -652,10 +666,13 @@ class TestIntegrationTestsCollector:
 
     def test_counts_only_the_two_gated_modules(self, contract):
         expected = sum(
-            len([
-                line for line in (gen.REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()
-                if line.strip().startswith("def test_")
-            ])
+            len(
+                [
+                    line
+                    for line in (gen.REPO_ROOT / rel).read_text(encoding="utf-8").splitlines()
+                    if line.strip().startswith("def test_")
+                ]
+            )
             for rel in gen.INTEGRATION_TEST_MODULES
         )
         assert gen._integration_tests(contract) == expected
@@ -665,8 +682,5 @@ class TestIntegrationTestsCollector:
         assert 0 < gen._integration_tests(contract) < gen._test_functions(contract)
 
     def test_modules_named_in_the_collector_exist(self):
-        missing = [
-            rel for rel in gen.INTEGRATION_TEST_MODULES
-            if not (gen.REPO_ROOT / rel).exists()
-        ]
+        missing = [rel for rel in gen.INTEGRATION_TEST_MODULES if not (gen.REPO_ROOT / rel).exists()]
         assert not missing, f"collector trỏ tới module không tồn tại: {missing}"

@@ -26,7 +26,7 @@ import yaml
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
-from spark.spark_session import get_spark_session
+from spark.spark_session import get_spark_session  # noqa: E402
 
 basicConfig(
     level=INFO,
@@ -47,7 +47,7 @@ RULES_FILE = os.path.join(_HERE, "quarantine_rules.yml")
 # ---------------------------------------------------------------------------
 def load_rules(path: str) -> dict[str, Any]:
     """Load quarantine rules from YAML file."""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -84,8 +84,7 @@ def check_violation(spark, source_table: str, condition: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Write to Quarantine Table
 # ---------------------------------------------------------------------------
-def write_to_quarantine(spark, records: list[dict], target_table: str,
-                       violation_type: str, source_table: str) -> int:
+def write_to_quarantine(spark, records: list[dict], target_table: str, violation_type: str, source_table: str) -> int:
     """
     Write violating records to quarantine table.
 
@@ -145,8 +144,7 @@ def write_to_quarantine(spark, records: list[dict], target_table: str,
 # ---------------------------------------------------------------------------
 # Run Quarantine Checks for One Rule Set
 # ---------------------------------------------------------------------------
-def run_quarantine_checks(spark, rule_name: str, rule_config: dict,
-                         cob_dt: str) -> list[dict]:
+def run_quarantine_checks(spark, rule_name: str, rule_config: dict, cob_dt: str) -> list[dict]:
     """
     Run all quarantine checks for a rule set.
 
@@ -180,10 +178,7 @@ def run_quarantine_checks(spark, rule_name: str, rule_config: dict,
 
         if violating_records:
             # Write to quarantine table
-            rows_written = write_to_quarantine(
-                spark, violating_records, target_table,
-                violation_name, source_table
-            )
+            rows_written = write_to_quarantine(spark, violating_records, target_table, violation_name, source_table)
 
             result = {
                 "rule_name": rule_name,
@@ -282,8 +277,7 @@ def main():
     # Filter by layer if needed
     if layer != "all":
         quarantine_rules = {
-            k: v for k, v in quarantine_rules.items()
-            if v.get("source_table", "").startswith(f"lakehouse.{layer}.")
+            k: v for k, v in quarantine_rules.items() if v.get("source_table", "").startswith(f"lakehouse.{layer}.")
         }
 
     log.info(f"Checking {len(quarantine_rules)} rule sets ...")

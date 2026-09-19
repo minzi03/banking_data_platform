@@ -105,15 +105,14 @@ SILVER_JOB_ORDER = [
 JOB_TYPE_MAP = {
     "scd_type1": "code_etl.silver.base_job.scd_type1",
     "scd_type2": "code_etl.silver.base_job.scd_type2",
-    "fact_txn":  "code_etl.silver.base_job.fact_txn",
+    "fact_txn": "code_etl.silver.base_job.fact_txn",
 }
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Silver Bootstrap Initial Load")
     parser.add_argument("--cob_dt", required=True, help="Business date YYYY-MM-DD")
-    parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit",
-                        help="Path to spark-submit command")
+    parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit", help="Path to spark-submit command")
     return parser.parse_args()
 
 
@@ -126,20 +125,26 @@ def run_silver_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> boo
 
     cmd = [
         spark_submit,
-        "--master", "spark://spark-master:7077",
-        "--deploy-mode", "client",
-        "--conf", "spark.driver.memory=512m",
-        "--conf", "spark.executor.memory=768m",
+        "--master",
+        "spark://spark-master:7077",
+        "--deploy-mode",
+        "client",
+        "--conf",
+        "spark.driver.memory=512m",
+        "--conf",
+        "spark.executor.memory=768m",
         f"code_etl/silver/base_job/{job_type}.py",
-        "--config", config_path,
-        "--cob_dt", cob_dt,
+        "--config",
+        config_path,
+        "--cob_dt",
+        cob_dt,
     ]
 
     logger.info(f"Running: {name} ({job_type})")
     logger.info(f"  Config: {config_path}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
         if result.returncode == 0:
             logger.info(f"  ✓ {name} completed successfully")
             return True

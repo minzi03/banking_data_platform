@@ -24,8 +24,7 @@ sys.modules["airflow.providers.postgres.operators.postgres"] = MagicMock()
 
 # Import via importlib
 _spec = importlib.util.spec_from_file_location(
-    "etl_flag_mod",
-    str(PROJECT_ROOT / "airflow" / "plugins" / "etl_flag.py")
+    "etl_flag_mod", str(PROJECT_ROOT / "airflow" / "plugins" / "etl_flag.py")
 )
 _efmod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_efmod)

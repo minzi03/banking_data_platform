@@ -111,9 +111,7 @@ def assert_source_snapshots(spark, config: dict, cob_dt: str, logger) -> None:
     missing = []
     for ref in required:
         table = _qualify(ref, catalog)
-        found = spark.sql(
-            f"SELECT 1 FROM {table} WHERE cob_dt = DATE '{cob_dt}' LIMIT 1"
-        ).take(1)
+        found = spark.sql(f"SELECT 1 FROM {table} WHERE cob_dt = DATE '{cob_dt}' LIMIT 1").take(1)
         if not found:
             missing.append(table)
         else:
@@ -175,7 +173,7 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     Trước khi transform: assert snapshot nguồn tồn tại (fail loud).
     Trước khi ghi: assert kết quả không rỗng (nếu config yêu cầu).
     """
-    target   = get_target_table(config)
+    target = get_target_table(config)
     job_type = config["job"]["type"]
 
     assert_source_snapshots(spark, config, cob_dt, logger)

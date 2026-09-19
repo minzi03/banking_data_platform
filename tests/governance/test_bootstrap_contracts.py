@@ -53,9 +53,7 @@ def _argument_default(source_path: Path, flag: str) -> str | None:
             continue
         for keyword in node.keywords:
             if keyword.arg == "default":
-                if isinstance(keyword.value, ast.Constant) and isinstance(
-                    keyword.value.value, str
-                ):
+                if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
                     return keyword.value.value
                 return ""
     return None
@@ -86,10 +84,5 @@ def test_bootstrap_layers_agree_on_spark_submit():
     Hai file anh em phải cùng một giá trị. Test ở trên đã chặn tên trần; test
     này chặn kiểu trôi tinh vi hơn — hai đường dẫn tuyệt đối nhưng khác nhau.
     """
-    defaults = {
-        layer: _argument_default(path, "--spark_submit")
-        for layer, path in BOOTSTRAPS.items()
-    }
-    assert len(set(defaults.values())) == 1, (
-        f"bootstrap các layer bất đồng về spark-submit: {defaults}"
-    )
+    defaults = {layer: _argument_default(path, "--spark_submit") for layer, path in BOOTSTRAPS.items()}
+    assert len(set(defaults.values())) == 1, f"bootstrap các layer bất đồng về spark-submit: {defaults}"

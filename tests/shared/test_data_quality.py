@@ -8,6 +8,7 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_dq_rules_yaml(tmp_path):
     """Create a minimal DQ rules YAML for testing."""
@@ -46,6 +47,7 @@ tables:
 # Test CHECK_DISPATCH
 # ---------------------------------------------------------------------------
 
+
 class TestCheckDispatch:
     def test_all_check_types_registered(self):
         """All standard check types should be registered."""
@@ -76,6 +78,7 @@ class TestCheckDispatch:
 # Test LAYER_PREFIXES
 # ---------------------------------------------------------------------------
 
+
 class TestLayerPrefixes:
     def test_layer_prefixes(self):
         from code_etl.shared.ops.data_quality import LAYER_PREFIXES
@@ -88,6 +91,7 @@ class TestLayerPrefixes:
 # ---------------------------------------------------------------------------
 # Test print_summary
 # ---------------------------------------------------------------------------
+
 
 class TestPrintSummary:
     def test_print_summary_all_pass(self):

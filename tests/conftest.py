@@ -41,6 +41,7 @@ if str(GOVERNANCE_ROOT) not in sys.path:
 # Fixtures: Temporary YAML config files
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_bronze_config(tmp_path):
     """Create a minimal Bronze YAML config for testing."""
@@ -200,6 +201,7 @@ def sample_dq_rules(tmp_path):
 # Fixtures: Mock Spark session
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_spark():
     """Create a mock SparkSession with common behaviors."""
@@ -239,6 +241,7 @@ def mock_spark_with_df(mock_spark):
 # ---------------------------------------------------------------------------
 # Fixtures: Sample data
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_customer_data():

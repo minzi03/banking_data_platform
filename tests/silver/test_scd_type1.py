@@ -9,6 +9,7 @@ Note: validate_config is a pure function — we import it directly.
 get_target_table comes from common_utils which has no heavy deps.
 """
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -24,7 +25,6 @@ ETL_ROOT = PROJECT_ROOT / "code_etl"
 _spec_src = (ETL_ROOT / "silver" / "base_job" / "scd_type1.py").read_text(encoding="utf-8")
 
 # Extract validate_config source code (lines 21-30)
-import ast
 
 # Parse the full module to extract just validate_config
 tree = ast.parse(_spec_src)
@@ -52,8 +52,7 @@ sys.modules["utils.logger"] = MagicMock()
 sys.modules["utils.sql_renderer"] = MagicMock()
 
 _spec_common = importlib.util.spec_from_file_location(
-    "common_utils_silver",
-    str(ETL_ROOT / "silver" / "base_job" / "common_utils.py")
+    "common_utils_silver", str(ETL_ROOT / "silver" / "base_job" / "common_utils.py")
 )
 _common_mod = importlib.util.module_from_spec(_spec_common)
 _spec_common.loader.exec_module(_common_mod)

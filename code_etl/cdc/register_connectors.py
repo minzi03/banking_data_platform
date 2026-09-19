@@ -39,12 +39,7 @@ def create_connector(url: str, connector_name: str, config: dict) -> bool:
     api_url = f"{url}/connectors/{connector_name}/config"
 
     try:
-        response = requests.put(
-            api_url,
-            json=config,
-            headers={"Content-Type": "application/json"},
-            timeout=30
-        )
+        response = requests.put(api_url, json=config, headers={"Content-Type": "application/json"}, timeout=30)
 
         if response.status_code in [200, 201]:
             print(f"✓ Connector '{connector_name}' created/updated successfully")
@@ -72,15 +67,9 @@ def get_connector_status(url: str, connector_name: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description="Register Debezium CDC connectors")
     parser.add_argument(
-        "--debezium-url",
-        default="http://debezium:8083",
-        help="Debezium Connect URL (default: http://debezium:8083)"
+        "--debezium-url", default="http://debezium:8083", help="Debezium Connect URL (default: http://debezium:8083)"
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print connector configs without registering"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="Print connector configs without registering")
     args = parser.parse_args()
 
     debezium_url = args.debezium_url.rstrip("/")
@@ -122,8 +111,8 @@ def main():
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",
                 "transforms.unwrap.delete.handling.mode": "rewrite",
-                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms"
-            }
+                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms",
+            },
         },
         {
             "name": "banking-card-crm",
@@ -137,11 +126,7 @@ def main():
                 "topic.prefix": "postgresql.banking",
                 "plugin.name": "pgoutput",
                 "schema.include.list": "card_crm",
-                "table.include.list": (
-                    "card_crm.card,"
-                    "card_crm.card_txn,"
-                    "card_crm.crm_interaction"
-                ),
+                "table.include.list": ("card_crm.card,card_crm.card_txn,card_crm.crm_interaction"),
                 "slot.name": "debezium_card_crm",
                 "publication.name": "debezium_pub_card",
                 "publication.autocreate.mode": "disabled",
@@ -154,8 +139,8 @@ def main():
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",
                 "transforms.unwrap.delete.handling.mode": "rewrite",
-                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms"
-            }
+                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms",
+            },
         },
         {
             "name": "banking-digital-banking",
@@ -170,9 +155,7 @@ def main():
                 "plugin.name": "pgoutput",
                 "schema.include.list": "digital_banking",
                 "table.include.list": (
-                    "digital_banking.online_transaction,"
-                    "digital_banking.device,"
-                    "digital_banking.support_ticket"
+                    "digital_banking.online_transaction,digital_banking.device,digital_banking.support_ticket"
                 ),
                 "slot.name": "debezium_digital_banking",
                 "publication.name": "debezium_pub_digital",
@@ -186,9 +169,9 @@ def main():
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",
                 "transforms.unwrap.delete.handling.mode": "rewrite",
-                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms"
-            }
-        }
+                "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms",
+            },
+        },
     ]
 
     # =========================================================================

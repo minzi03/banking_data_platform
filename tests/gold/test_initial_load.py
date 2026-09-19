@@ -33,8 +33,7 @@ sys.modules.update(_STUBBED)
 try:
     # Import via importlib
     _spec = importlib.util.spec_from_file_location(
-        "initial_load_mod",
-        str(PROJECT_ROOT / "code_etl" / "gold" / "bootstrap" / "initial_load.py")
+        "initial_load_mod", str(PROJECT_ROOT / "code_etl" / "gold" / "bootstrap" / "initial_load.py")
     )
     _ilmod = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_ilmod)
@@ -83,8 +82,7 @@ class TestGoldJobOrder:
         """Phase 1 jobs should not have depends_on."""
         for job in GOLD_JOB_ORDER:
             if job["name"] != "campaign_target":
-                assert "depends_on" not in job, \
-                    f"Phase 1 job '{job['name']}' should not have depends_on"
+                assert "depends_on" not in job, f"Phase 1 job '{job['name']}' should not have depends_on"
 
     def test_mart360_jobs_count(self):
         """Should have 5 mart360 jobs."""
@@ -132,9 +130,7 @@ class TestParseArguments:
         """
         with patch("sys.argv", ["initial_load.py", "--cob_dt", "2025-01-15"]):
             args = parse_arguments()
-            assert args.spark_submit.startswith("/"), (
-                f"default {args.spark_submit!r} phụ thuộc PATH"
-            )
+            assert args.spark_submit.startswith("/"), f"default {args.spark_submit!r} phụ thuộc PATH"
             assert args.spark_submit.endswith("/spark-submit")
 
 
@@ -167,6 +163,7 @@ class TestRunGoldJob:
         job_def = {"name": "test_job", "type": "mart360", "config": "test.yml"}
 
         import subprocess
+
         with patch.object(_ilmod.subprocess, "run", side_effect=subprocess.TimeoutExpired(cmd="test", timeout=600)):
             result = run_gold_job(job_def, "2025-01-15", "spark-submit", mock_logger)
             assert result is False

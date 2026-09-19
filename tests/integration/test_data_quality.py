@@ -19,14 +19,11 @@ import pytest
 # Helper: Run Trino query
 # ---------------------------------------------------------------------------
 
+
 def run_trino_query(query: str, catalog: str = "iceberg", schema: str = "bronze") -> list:
     """Execute a Trino query and return results as list of tuples."""
-    cmd = [
-        "docker", "exec", "ci-trino",
-        "trino", f"--catalog={catalog}", f"--schema={schema}",
-        f"--execute={query}"
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    cmd = ["docker", "exec", "ci-trino", "trino", f"--catalog={catalog}", f"--schema={schema}", f"--execute={query}"]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
     if result.returncode != 0:
         raise RuntimeError(f"Trino query failed: {result.stderr}")
 
@@ -36,19 +33,13 @@ def run_trino_query(query: str, catalog: str = "iceberg", schema: str = "bronze"
 
 def get_null_count(table: str, column: str, schema: str = "bronze") -> int:
     """Get count of NULL values in a column."""
-    result = run_trino_query(
-        f"SELECT COUNT(*) FROM {table} WHERE {column} IS NULL",
-        schema=schema
-    )
+    result = run_trino_query(f"SELECT COUNT(*) FROM {table} WHERE {column} IS NULL", schema=schema)
     return int(result[0]) if result else 0
 
 
 def get_distinct_count(table: str, column: str, schema: str = "bronze") -> int:
     """Get count of distinct values in a column."""
-    result = run_trino_query(
-        f"SELECT COUNT(DISTINCT {column}) FROM {table}",
-        schema=schema
-    )
+    result = run_trino_query(f"SELECT COUNT(DISTINCT {column}) FROM {table}", schema=schema)
     return int(result[0]) if result else 0
 
 
@@ -78,14 +69,14 @@ def assert_unique_grain(table: str, key: str, schema: str = "bronze") -> None:
         schema=schema,
     )
     assert not duplicates, (
-        f"{schema}.{table}: ({key}, cob_dt) không duy nhất — "
-        f"{len(duplicates)} nhóm trùng (5 đầu): {duplicates}"
+        f"{schema}.{table}: ({key}, cob_dt) không duy nhất — {len(duplicates)} nhóm trùng (5 đầu): {duplicates}"
     )
 
 
 # ---------------------------------------------------------------------------
 # Row Count Tests
 # ---------------------------------------------------------------------------
+
 
 class TestRowCounts:
     """Test minimum row count thresholds."""
@@ -125,6 +116,7 @@ class TestRowCounts:
 # Null Check Tests
 # ---------------------------------------------------------------------------
 
+
 class TestNullChecks:
     """Test that critical columns have no NULLs."""
 
@@ -163,6 +155,7 @@ class TestNullChecks:
 # Unique Constraint Tests
 # ---------------------------------------------------------------------------
 
+
 class TestUniqueConstraints:
     """Test that key columns have unique values."""
 
@@ -193,13 +186,13 @@ class TestUniqueConstraints:
         """dim_customer.customer_sk should be unique."""
         count = get_row_count("dim_customer", schema="silver")
         distinct = get_distinct_count("dim_customer", "customer_sk", schema="silver")
-        assert count == distinct, \
-            f"dim_customer.customer_sk has duplicates: {count} rows, {distinct} distinct"
+        assert count == distinct, f"dim_customer.customer_sk has duplicates: {count} rows, {distinct} distinct"
 
 
 # ---------------------------------------------------------------------------
 # Referential Integrity Tests
 # ---------------------------------------------------------------------------
+
 
 class TestReferentialIntegrity:
     """Test referential integrity between tables."""
@@ -207,26 +200,32 @@ class TestReferentialIntegrity:
     @pytest.mark.integration
     def test_account_customer_referential_integrity(self):
         """All account customer_ids should exist in core_customer."""
-        result = run_trino_query("""
+        result = run_trino_query(
+            """
             SELECT COUNT(*)
             FROM iceberg.bronze.core_account a
             LEFT JOIN iceberg.bronze.core_customer c
               ON a.customer_id = c.customer_id
             WHERE c.customer_id IS NULL
-        """, schema="bronze")
+        """,
+            schema="bronze",
+        )
         orphan_count = int(result[0]) if result else 0
         assert orphan_count == 0, f"Found {orphan_count} accounts with invalid customer_id"
 
     @pytest.mark.integration
     def test_silver_dim_branchReferential_integrity(self):
         """Silver dim_branch branch_codes should exist in Bronze."""
-        result = run_trino_query("""
+        result = run_trino_query(
+            """
             SELECT COUNT(*)
             FROM iceberg.silver.dim_branch s
             LEFT JOIN iceberg.bronze.core_branch b
               ON s.branch_code = b.branch_code
             WHERE b.branch_code IS NULL
-        """, schema="silver")
+        """,
+            schema="silver",
+        )
         orphan_count = int(result[0]) if result else 0
         assert orphan_count == 0, f"Found {orphan_count} silver branches not in bronze"
 
@@ -235,16 +234,14 @@ class TestReferentialIntegrity:
 # Data Freshness Tests
 # ---------------------------------------------------------------------------
 
+
 class TestDataFreshness:
     """Test that data is recent (has current cob_dt)."""
 
     @pytest.mark.integration
     def test_bronze_has_recent_data(self):
         """Bronze tables should have data with recent cob_dt."""
-        result = run_trino_query(
-            "SELECT MAX(cob_dt) FROM core_customer",
-            schema="bronze"
-        )
+        result = run_trino_query("SELECT MAX(cob_dt) FROM core_customer", schema="bronze")
         max_cob_dt = result[0] if result else None
         assert max_cob_dt is not None, "core_customer has no data"
         # Just check it's not NULL - actual date validation depends on data generation
@@ -253,9 +250,6 @@ class TestDataFreshness:
     @pytest.mark.integration
     def test_silver_has_current_records(self):
         """Silver SCD2 tables should have current records."""
-        result = run_trino_query(
-            "SELECT COUNT(*) FROM dim_customer WHERE is_current = 1",
-            schema="silver"
-        )
+        result = run_trino_query("SELECT COUNT(*) FROM dim_customer WHERE is_current = 1", schema="silver")
         current_count = int(result[0]) if result else 0
         assert current_count > 0, "dim_customer has no current records"

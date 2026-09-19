@@ -146,8 +146,7 @@ class TestRuleA_SnapshotPinningIsUniversal:
         ]
         assert not violations, (
             "Thiếu `cob_dt = DATE '{{ cob_dt }}'` — Silver fact là full snapshot "
-            "mỗi cob_dt nên aggregate sẽ cộng chồng qua các ngày:\n  "
-            + "\n  ".join(violations)
+            "mỗi cob_dt nên aggregate sẽ cộng chồng qua các ngày:\n  " + "\n  ".join(violations)
         )
 
     def test_gold_to_gold_scopes_pin_cob_dt(self):
@@ -158,8 +157,7 @@ class TestRuleA_SnapshotPinningIsUniversal:
         ]
         assert not violations, (
             "Gold table cũng partition theo cob_dt — đọc lại mà không chốt "
-            "snapshot sẽ kéo toàn bộ lịch sử vào một partition:\n  "
-            + "\n  ".join(violations)
+            "snapshot sẽ kéo toàn bộ lịch sử vào một partition:\n  " + "\n  ".join(violations)
         )
 
     def test_every_snapshot_source_is_declared_for_runtime_guard(self):
@@ -175,9 +173,7 @@ class TestRuleA_SnapshotPinningIsUniversal:
         for path in gold_config_paths():
             config = yaml.safe_load(path.read_text(encoding="utf-8"))
             sql = config.get("sql", "")
-            declared = set(
-                (config.get("validation") or {}).get("require_snapshots") or []
-            )
+            declared = set((config.get("validation") or {}).get("require_snapshots") or [])
             used = {f"silver.{t}" for t in SILVER_FACT_REF.findall(sql)}
             used |= {f"gold.{t}" for t in GOLD_REF.findall(sql)}
             undeclared = used - declared
@@ -185,8 +181,7 @@ class TestRuleA_SnapshotPinningIsUniversal:
                 violations.append(f"{path.name}: {sorted(undeclared)}")
         assert not violations, (
             "Snapshot-backed source chưa khai báo trong validation.require_snapshots "
-            "→ gold_job.py sẽ không fail loud khi thiếu partition:\n  "
-            + "\n  ".join(violations)
+            "→ gold_job.py sẽ không fail loud khi thiếu partition:\n  " + "\n  ".join(violations)
         )
 
 
@@ -303,8 +298,7 @@ class TestBusinessDateDerivationIsExplicit:
                     violations.append(f"{path.name}: {m.group(0)}")
         assert not violations, (
             "CAST trần trên event timestamp — bucket theo session timezone.\n"
-            f"Dùng: CAST(from_utc_timestamp(<ts>, '{BUSINESS_TZ}') AS DATE)\n  "
-            + "\n  ".join(violations)
+            f"Dùng: CAST(from_utc_timestamp(<ts>, '{BUSINESS_TZ}') AS DATE)\n  " + "\n  ".join(violations)
         )
 
     def test_business_date_uses_explicit_timezone(self):
@@ -313,8 +307,7 @@ class TestBusinessDateDerivationIsExplicit:
         for path in gold_config_paths():
             sql = load_sql(path)
             uses_event_date = any(
-                re.search(rf"from_utc_timestamp\(\s*(\w+\.)?{col}", sql)
-                for col in EVENT_TIMESTAMP_COLUMNS
+                re.search(rf"from_utc_timestamp\(\s*(\w+\.)?{col}", sql) for col in EVENT_TIMESTAMP_COLUMNS
             )
             if uses_event_date and BUSINESS_TZ not in sql:
                 missing.append(path.name)
@@ -330,7 +323,7 @@ class TestBusinessDateDerivationIsExplicit:
             sql = load_sql(path)
             for m in re.finditer(r"(\w+)\s+AS\s+cob_dt", sql, re.IGNORECASE):
                 expr_start = max(0, m.start() - 80)
-                if any(c in sql[expr_start:m.start()] for c in EVENT_TIMESTAMP_COLUMNS):
+                if any(c in sql[expr_start : m.start()] for c in EVENT_TIMESTAMP_COLUMNS):
                     violations.append(f"{path.name}: {m.group(0)}")
         assert not violations, f"cob_dt derive từ event timestamp: {violations}"
 
@@ -347,6 +340,5 @@ class TestBusinessDateDerivationIsExplicit:
                 if re.search(rf"MAX\(\s*from_utc_timestamp\(\s*(\w+\.)?{col}", sql):
                     wrong.append(f"{path.name}: MAX(from_utc_timestamp({col}...))")
         assert not wrong, (
-            "instant aggregate bị bọc timezone conversion — đó là business-date "
-            f"semantics áp nhầm lên instant: {wrong}"
+            f"instant aggregate bị bọc timezone conversion — đó là business-date semantics áp nhầm lên instant: {wrong}"
         )

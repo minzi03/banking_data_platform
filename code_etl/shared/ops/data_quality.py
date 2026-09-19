@@ -31,7 +31,7 @@ import yaml
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
-from spark.spark_session import get_spark_session
+from spark.spark_session import get_spark_session  # noqa: E402
 
 basicConfig(
     level=INFO,
@@ -59,13 +59,14 @@ LAYER_PREFIXES = {
 # ---------------------------------------------------------------------------
 def load_rules(path: str) -> dict[str, Any]:
     """Load DQ rules from YAML file."""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 # ---------------------------------------------------------------------------
 # Individual Check Executors
 # ---------------------------------------------------------------------------
+
 
 def check_row_count(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check row count >= min_rows."""
@@ -142,9 +143,11 @@ def check_range(spark, table: str, rule: dict) -> tuple[str, str, str]:
             return "FAIL", "N/A", f"Column '{col_name}' not found"
 
         total = df.count()  # noqa: F841
-        out_of_range = df.filter(
-            (df[col_name] < min_val) | (df[col_name] > max_val)
-        ).count() if min_val is not None and max_val is not None else 0
+        out_of_range = (
+            df.filter((df[col_name] < min_val) | (df[col_name] > max_val)).count()
+            if min_val is not None and max_val is not None
+            else 0
+        )
 
         if min_val is not None and max_val is None:
             out_of_range = df.filter(df[col_name] < min_val).count()
@@ -180,9 +183,7 @@ def check_referential_integrity(spark, table: str, rule: dict) -> tuple[str, str
         # Find orphan records
         source_vals = df.select(col_name).distinct()
         ref_vals = ref_df.select(ref_column).distinct()
-        orphans = source_vals.join(
-            ref_vals, source_vals[col_name] == ref_vals[ref_column], "left_anti"
-        ).count()
+        orphans = source_vals.join(ref_vals, source_vals[col_name] == ref_vals[ref_column], "left_anti").count()
 
         if orphans > 0:
             return "FAIL", "0", f"{orphans} orphan records: {col_name} not in {ref_table}.{ref_column}"
@@ -194,6 +195,7 @@ def check_referential_integrity(spark, table: str, rule: dict) -> tuple[str, str
 # ---------------------------------------------------------------------------
 # New Check Types — Phase 1: Governance & Data Quality
 # ---------------------------------------------------------------------------
+
 
 def check_anomaly_detection(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check for statistical anomalies (volume deviation, outliers)."""
@@ -275,11 +277,22 @@ def check_reconciliation(spark, table: str, rule: dict) -> tuple[str, str, str]:
         if not source_table:
             return "FAIL", "N/A", "Missing source_table in rule"
 
-        source_count = spark.table(source_table).select(source_key).distinct().count()
-        target_count = spark.table(table).select(target_key).distinct().count()
+        # `compare` selects the population being reconciled. Previously it was
+        # read and then ignored — every rule reconciled distinct keys, so a rule
+        # declaring `compare: row_count` silently checked something else.
+        if compare == "row_count":
+            source_count = spark.table(source_table).count()
+            target_count = spark.table(table).count()
+        else:
+            source_count = spark.table(source_table).select(source_key).distinct().count()
+            target_count = spark.table(table).select(target_key).distinct().count()
+
         diff_pct = abs(source_count - target_count) / max(source_count, 1) * 100
 
-        details = f"Source({source_table}): {source_count}, Target({table}): {target_count}, Diff: {diff_pct:.1f}%"
+        details = (
+            f"Source({source_table}): {source_count}, Target({table}): {target_count}, "
+            f"Diff: {diff_pct:.1f}% [{compare}]"
+        )
         if diff_pct <= tolerance_pct:
             return "PASS", str(source_count), details
         return "FAIL", str(source_count), details
@@ -306,6 +319,7 @@ CHECK_DISPATCH = {
 # Run All Checks for One Table
 # ---------------------------------------------------------------------------
 
+
 def run_checks_for_table(spark, table: str, checks: list[dict], cob_dt: str) -> list[dict[str, Any]]:
     """Run all DQ checks for a single table, return result records."""
     results = []
@@ -325,16 +339,18 @@ def run_checks_for_table(spark, table: str, checks: list[dict], cob_dt: str) -> 
         if severity == "WARN" and status == "FAIL":
             status = "WARN"
 
-        results.append({
-            "check_name": check_name,
-            "table_name": table,
-            "check_status": status,
-            "expected_value": expected,
-            "actual_value": details,
-            "details": details,
-            "cob_dt": cob_dt,
-            "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        results.append(
+            {
+                "check_name": check_name,
+                "table_name": table,
+                "check_status": status,
+                "expected_value": expected,
+                "actual_value": details,
+                "details": details,
+                "cob_dt": cob_dt,
+                "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
 
         icon = "✅" if status == "PASS" else "⚠️" if status == "WARN" else "❌"
         log.info(f"    {icon} {check_name}: {status} — {details}")
@@ -345,6 +361,7 @@ def run_checks_for_table(spark, table: str, checks: list[dict], cob_dt: str) -> 
 # ---------------------------------------------------------------------------
 # Write Results to PostgreSQL
 # ---------------------------------------------------------------------------
+
 
 def write_results_to_pg(results: list[dict[str, Any]]) -> None:
     """Write DQ results to opslakehouse.data_quality_log via JDBC."""
@@ -376,27 +393,31 @@ def write_results_to_pg(results: list[dict[str, Any]]) -> None:
     # Build rows with proper types
     rows = []
     for r in results:
-        rows.append(Row(
-            check_name=r["check_name"],
-            table_name=r["table_name"],
-            check_status=r["check_status"],
-            expected_value=r["expected_value"],
-            actual_value=r["actual_value"],
-            details=r["details"],
-            cob_dt=datetime.datetime.strptime(cob_dt_str, "%Y-%m-%d").date(),
-            checked_at=datetime.datetime.strptime(r["checked_at"], "%Y-%m-%d %H:%M:%S"),
-        ))
+        rows.append(
+            Row(
+                check_name=r["check_name"],
+                table_name=r["table_name"],
+                check_status=r["check_status"],
+                expected_value=r["expected_value"],
+                actual_value=r["actual_value"],
+                details=r["details"],
+                cob_dt=datetime.datetime.strptime(cob_dt_str, "%Y-%m-%d").date(),
+                checked_at=datetime.datetime.strptime(r["checked_at"], "%Y-%m-%d %H:%M:%S"),
+            )
+        )
 
-    schema = StructType([
-        StructField("check_name", StringType()),
-        StructField("table_name", StringType()),
-        StructField("check_status", StringType()),
-        StructField("expected_value", StringType()),
-        StructField("actual_value", StringType()),
-        StructField("details", StringType()),
-        StructField("cob_dt", DateType()),
-        StructField("checked_at", TimestampType()),
-    ])
+    schema = StructType(
+        [
+            StructField("check_name", StringType()),
+            StructField("table_name", StringType()),
+            StructField("check_status", StringType()),
+            StructField("expected_value", StringType()),
+            StructField("actual_value", StringType()),
+            StructField("details", StringType()),
+            StructField("cob_dt", DateType()),
+            StructField("checked_at", TimestampType()),
+        ]
+    )
     df = spark.createDataFrame(rows, schema=schema)
 
     # Delete existing results for same cob_dt + same tables (idempotent re-runs)
@@ -410,9 +431,7 @@ def write_results_to_pg(results: list[dict[str, Any]]) -> None:
             props["password"],
         )
         stmt = conn.createStatement()
-        stmt.executeUpdate(
-            f"DELETE FROM {DQ_LOG_TABLE} WHERE cob_dt = '{cob_dt_str}' AND table_name IN ({tables_str})"
-        )
+        stmt.executeUpdate(f"DELETE FROM {DQ_LOG_TABLE} WHERE cob_dt = '{cob_dt_str}' AND table_name IN ({tables_str})")
         stmt.close()
         conn.close()
     except Exception as e:
@@ -427,6 +446,7 @@ def write_results_to_pg(results: list[dict[str, Any]]) -> None:
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
 
 def print_summary(results: list[dict[str, Any]]) -> tuple[int, int, int]:
     """Print summary and return (pass, warn, fail) counts."""
@@ -455,6 +475,7 @@ def print_summary(results: list[dict[str, Any]]) -> tuple[int, int, int]:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Data Quality Validation")
     parser.add_argument("--cob_dt", required=True, help="Business date (YYYY-MM-DD)")
@@ -476,6 +497,7 @@ def parse_args():
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     args = parse_args()
     cob_dt = args.cob_dt
@@ -493,9 +515,7 @@ def main():
         target_tables = all_tables
     else:
         prefix = LAYER_PREFIXES[layer]
-        target_tables = {
-            k: v for k, v in all_tables.items() if k.startswith(prefix)
-        }
+        target_tables = {k: v for k, v in all_tables.items() if k.startswith(prefix)}
 
     log.info(f"Checking {len(target_tables)} tables ...")
 
