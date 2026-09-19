@@ -2,13 +2,13 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 03c8971490cc6100bafe8ea080f32436c42aea0f
+    git_commit: f7ce77e85efcec8f843c0bc1ed5f25bd95468798
     git_branch: fix/materialize-risk-marts-and-dbt-tests
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-18T16:47:46Z'
-    requested_cob_dt: '2026-09-16'
+    generated_at_utc: '2026-09-19T05:12:08Z'
+    requested_cob_dt: '2026-09-17'
     verification_scope: full
   environment:
     execution_mode: local-docker-compose
@@ -36,10 +36,10 @@ manifest:
 
       '
   snapshot:
-    requested_cob_dt: '2026-09-16'
-    bronze_max_cob_dt: '2026-09-16'
-    silver_max_cob_dt: '2026-09-16'
-    gold_max_cob_dt: '2026-09-16'
+    requested_cob_dt: '2026-09-17'
+    bronze_max_cob_dt: '2026-09-17'
+    silver_max_cob_dt: '2026-09-17'
+    gold_max_cob_dt: '2026-09-17'
     bronze_partition_exists: true
     silver_partition_exists: true
     gold_partition_exists: true
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 3
+      value: 4
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
