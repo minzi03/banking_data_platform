@@ -95,87 +95,81 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
         col_type = col_def.get("type", "string")
 
         if col_type == "long":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("long").alias(col_name)
-            )
+            select_expressions.append(F.col(f"payload.{col_name}").cast("long").alias(col_name))
         elif col_type == "decimal":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("decimal(18,2)").alias(col_name)
-            )
+            select_expressions.append(F.col(f"payload.{col_name}").cast("decimal(18,2)").alias(col_name))
         elif col_type == "int":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("int").alias(col_name)
-            )
+            select_expressions.append(F.col(f"payload.{col_name}").cast("int").alias(col_name))
         elif col_type == "boolean":
-            select_expressions.append(
-                F.col(f"payload.{col_name}").cast("boolean").alias(col_name)
-            )
+            select_expressions.append(F.col(f"payload.{col_name}").cast("boolean").alias(col_name))
         else:
-            select_expressions.append(
-                F.col(f"payload.{col_name}").alias(col_name)
-            )
+            select_expressions.append(F.col(f"payload.{col_name}").alias(col_name))
 
     enriched_df = parsed_df.select(*select_expressions)
 
     # ── Validation: classify each row ────────────────────────────────
     valid_ops = ["c", "u", "d", "r"]
 
-    validated_df = enriched_df.withColumn(
-        "_is_valid",
-        F.when(
-            # Check 1: __op must exist and be a known CDC operation
-            F.col("_raw_op").isNull()
-            | ~F.col("_raw_op").isin(valid_ops),
-            F.lit(False)
-        ).when(
-            # Check 2: __ts_ms must be parseable as long
-            F.col("_raw_ts_ms").isNull()
-            | F.col("_raw_ts_ms").cast("long").isNull(),
-            F.lit(False)
-        ).when(
-            # Check 3: raw payload must be non-null (JSON parseable)
-            F.col("_raw_payload").isNull(),
-            F.lit(False)
-        ).otherwise(F.lit(True))
-    ).withColumn(
-        "_error_type",
-        F.when(F.col("_raw_payload").isNull(), "PARSE_ERROR")
-         .when(F.col("_raw_op").isNull() | ~F.col("_raw_op").isin(valid_ops), "INVALID_OPERATION")
-         .when(F.col("_raw_ts_ms").isNull() | F.col("_raw_ts_ms").cast("long").isNull(), "INVALID_TIMESTAMP")
-         .otherwise(F.lit(None).cast("string"))
-    ).withColumn(
-        "_error_message",
-        F.when(F.col("_raw_payload").isNull(), F.concat(F.lit("JSON parse failed: "), F.col("_cdc_key")))
-         .when(F.col("_raw_op").isNull(), F.concat(F.lit("__op is null: "), F.col("_cdc_key")))
-         .when(~F.col("_raw_op").isin(valid_ops), F.concat(F.lit("Unknown __op="), F.col("_raw_op"), F.lit(": "), F.col("_cdc_key")))
-         .when(F.col("_raw_ts_ms").isNull(), F.concat(F.lit("__ts_ms is null: "), F.col("_cdc_key")))
-         .when(F.col("_raw_ts_ms").cast("long").isNull(), F.concat(F.lit("__ts_ms not numeric: "), F.col("_cdc_key"), F.lit(" value="), F.col("_raw_ts_ms")))
-         .otherwise(F.lit(None).cast("string"))
+    validated_df = (
+        enriched_df.withColumn(
+            "_is_valid",
+            F.when(
+                # Check 1: __op must exist and be a known CDC operation
+                F.col("_raw_op").isNull() | ~F.col("_raw_op").isin(valid_ops),
+                F.lit(False),
+            )
+            .when(
+                # Check 2: __ts_ms must be parseable as long
+                F.col("_raw_ts_ms").isNull() | F.col("_raw_ts_ms").cast("long").isNull(),
+                F.lit(False),
+            )
+            .when(
+                # Check 3: raw payload must be non-null (JSON parseable)
+                F.col("_raw_payload").isNull(),
+                F.lit(False),
+            )
+            .otherwise(F.lit(True)),
+        )
+        .withColumn(
+            "_error_type",
+            F.when(F.col("_raw_payload").isNull(), "PARSE_ERROR")
+            .when(F.col("_raw_op").isNull() | ~F.col("_raw_op").isin(valid_ops), "INVALID_OPERATION")
+            .when(F.col("_raw_ts_ms").isNull() | F.col("_raw_ts_ms").cast("long").isNull(), "INVALID_TIMESTAMP")
+            .otherwise(F.lit(None).cast("string")),
+        )
+        .withColumn(
+            "_error_message",
+            F.when(F.col("_raw_payload").isNull(), F.concat(F.lit("JSON parse failed: "), F.col("_cdc_key")))
+            .when(F.col("_raw_op").isNull(), F.concat(F.lit("__op is null: "), F.col("_cdc_key")))
+            .when(
+                ~F.col("_raw_op").isin(valid_ops),
+                F.concat(F.lit("Unknown __op="), F.col("_raw_op"), F.lit(": "), F.col("_cdc_key")),
+            )
+            .when(F.col("_raw_ts_ms").isNull(), F.concat(F.lit("__ts_ms is null: "), F.col("_cdc_key")))
+            .when(
+                F.col("_raw_ts_ms").cast("long").isNull(),
+                F.concat(F.lit("__ts_ms not numeric: "), F.col("_cdc_key"), F.lit(" value="), F.col("_raw_ts_ms")),
+            )
+            .otherwise(F.lit(None).cast("string")),
+        )
     )
 
     # ── Split valid / invalid ────────────────────────────────────────
-    valid_df = validated_df.filter(F.col("_is_valid") == True)
-    invalid_df = validated_df.filter(F.col("_is_valid") == False)
+    valid_df = validated_df.filter(F.col("_is_valid"))
+    invalid_df = validated_df.filter(~F.col("_is_valid"))
 
     # ── Prepare valid DataFrame (same schema as original cdc_streaming.py) ──
     valid_df = (
-        valid_df
-        .withColumn(
+        valid_df.withColumn(
             "__cdc_operation",
             F.when(F.col("_raw_op") == "c", "INSERT")
-             .when(F.col("_raw_op") == "u", "UPDATE")
-             .when(F.col("_raw_op") == "d", "DELETE")
-             .when(F.col("_raw_op") == "r", "SNAPSHOT")
-             .otherwise(F.col("_raw_op"))
+            .when(F.col("_raw_op") == "u", "UPDATE")
+            .when(F.col("_raw_op") == "d", "DELETE")
+            .when(F.col("_raw_op") == "r", "SNAPSHOT")
+            .otherwise(F.col("_raw_op")),
         )
-        .withColumn(
-            "__cdc_timestamp_ms",
-            F.col("_raw_ts_ms").cast("long")
-        )
-        .withColumn(
-            "__cdc_timestamp",
-            F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000)
-        )
+        .withColumn("__cdc_timestamp_ms", F.col("_raw_ts_ms").cast("long"))
+        .withColumn("__cdc_timestamp", F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000))
         # Preserve immutable Kafka coordinates and the raw envelope for audit,
         # replay, reconciliation, and regulatory investigation.
         .withColumn("source_topic", F.col("_kafka_topic"))
@@ -184,30 +178,38 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
         .withColumn("kafka_timestamp", F.col("_kafka_timestamp"))
         .withColumn("raw_payload", F.col("_raw_payload"))
         .withColumn("payload_hash", F.sha2(F.col("_raw_payload"), 256))
-        .drop("_cdc_key", "_raw_op", "_raw_ts_ms", "_raw_deleted",
-              "_kafka_topic", "_kafka_partition", "_kafka_offset", "_kafka_timestamp",
-              "_raw_payload", "_is_valid", "_error_type", "_error_message")
+        .drop(
+            "_cdc_key",
+            "_raw_op",
+            "_raw_ts_ms",
+            "_raw_deleted",
+            "_kafka_topic",
+            "_kafka_partition",
+            "_kafka_offset",
+            "_kafka_timestamp",
+            "_raw_payload",
+            "_is_valid",
+            "_error_type",
+            "_error_message",
+        )
     )
 
     # ── Prepare DLQ DataFrame ────────────────────────────────────────
     # Get entity name from config (table name without schema)
     entity = config["target"]["table"]
 
-    dlq_df = (
-        invalid_df
-        .select(
-            F.col("_kafka_topic").alias("source_topic"),
-            F.lit(entity).alias("entity"),
-            F.col("_raw_payload").alias("raw_payload"),
-            F.col("_error_type").alias("error_type"),
-            F.col("_error_message").alias("error_message"),
-            F.col("_raw_ts_ms").cast("long").alias("event_timestamp"),
-            F.col("_kafka_partition").alias("kafka_partition"),
-            F.col("_kafka_offset").alias("kafka_offset"),
-            F.col("_kafka_timestamp").alias("kafka_timestamp"),
-            F.current_timestamp().alias("failed_at"),
-            F.lit(batch_id).alias("spark_batch_id"),
-        )
+    dlq_df = invalid_df.select(
+        F.col("_kafka_topic").alias("source_topic"),
+        F.lit(entity).alias("entity"),
+        F.col("_raw_payload").alias("raw_payload"),
+        F.col("_error_type").alias("error_type"),
+        F.col("_error_message").alias("error_message"),
+        F.col("_raw_ts_ms").cast("long").alias("event_timestamp"),
+        F.col("_kafka_partition").alias("kafka_partition"),
+        F.col("_kafka_offset").alias("kafka_offset"),
+        F.col("_kafka_timestamp").alias("kafka_timestamp"),
+        F.current_timestamp().alias("failed_at"),
+        F.lit(batch_id).alias("spark_batch_id"),
     )
 
     return valid_df, dlq_df

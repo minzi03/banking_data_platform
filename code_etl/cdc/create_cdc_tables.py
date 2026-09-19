@@ -8,8 +8,7 @@ from pyspark.sql import SparkSession
 
 def main():
     spark = (
-        SparkSession.builder
-        .appName("Create_CDC_Tables")
+        SparkSession.builder.appName("Create_CDC_Tables")
         .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
         .config("spark.sql.catalog.lakehouse.type", "rest")
         .config("spark.sql.catalog.lakehouse.uri", "http://iceberg-rest:8181")
@@ -184,6 +183,7 @@ def main():
 
     print("\nAll CDC tables created successfully!")
     spark.stop()
+
 
 if __name__ == "__main__":
     main()

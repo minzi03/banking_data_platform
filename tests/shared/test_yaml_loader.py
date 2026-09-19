@@ -7,6 +7,7 @@ Covers:
 """
 
 import importlib
+import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -17,11 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ETL_SHARED = str(PROJECT_ROOT / "code_etl" / "shared")
 
 # Direct import via importlib to avoid package name conflicts
-import importlib.util
-
 _spec = importlib.util.spec_from_file_location(
-    "yaml_loader",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "yaml_loader.py")
+    "yaml_loader", str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "yaml_loader.py")
 )
 _yaml_loader = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_yaml_loader)
@@ -99,10 +97,7 @@ class TestLoadConfigPipeline:
 
     def test_load_with_jinja_rendering(self, sample_silver_scd1_config):
         """Should render Jinja variables in YAML."""
-        config = load_config_pipeline(
-            sample_silver_scd1_config,
-            context_vars={"cob_dt": "2025-01-15"}
-        )
+        config = load_config_pipeline(sample_silver_scd1_config, context_vars={"cob_dt": "2025-01-15"})
         assert "2025-01-15" in config["sql"]
         assert "{{ cob_dt }}" not in config["sql"]
 
@@ -126,7 +121,7 @@ sql: |
                 "source_schema": "core_banking",
                 "target_table": "account",
                 "cob_dt": "2025-06-01",
-            }
+            },
         )
         assert config["source"]["schema"] == "core_banking"
         assert config["target"]["table"] == "account"

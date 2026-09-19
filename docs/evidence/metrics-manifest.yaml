@@ -2,13 +2,13 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 0817d0c95706bd895c7c418129fb8db1e342b173
-    git_branch: docs/portfolio-executive-summary
+    git_commit: f7ce77e85efcec8f843c0bc1ed5f25bd95468798
+    git_branch: fix/materialize-risk-marts-and-dbt-tests
     git_dirty: false
     portfolio_release: portfolio-v1.1
   runtime:
-    generated_at_utc: '2026-09-06T19:26:20Z'
-    requested_cob_dt: '2026-09-06'
+    generated_at_utc: '2026-09-19T05:12:08Z'
+    requested_cob_dt: '2026-09-17'
     verification_scope: full
   environment:
     execution_mode: local-docker-compose
@@ -36,10 +36,10 @@ manifest:
 
       '
   snapshot:
-    requested_cob_dt: '2026-09-06'
-    bronze_max_cob_dt: '2026-09-06'
-    silver_max_cob_dt: '2026-09-06'
-    gold_max_cob_dt: '2026-09-06'
+    requested_cob_dt: '2026-09-17'
+    bronze_max_cob_dt: '2026-09-17'
+    silver_max_cob_dt: '2026-09-17'
+    gold_max_cob_dt: '2026-09-17'
     bronze_partition_exists: true
     silver_partition_exists: true
     gold_partition_exists: true
@@ -71,8 +71,8 @@ manifest:
 metrics:
   source:
     source_datasets:
-      value: 16
-      declared: 16
+      value: 17
+      declared: 17
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
       definition: 'Bronze ingestion workload configurations targeting source datasets.
@@ -100,8 +100,8 @@ metrics:
         value: null
   bronze:
     batch_tables:
-      value: 16
-      declared: 16
+      value: 17
+      declared: 17
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
       definition: Cùng definition với source.source_datasets — 1 workload = 1 bảng
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 1
+      value: 4
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
@@ -142,13 +142,13 @@ metrics:
   silver:
     dimensions:
       total:
-        value: 8
-        declared: 8
+        value: 10
+        declared: 10
         metric_type: static
         provenance: collector:silver_dimension_configs
       scd_type_1:
-        value: 6
-        declared: 6
+        value: 8
+        declared: 8
         metric_type: static
         provenance: collector:silver_dimension_configs
         definition: YAML có job.type == scd_type1.
@@ -160,8 +160,8 @@ metrics:
         definition: YAML có job.type == scd_type2.
     facts:
       total:
-        value: 5
-        declared: 5
+        value: 6
+        declared: 6
         metric_type: static
         provenance: collector:silver_fact_configs
         definition: YAML có job.type == fact_txn.
@@ -247,12 +247,13 @@ metrics:
       online_distinct: 500000
   gold:
     tables:
-      value: 10
-      declared: 10
+      value: 14
+      declared: 14
       metric_type: static
       provenance: collector:gold_ddl_tables
-      definition: '10 bảng history partitioned by cob_dt + 8 bảng *_current, đếm từ
-        CREATE TABLE trong docker/init_iceberg/03_ddl_gold.sql.
+      definition: '14 bảng history partitioned by cob_dt (6 mart360 + 4 segment +
+        1 time_analytics + 3 risk), đếm từ CREATE TABLE trong docker/init_iceberg/03_ddl_gold.sql.
+        Serving objects thuộc dbt, không đếm ở đây.
 
         '
     legacy_gold_current_objects:
@@ -295,7 +296,7 @@ metrics:
         mismatched_customers: 0
         tolerance: 0
       branch_monthly_recompute:
-        compared_buckets: 1500
+        compared_buckets: 1600
         mismatched_buckets: 0
         tolerance: 0
         definition: 'Cross-engine reconciliation cho CALENDAR bucket. branch_monthly_summary
@@ -343,20 +344,20 @@ metrics:
         duplicate_customer_ids: 0
   serving:
     gold_objects_declared:
-      value: 10
+      value: 14
       declared: null
       metric_type: static
       provenance: collector:gold_ddl_objects
-      definition: 'Số object gold khai báo trong 03_ddl_gold.sql = CREATE TABLE (18)
-        + CREATE VIEW (1) = 19.
+      definition: 'Số object gold khai báo trong 03_ddl_gold.sql = 14 CREATE TABLE.
+        Không còn CREATE VIEW / `*_current` legacy — tầng serving do dbt sở hữu.
 
         '
     objects_present:
-      value: 9
-      declared: 9
+      value: 13
+      declared: 13
       metric_type: runtime
       provenance: query:serving.objects_present
-      definition: Số object trong schema `serving` — 9 model dbt current-serving.
+      definition: Số object trong schema `serving` — 13 model dbt current-serving.
     current_snapshot_alignment:
       value: 0
       declared: null
@@ -371,7 +372,7 @@ metrics:
         '
     trino:
       visible_gold_objects:
-        value: 10
+        value: 14
         declared: null
         metric_type: runtime
         note: 'OBSERVATION, không còn invariant chặn. Nó ghi lại sự thật rằng DDL
@@ -423,12 +424,12 @@ metrics:
     collection_reason: null
     current_state:
       dim_customer_current:
-        rows: 10000
-        distinct_customer_id: 10000
+        rows: 0
+        distinct_customer_id: 0
         duplicate_keys: 0
       dim_account_current:
-        rows: 30000
-        distinct_account_id: 30000
+        rows: 0
+        distinct_account_id: 0
         duplicate_keys: 0
     timestamp_semantics:
       technical_timestamps:
@@ -506,18 +507,18 @@ metrics:
         '
   platform:
     airflow_dag_files:
-      value: 16
-      declared: 16
+      value: 20
+      declared: 20
       metric_type: static
       provenance: collector:airflow_dag_files
     airflow_dag_objects:
-      value: 17
-      declared: 17
+      value: 21
+      declared: 21
       metric_type: static
       provenance: collector:airflow_dag_objects
-      definition: 'cdc_streaming_dag.py định nghĩa 2 DAG. README dùng ''16 DAGs''
-        theo nghĩa số file — hợp lệ nếu đó là định nghĩa user-facing. Ghi cả hai để
-        không ai phải đoán.
+      definition: 'cdc_streaming_dag.py định nghĩa 2 DAG. README dùng ''21 DAGs''
+        theo nghĩa số DAG object đã load (`airflow dags list`) — hợp lệ nếu đó là
+        định nghĩa user-facing. Ghi cả hai để không ai phải đoán.
 
         '
     integration_tests:
@@ -535,13 +536,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 472
-        declared: 472
+        value: 476
+        declared: 476
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 568
+        value: null
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -555,14 +556,14 @@ metrics:
           '
     docker_services:
       compose_defined:
-        value: 24
+        value: 29
         declared: null
         metric_type: static
         provenance: collector:compose_services
         definition: Số key trong docker-compose.yml services:.
       long_running:
-        value: 20
-        declared: 20
+        value: 25
+        declared: 25
         metric_type: static
         provenance: collector:compose_services
         definition: compose_defined trừ one_shot_services.
@@ -587,20 +588,20 @@ metrics:
       metric_type: static
       provenance: collector:data_contracts
     dq_check_types:
-      value: 8
-      declared: 8
+      value: 9
+      declared: 9
       metric_type: static
       provenance: collector:dq_check_types
       definition: Số key trong CHECK_DISPATCH của code_etl/shared/ops/data_quality.py.
     dbt_models:
-      value: 9
-      declared: 9
+      value: 13
+      declared: 13
       metric_type: static
       provenance: collector:dbt_models
       definition: 'Tất cả materialized: ephemeral — không tạo object vật lý.'
     business_vs_utc_date_rows:
       total_rows: 1200000
-      divergent_date_rows: 350099
+      divergent_date_rows: 263417
       metric_type: runtime
       declared: null
       provenance: query:platform.business_vs_utc_date_rows
@@ -806,22 +807,22 @@ invariants:
 
       '
 readme_bindings:
-- readme_claim: '| Source workloads           |             16 |'
+- readme_claim: '| Source workloads           |             17 |'
   manifest_path: metrics.source.source_datasets.value
 - readme_claim: '| Bronze CDC tables          |              6 |'
   manifest_path: metrics.bronze.cdc_tables.value
 - manifest_path: metrics.gold.tables.value
   readme_claims:
   - location: metrics_table
-    claim: '| Historical Gold tables     |             10 |'
+    claim: '| Historical Gold tables     |             14 |'
   - location: executive_summary
-    claim: 10 historical Gold models
+    claim: 14 historical Gold models
 - manifest_path: metrics.serving.objects_present.value
   readme_claims:
   - location: metrics_table
-    claim: '| Current-serving tables     |              9 |'
+    claim: '| Current-serving tables     |             13 |'
   - location: executive_summary
-    claim: 9 dbt-managed current-serving tables
+    claim: 13 dbt-managed current-serving tables
 - manifest_path: metrics.transaction_scale.curated_financial_transactions.value
   readme_claims:
   - location: metrics_table
@@ -834,9 +835,9 @@ readme_bindings:
   manifest_path: metrics.cdc.topics.value
 - readme_claim: '| Data contracts             |             33 |'
   manifest_path: metrics.platform.data_contracts.value
-- readme_claim: '| Data-quality check types   |              8 |'
+- readme_claim: '| Data-quality check types   |              9 |'
   manifest_path: metrics.platform.dq_check_types.value
-- readme_claim: '| Airflow DAG files          |             16 |'
+- readme_claim: '| Airflow DAG files          |             20 |'
   manifest_path: metrics.platform.airflow_dag_files.value
 - manifest_path: metrics.platform.integration_tests.value
   readme_claims:
@@ -844,11 +845,11 @@ readme_bindings:
     claim: '| Trino integration tests    |             34 |'
   - location: executive_summary
     claim: 34 Trino-backed integration tests
-- readme_claim: '| Automated tests            |            472 |'
+- readme_claim: '| Automated tests            |            476 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
-- readme_claim: '| Docker Compose services    |             24 |'
+- readme_claim: '| Docker Compose services    |             29 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value
-- readme_claim: 20 long-running + 4 one-shot initialization/migration jobs
+- readme_claim: 25 long-running + 4 one-shot initialization/migration jobs
   manifest_path: metrics.platform.docker_services.long_running.value
 - readme_claim: '| CDC current-state rows     | 10,000 / 30,000 |'
   manifest_path: metrics.cdc.current_state

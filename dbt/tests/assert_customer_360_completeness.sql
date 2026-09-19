@@ -24,7 +24,7 @@ WITH customer_counts AS (
 
 SELECT
     CASE
-        WHEN total_customers < 1000 THEN 'FAIL: Less than 1000 customers (' || total_customers || ')'
+        WHEN total_customers < 1000 THEN 'FAIL: Less than 1000 customers (' || CAST(total_customers AS varchar) || ')'
         WHEN retail_count = 0 THEN 'FAIL: No RETAIL customers found'
         WHEN priority_count = 0 THEN 'FAIL: No PRIORITY customers found'
         WHEN vip_count = 0 THEN 'FAIL: No VIP customers found'

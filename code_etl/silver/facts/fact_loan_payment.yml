@@ -1,5 +1,5 @@
 # Silver: fact_loan_payment (overwritePartitions by cob_dt)
-# Joins: dim_loan (loan_sk) + dim_customer (customer_sk)
+# Joins: dim_loan (SCD1 — no surrogate key) + dim_customer (customer_sk)
 job:
   type: fact_txn
 
@@ -21,8 +21,8 @@ sql: |
   SELECT
       p.payment_id,
       p.loan_id,
-      l.loan_sk,
       l.product_code,
+      l.branch_code,
       l.customer_id,
       c.customer_sk,
       p.payment_date,

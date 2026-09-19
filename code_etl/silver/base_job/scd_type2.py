@@ -56,17 +56,17 @@ def _build_sk_col_name(config: dict) -> str:
     return name + "_sk"
 
 
-def _attach_scd2_columns(source_df, business_keys: list, cob_dt: str, sk_col: str,
-                          effective_col: str, expiry_col: str, current_flag: str):
+def _attach_scd2_columns(
+    source_df, business_keys: list, cob_dt: str, sk_col: str, effective_col: str, expiry_col: str, current_flag: str
+):
     """
     Gắn các cột metadata SCD2 vào DataFrame trước khi ghi vào bảng đích.
     SK = SHA-256(business_key_1 | ... | cob_dt) — duy nhất mỗi version.
     """
     return (
-        source_df
-        .withColumn(effective_col, F.to_date(F.lit(cob_dt)))
-        .withColumn(expiry_col,    F.to_date(F.lit("9999-12-31")))
-        .withColumn(current_flag,  F.lit(1))
+        source_df.withColumn(effective_col, F.to_date(F.lit(cob_dt)))
+        .withColumn(expiry_col, F.to_date(F.lit("9999-12-31")))
+        .withColumn(current_flag, F.lit(1))
         .withColumn(
             sk_col,
             F.sha2(
@@ -77,8 +77,9 @@ def _attach_scd2_columns(source_df, business_keys: list, cob_dt: str, sk_col: st
     )
 
 
-def _idempotency_cleanup(spark, target: str, effective_col: str, expiry_col: str,
-                          current_flag: str, cob_dt: str, prev_dt: str, logger):
+def _idempotency_cleanup(
+    spark, target: str, effective_col: str, expiry_col: str, current_flag: str, cob_dt: str, prev_dt: str, logger
+):
     """
     Đảm bảo rerun an toàn cho cùng cob_dt:
       - Xóa các row được insert bởi lần chạy trước (effective_from = cob_dt, is_current = 1).
@@ -98,14 +99,14 @@ def _idempotency_cleanup(spark, target: str, effective_col: str, expiry_col: str
 
 def run_scd_type2(spark, config: dict, cob_dt: str, logger):
     """Thực thi đầy đủ quy trình SCD Type 2 cho ngày cob_dt."""
-    target        = get_target_table(config)
+    target = get_target_table(config)
     business_keys = config["business_key"]
-    scd           = config["scd"]
+    scd = config["scd"]
     effective_col = scd["effective_from_column"]
-    expiry_col    = scd["effective_to_column"]
-    current_flag  = scd["current_flag_column"]
-    sk_col        = _build_sk_col_name(config)
-    prev_dt       = (datetime.strptime(cob_dt, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    expiry_col = scd["effective_to_column"]
+    current_flag = scd["current_flag_column"]
+    sk_col = _build_sk_col_name(config)
+    prev_dt = (datetime.strptime(cob_dt, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
 
     # Bước 1: Đọc và deduplicate dữ liệu nguồn
     source_df = load_source_df(spark, config, cob_dt).dropDuplicates(business_keys)
@@ -115,9 +116,7 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
     # Check table exists — if not, create with initial SCD2 load
     if not table_exists(spark, target):
         logger.warning(f"Target table {target} does not exist. Creating with initial SCD2 load...")
-        new_df = _attach_scd2_columns(
-            source_df, business_keys, cob_dt, sk_col, effective_col, expiry_col, current_flag
-        )
+        new_df = _attach_scd2_columns(source_df, business_keys, cob_dt, sk_col, effective_col, expiry_col, current_flag)
         create_iceberg_table_if_not_exists(new_df, target, logger)
         new_df.writeTo(target).append()
         logger.info(f"Created {target} with initial SCD2 data ({source_df.count()} rows)")
@@ -134,8 +133,7 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
     )
 
     # Bước 2: Idempotency cleanup
-    _idempotency_cleanup(spark, target, effective_col, expiry_col, current_flag,
-                         cob_dt, prev_dt, logger)
+    _idempotency_cleanup(spark, target, effective_col, expiry_col, current_flag, cob_dt, prev_dt, logger)
 
     # Bước 3: Phát hiện record thay đổi
     target_current = spark.table(target).filter(F.col(current_flag) == 1)
@@ -153,8 +151,8 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
     change_expr = reduce(
         lambda a, b: a | b,
         [
-            F.coalesce(F.col(f"s.{c}").cast("string"), F.lit("__NULL__")) !=
-            F.coalesce(F.col(f"t.{c}").cast("string"), F.lit("__NULL__"))
+            F.coalesce(F.col(f"s.{c}").cast("string"), F.lit("__NULL__"))
+            != F.coalesce(F.col(f"t.{c}").cast("string"), F.lit("__NULL__"))
             for c in compare_cols
         ],
     )
@@ -163,24 +161,16 @@ def run_scd_type2(spark, config: dict, cob_dt: str, logger):
         [F.col(f"t.{k}").isNotNull() for k in business_keys],
     )
 
-    changed_keys = (
-        joined
-        .filter(exists_in_target & change_expr)
-        .select([F.col(f"s.{k}").alias(k) for k in business_keys])
+    changed_keys = joined.filter(exists_in_target & change_expr).select(
+        [F.col(f"s.{k}").alias(k) for k in business_keys]
     )
     changed_keys.cache()
     changed_count = changed_keys.count()
     logger.info(f"Số record thay đổi: {changed_count}")
 
     # Bước 4: Append version mới (INSERT TRƯỚC MERGE)
-    new_df = (
-        joined
-        .filter(~exists_in_target | change_expr)
-        .select([F.col(f"s.{c}").alias(c) for c in src_cols])
-    )
-    new_df = _attach_scd2_columns(
-        new_df, business_keys, cob_dt, sk_col, effective_col, expiry_col, current_flag
-    )
+    new_df = joined.filter(~exists_in_target | change_expr).select([F.col(f"s.{c}").alias(c) for c in src_cols])
+    new_df = _attach_scd2_columns(new_df, business_keys, cob_dt, sk_col, effective_col, expiry_col, current_flag)
     new_df.writeTo(target).append()
     logger.info("Đã append version mới")
 

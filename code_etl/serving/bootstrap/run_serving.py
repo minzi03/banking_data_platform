@@ -26,15 +26,15 @@ from utils.logger import get_logger
 # Each is: SELECT * FROM gold.source WHERE cob_dt = target_cob_dt
 # Note: Spark catalog = "lakehouse", Trino catalog = "iceberg"
 SERVING_MODELS = [
-    ("lakehouse.serving.mart_customer_360_current",           "lakehouse.gold.mart_customer_360"),
-    ("lakehouse.serving.rfm_segment_current",                 "lakehouse.gold.rfm_segment"),
-    ("lakehouse.serving.churn_prediction_current",            "lakehouse.gold.churn_prediction"),
-    ("lakehouse.serving.cross_sell_segment_current",          "lakehouse.gold.cross_sell_segment"),
-    ("lakehouse.serving.campaign_target_current",             "lakehouse.gold.campaign_target"),
-    ("lakehouse.serving.customer_balance_summary_current",    "lakehouse.gold.customer_balance_summary"),
-    ("lakehouse.serving.customer_transaction_summary_current","lakehouse.gold.customer_transaction_summary"),
-    ("lakehouse.serving.customer_product_summary_current",    "lakehouse.gold.customer_product_summary"),
-    ("lakehouse.serving.customer_card_summary_current",       "lakehouse.gold.customer_card_summary"),
+    ("lakehouse.serving.mart_customer_360_current", "lakehouse.gold.mart_customer_360"),
+    ("lakehouse.serving.rfm_segment_current", "lakehouse.gold.rfm_segment"),
+    ("lakehouse.serving.churn_prediction_current", "lakehouse.gold.churn_prediction"),
+    ("lakehouse.serving.cross_sell_segment_current", "lakehouse.gold.cross_sell_segment"),
+    ("lakehouse.serving.campaign_target_current", "lakehouse.gold.campaign_target"),
+    ("lakehouse.serving.customer_balance_summary_current", "lakehouse.gold.customer_balance_summary"),
+    ("lakehouse.serving.customer_transaction_summary_current", "lakehouse.gold.customer_transaction_summary"),
+    ("lakehouse.serving.customer_product_summary_current", "lakehouse.gold.customer_product_summary"),
+    ("lakehouse.serving.customer_card_summary_current", "lakehouse.gold.customer_card_summary"),
 ]
 
 

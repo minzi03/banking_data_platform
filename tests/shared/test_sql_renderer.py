@@ -14,8 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Direct import via importlib to avoid package name conflicts
 _spec = importlib.util.spec_from_file_location(
-    "sql_renderer",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "sql_renderer.py")
+    "sql_renderer", str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "sql_renderer.py")
 )
 _sql_renderer = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_sql_renderer)

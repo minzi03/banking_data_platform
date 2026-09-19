@@ -20,10 +20,10 @@ import thật, nên vẫn bắt được nếu API pyspark đổi.
 import contextlib
 import importlib.util
 import sys
-
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -33,6 +33,7 @@ def _pyspark_importable():
     """Đảm bảo `from pyspark.sql import SparkSession` chạy được, rồi dọn sạch."""
     try:
         import pyspark.sql  # noqa: F401
+
         yield
         return
     except ImportError:
@@ -53,9 +54,7 @@ def _pyspark_importable():
 
 
 def _load(module_name: str, relative_path: str):
-    spec = importlib.util.spec_from_file_location(
-        module_name, str(PROJECT_ROOT / relative_path)
-    )
+    spec = importlib.util.spec_from_file_location(module_name, str(PROJECT_ROOT / relative_path))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

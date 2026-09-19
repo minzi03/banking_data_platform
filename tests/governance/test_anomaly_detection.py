@@ -37,9 +37,11 @@ def _stub_pyspark_functions():
     ):
         yield
 
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def detector():
@@ -95,6 +97,7 @@ def mock_df_outlier():
 # Test AnomalyResult
 # ---------------------------------------------------------------------------
 
+
 class TestAnomalyResult:
     def test_creation(self):
         result = AnomalyResult(
@@ -122,6 +125,7 @@ class TestAnomalyResult:
 # ---------------------------------------------------------------------------
 # Test AnomalyDetector — Volume Anomaly
 # ---------------------------------------------------------------------------
+
 
 class TestVolumeAnomaly:
     def test_pass_normal_volume(self, detector, mock_spark):
@@ -196,6 +200,7 @@ class TestVolumeAnomaly:
 # Test AnomalyDetector — Statistical Outlier
 # ---------------------------------------------------------------------------
 
+
 class TestStatisticalOutlier:
     def test_no_outliers_zscore(self, detector):
         """No outliers with zscore method should PASS."""
@@ -269,9 +274,7 @@ class TestStatisticalOutlier:
         df.columns = ["amount"]
 
         stats_row = MagicMock()
-        stats_row.__getitem__ = lambda self, key: {
-            "mean": 100.0, "stddev": 10.0, "q1": 90.0, "q3": 110.0
-        }.get(key, 0)
+        stats_row.__getitem__ = lambda self, key: {"mean": 100.0, "stddev": 10.0, "q1": 90.0, "q3": 110.0}.get(key, 0)
 
         df.select.return_value.collect.return_value = [stats_row]
 
@@ -282,6 +285,7 @@ class TestStatisticalOutlier:
 # ---------------------------------------------------------------------------
 # Test AnomalyDetector — Column Anomaly
 # ---------------------------------------------------------------------------
+
 
 class TestColumnAnomaly:
     def test_pass_type_match(self, detector):

@@ -8,6 +8,7 @@ from governance.lineage import LineageRecord, LineageTracker, TransformType
 # Test TransformType
 # ---------------------------------------------------------------------------
 
+
 class TestTransformType:
     def test_constants(self):
         assert TransformType.JDBC_INGEST == "jdbc_ingest"
@@ -24,6 +25,7 @@ class TestTransformType:
 # ---------------------------------------------------------------------------
 # Test LineageRecord
 # ---------------------------------------------------------------------------
+
 
 class TestLineageRecord:
     def test_creation(self):
@@ -71,6 +73,7 @@ class TestLineageRecord:
 # ---------------------------------------------------------------------------
 # Test LineageTracker
 # ---------------------------------------------------------------------------
+
 
 class TestLineageTracker:
     def test_record_lineage(self):

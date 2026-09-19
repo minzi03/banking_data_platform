@@ -17,7 +17,7 @@ def load_config(config_path: str) -> dict:
     if not config_file.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    with open(config_file, "r", encoding="utf-8") as f:
+    with open(config_file, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     if config is None:
@@ -49,7 +49,7 @@ def load_config_pipeline(config_path: str, spark=None, context_vars: dict = None
     if not os.path.exists(full_path):
         raise FileNotFoundError(f"Config file not found: {full_path}")
 
-    with open(full_path, "r", encoding="utf-8") as f:
+    with open(full_path, encoding="utf-8") as f:
         raw = f.read()
 
     if context_vars:

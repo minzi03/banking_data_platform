@@ -17,6 +17,7 @@ from governance.enforcement import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_spark():
     """Create a mock SparkSession."""
@@ -104,6 +105,7 @@ def contract_fail():
 # Test CheckResult
 # ---------------------------------------------------------------------------
 
+
 class TestCheckResult:
     def test_creation(self):
         result = CheckResult(
@@ -123,6 +125,7 @@ class TestCheckResult:
 # ---------------------------------------------------------------------------
 # Test ValidationResult
 # ---------------------------------------------------------------------------
+
 
 class TestValidationResult:
     def test_creation(self):
@@ -172,6 +175,7 @@ class TestValidationResult:
 # ---------------------------------------------------------------------------
 # Test ContractEnforcer
 # ---------------------------------------------------------------------------
+
 
 class TestContractEnforcer:
     def test_validate_pass_required_columns(self, mock_spark, mock_df_pass, contract_pass):
@@ -231,6 +235,7 @@ class TestContractEnforcer:
     def test_validate_with_range_check(self, mock_spark, mock_df_pass):
         """Contract with range check should run range validation."""
         from governance.contracts import RangeCheck
+
         contract = DatasetContract(
             dataset_id="banking.test",
             owner="test",

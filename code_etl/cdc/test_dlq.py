@@ -37,8 +37,7 @@ from pyspark.sql import SparkSession
 def create_spark_session() -> SparkSession:
     """Create SparkSession with Iceberg REST catalog configuration."""
     return (
-        SparkSession.builder
-        .appName("DLQ_Runtime_Test")
+        SparkSession.builder.appName("DLQ_Runtime_Test")
         .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
         .config("spark.sql.catalog.lakehouse.type", "rest")
         .config("spark.sql.catalog.lakehouse.uri", "http://iceberg-rest:8181")
@@ -67,6 +66,7 @@ def create_debezium_message(key: str, payload: dict, topic: str) -> dict:
 def get_current_offsets(topic: str) -> dict:
     """Get current end offsets for a Kafka topic."""
     from kafka import KafkaConsumer, TopicPartition
+
     c = KafkaConsumer(bootstrap_servers=["kafka:9092"])
     partitions = c.partitions_for_topic(topic)
     if not partitions:
@@ -88,9 +88,9 @@ def inject_test_events(topic: str):
         key_serializer=lambda k: k,
     )
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Injecting test events into {topic}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # ── VALID events (5 total) ───────────────────────────────────────
     valid_events = [
@@ -98,51 +98,76 @@ def inject_test_events(topic: str):
         {
             "key": "test_dlq_1001",
             "payload": {
-                "__op": "c", "__ts_ms": str(int(time.time() * 1000)),
-                "customer_id": "997001", "full_name": "DLQ Test User 1",
-                "cccd": "001001001001", "gender": "M", "phone": "0900000001",
-                "email": "dlq1@test.com", "is_active": "1",
-            }
+                "__op": "c",
+                "__ts_ms": str(int(time.time() * 1000)),
+                "customer_id": "997001",
+                "full_name": "DLQ Test User 1",
+                "cccd": "001001001001",
+                "gender": "M",
+                "phone": "0900000001",
+                "email": "dlq1@test.com",
+                "is_active": "1",
+            },
         },
         # Valid UPDATE
         {
             "key": "test_dlq_1002",
             "payload": {
-                "__op": "u", "__ts_ms": str(int(time.time() * 1000) + 1),
-                "customer_id": "997002", "full_name": "DLQ Test User 2",
-                "cccd": "001001001002", "gender": "F", "phone": "0900000002",
-                "email": "dlq2@test.com", "is_active": "1",
-            }
+                "__op": "u",
+                "__ts_ms": str(int(time.time() * 1000) + 1),
+                "customer_id": "997002",
+                "full_name": "DLQ Test User 2",
+                "cccd": "001001001002",
+                "gender": "F",
+                "phone": "0900000002",
+                "email": "dlq2@test.com",
+                "is_active": "1",
+            },
         },
         # Valid INSERT
         {
             "key": "test_dlq_1003",
             "payload": {
-                "__op": "c", "__ts_ms": str(int(time.time() * 1000) + 2),
-                "customer_id": "997003", "full_name": "DLQ Test User 3",
-                "cccd": "001001001003", "gender": "M", "phone": "0900000003",
-                "email": "dlq3@test.com", "is_active": "0",
-            }
+                "__op": "c",
+                "__ts_ms": str(int(time.time() * 1000) + 2),
+                "customer_id": "997003",
+                "full_name": "DLQ Test User 3",
+                "cccd": "001001001003",
+                "gender": "M",
+                "phone": "0900000003",
+                "email": "dlq3@test.com",
+                "is_active": "0",
+            },
         },
         # Valid DELETE
         {
             "key": "test_dlq_1004",
             "payload": {
-                "__op": "d", "__ts_ms": str(int(time.time() * 1000) + 3),
-                "customer_id": "997004", "full_name": "DLQ Test User 4",
-                "cccd": "001001001004", "gender": "F", "phone": "0900000004",
-                "email": "dlq4@test.com", "is_active": "1",
-            }
+                "__op": "d",
+                "__ts_ms": str(int(time.time() * 1000) + 3),
+                "customer_id": "997004",
+                "full_name": "DLQ Test User 4",
+                "cccd": "001001001004",
+                "gender": "F",
+                "phone": "0900000004",
+                "email": "dlq4@test.com",
+                "is_active": "1",
+            },
         },
         # Valid INSERT
         {
             "key": "test_dlq_1005",
             "payload": {
-                "__op": "c", "__ts_ms": str(int(time.time() * 1000) + 4),
-                "customer_id": "997005", "full_name": "DLQ Test User 5",
-                "cccd": "001001001005", "gender": "M", "phone": "0900000005",
-                "email": "dlq5@test.com", "is_active": "1",
-            }
+                "__op": "c",
+                "__ts_ms": str(int(time.time() * 1000) + 4),
+                "customer_id": "997005",
+                "full_name": "DLQ Test User 5",
+                "cccd": "001001001005",
+                "gender": "M",
+                "phone": "0900000005",
+                "email": "dlq5@test.com",
+                "is_active": "1",
+            },
         },
     ]
 
@@ -153,21 +178,30 @@ def inject_test_events(topic: str):
             "key": "test_dlq_9001",
             "payload": {
                 "__ts_ms": str(int(time.time() * 1000) + 5),
-                "customer_id": "997099", "full_name": "Bad Event - No Op",
-                "cccd": "000000000001", "gender": "M", "phone": "0999999901",
-                "email": "bad1@test.com", "is_active": "1",
+                "customer_id": "997099",
+                "full_name": "Bad Event - No Op",
+                "cccd": "000000000001",
+                "gender": "M",
+                "phone": "0999999901",
+                "email": "bad1@test.com",
+                "is_active": "1",
                 # __op is MISSING
-            }
+            },
         },
         # Invalid: __op is "x" (unknown)
         {
             "key": "test_dlq_9002",
             "payload": {
-                "__op": "x", "__ts_ms": str(int(time.time() * 1000) + 6),
-                "customer_id": "997098", "full_name": "Bad Event - Unknown Op",
-                "cccd": "000000000002", "gender": "F", "phone": "0999999902",
-                "email": "bad2@test.com", "is_active": "0",
-            }
+                "__op": "x",
+                "__ts_ms": str(int(time.time() * 1000) + 6),
+                "customer_id": "997098",
+                "full_name": "Bad Event - Unknown Op",
+                "cccd": "000000000002",
+                "gender": "F",
+                "phone": "0999999902",
+                "email": "bad2@test.com",
+                "is_active": "0",
+            },
         },
     ]
 
@@ -175,12 +209,12 @@ def inject_test_events(topic: str):
     for i, event in enumerate(valid_events):
         msg = create_debezium_message(event["key"], event["payload"], topic)
         producer.send(topic, key=msg["key"], value=msg["value"])
-        print(f"  [VALID {i+1}/5] key={event['key']} customer_id={event['payload']['customer_id']}")
+        print(f"  [VALID {i + 1}/5] key={event['key']} customer_id={event['payload']['customer_id']}")
 
     for i, event in enumerate(invalid_events):
         msg = create_debezium_message(event["key"], event["payload"], topic)
         producer.send(topic, key=msg["key"], value=msg["value"])
-        print(f"  [INVALID {i+1}/2] key={event['key']} → {event['payload'].get('__op', 'MISSING')}")
+        print(f"  [INVALID {i + 1}/2] key={event['key']} → {event['payload'].get('__op', 'MISSING')}")
 
     producer.flush()
     producer.close()
@@ -199,11 +233,11 @@ def run_streaming_batch(spark: SparkSession, config: dict, test_batch_id: int, p
     target_table = f"{config['target']['catalog']}.{config['target']['schema']}.{config['target']['table']}"
     topic = config["kafka"]["topic"]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running DLQ test micro-batch (batch_id={test_batch_id})")
     print(f"  Topic: {topic}")
     print(f"  Target: {target_table}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Ensure DLQ table exists
     ensure_dlq_table(spark)
@@ -214,8 +248,7 @@ def run_streaming_batch(spark: SparkSession, config: dict, test_batch_id: int, p
     print(f"  Starting offsets: {starting_offsets}")
 
     test_df = (
-        spark.read
-        .format("kafka")
+        spark.read.format("kafka")
         .option("kafka.bootstrap.servers", "kafka:9092")
         .option("subscribe", topic)
         .option("startingOffsets", json.dumps(starting_offsets))
@@ -254,9 +287,9 @@ def verify_results(spark: SparkSession, config: dict, test_batch_id: int):
     """Verify the DLQ test results."""
     target_table = f"{config['target']['catalog']}.{config['target']['schema']}.{config['target']['table']}"
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Verifying DLQ test results (batch_id={test_batch_id})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Check Bronze: should have 5 test events in this batch
     bronze_count = spark.sql(f"""
@@ -290,7 +323,7 @@ def verify_results(spark: SparkSession, config: dict, test_batch_id: int):
             print(f"      topic={row['source_topic']}, offset={row['kafka_offset']}")
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     passed = bronze_count == 5 and dlq_count == 2
     if passed:
         print("✅ DLQ TEST PASSED")
@@ -301,7 +334,7 @@ def verify_results(spark: SparkSession, config: dict, test_batch_id: int):
         print("❌ DLQ TEST FAILED")
         print("   Expected: 5 valid + 2 invalid")
         print(f"   Got: {bronze_count} valid + {dlq_count} invalid")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     return passed
 

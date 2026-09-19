@@ -27,8 +27,9 @@ log = getLogger("anomaly_detection")
 @dataclass
 class AnomalyResult:
     """Result of anomaly detection."""
+
     check_name: str
-    status: str          # "PASS", "WARN", "FAIL"
+    status: str  # "PASS", "WARN", "FAIL"
     details: str
     anomaly_count: int = 0
     total_count: int = 0
@@ -92,8 +93,7 @@ class AnomalyDetector:
             if deviation_pct > threshold_pct:
                 direction = "above" if actual_count > historical_avg else "below"
                 issues.append(
-                    f"Deviation {deviation_pct:.1f}% {direction} historical avg "
-                    f"({actual_count} vs {historical_avg})"
+                    f"Deviation {deviation_pct:.1f}% {direction} historical avg ({actual_count} vs {historical_avg})"
                 )
 
         if issues:
@@ -173,16 +173,12 @@ class AnomalyDetector:
                 if stddev_val == 0:
                     outlier_count = 0
                 else:
-                    outlier_count = df.filter(
-                        F.abs(F.col(column) - mean_val) > threshold * stddev_val
-                    ).count()
+                    outlier_count = df.filter(F.abs(F.col(column) - mean_val) > threshold * stddev_val).count()
             elif method == "iqr":
                 iqr = q3 - q1
                 lower_bound = q1 - threshold * iqr
                 upper_bound = q3 + threshold * iqr
-                outlier_count = df.filter(
-                    (F.col(column) < lower_bound) | (F.col(column) > upper_bound)
-                ).count()
+                outlier_count = df.filter((F.col(column) < lower_bound) | (F.col(column) > upper_bound)).count()
             else:
                 return AnomalyResult(
                     check_name=f"outlier_{column}",

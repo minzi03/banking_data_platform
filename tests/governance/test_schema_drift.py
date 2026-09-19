@@ -12,6 +12,7 @@ from governance.schema_drift import SchemaDriftDetector, SchemaDriftResult
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def detector():
     return SchemaDriftDetector()
@@ -70,6 +71,7 @@ def mock_df_missing_column():
 # Test SchemaDriftResult
 # ---------------------------------------------------------------------------
 
+
 class TestSchemaDriftResult:
     def test_creation(self):
         result = SchemaDriftResult(
@@ -104,6 +106,7 @@ class TestSchemaDriftResult:
 # ---------------------------------------------------------------------------
 # Test SchemaDriftDetector
 # ---------------------------------------------------------------------------
+
 
 class TestSchemaDriftDetector:
     def test_no_drift(self, detector, mock_spark, mock_df_matching):

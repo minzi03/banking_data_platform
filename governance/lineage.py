@@ -34,9 +34,11 @@ log = getLogger("lineage")
 # Lineage Record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LineageRecord:
     """A single lineage record linking source to target."""
+
     source_table: str
     target_table: str
     transform_type: str
@@ -45,9 +47,7 @@ class LineageRecord:
     snapshot_id: str | None = None
     row_count: int = 0
     column_mappings: dict[str, str] = field(default_factory=dict)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
         return {
@@ -67,8 +67,10 @@ class LineageRecord:
 # Transform Types
 # ---------------------------------------------------------------------------
 
+
 class TransformType:
     """Standard transform types for lineage tracking."""
+
     JDBC_INGEST = "jdbc_ingest"
     CDC_STREAMING = "cdc_streaming"
     SCD1_UPSERT = "scd1_upsert"
@@ -83,6 +85,7 @@ class TransformType:
 # ---------------------------------------------------------------------------
 # Lineage Tracker
 # ---------------------------------------------------------------------------
+
 
 class LineageTracker:
     """
@@ -140,10 +143,7 @@ class LineageTracker:
         )
 
         self._records.append(record)
-        log.info(
-            f"Lineage recorded: {source_table} → {target_table} "
-            f"({transform_type}, {row_count} rows)"
-        )
+        log.info(f"Lineage recorded: {source_table} → {target_table} ({transform_type}, {row_count} rows)")
 
         return record
 
@@ -161,10 +161,7 @@ class LineageTracker:
         Returns:
             List of LineageRecord where target_table matches
         """
-        return [
-            r for r in self._records
-            if r.target_table == table_name
-        ]
+        return [r for r in self._records if r.target_table == table_name]
 
     def get_downstream(self, table_name: str) -> list[LineageRecord]:
         """
@@ -176,10 +173,7 @@ class LineageTracker:
         Returns:
             List of LineageRecord where source_table matches
         """
-        return [
-            r for r in self._records
-            if r.source_table == table_name
-        ]
+        return [r for r in self._records if r.source_table == table_name]
 
     def get_full_lineage(self, table_name: str) -> list[LineageRecord]:
         """
@@ -219,29 +213,33 @@ class LineageTracker:
             TimestampType,
         )
 
-        schema = StructType([
-            StructField("source_table", StringType()),
-            StructField("target_table", StringType()),
-            StructField("transform_type", StringType()),
-            StructField("dag_id", StringType()),
-            StructField("dag_run_id", StringType()),
-            StructField("snapshot_id", StringType()),
-            StructField("row_count", IntegerType()),
-            StructField("created_at", TimestampType()),
-        ])
+        schema = StructType(
+            [
+                StructField("source_table", StringType()),
+                StructField("target_table", StringType()),
+                StructField("transform_type", StringType()),
+                StructField("dag_id", StringType()),
+                StructField("dag_run_id", StringType()),
+                StructField("snapshot_id", StringType()),
+                StructField("row_count", IntegerType()),
+                StructField("created_at", TimestampType()),
+            ]
+        )
 
         rows = []
         for r in self._records:
-            rows.append(Row(
-                source_table=r.source_table,
-                target_table=r.target_table,
-                transform_type=r.transform_type,
-                dag_id=r.dag_id,
-                dag_run_id=r.dag_run_id,
-                snapshot_id=r.snapshot_id,
-                row_count=r.row_count,
-                created_at=datetime.now(timezone.utc),
-            ))
+            rows.append(
+                Row(
+                    source_table=r.source_table,
+                    target_table=r.target_table,
+                    transform_type=r.transform_type,
+                    dag_id=r.dag_id,
+                    dag_run_id=r.dag_run_id,
+                    snapshot_id=r.snapshot_id,
+                    row_count=r.row_count,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
 
         df = spark.createDataFrame(rows, schema=schema)
 

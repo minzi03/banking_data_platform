@@ -19,6 +19,7 @@ Limitations:
 """
 
 import argparse
+import contextlib
 
 import pyspark.sql.functions as F
 import yaml
@@ -29,9 +30,10 @@ from pyspark.sql.window import Window
 # Configuration
 # =============================================================================
 
+
 def load_config(config_path: str) -> dict:
     """Load YAML configuration for consolidation job."""
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config = yaml.safe_load(f)
     return config
 
@@ -39,6 +41,7 @@ def load_config(config_path: str) -> dict:
 # =============================================================================
 # Watermark Management
 # =============================================================================
+
 
 def ensure_watermark_table(spark: SparkSession):
     """Create watermark table if not exists."""
@@ -62,10 +65,7 @@ def read_watermark(spark: SparkSession, table_name: str) -> dict:
         """).collect()
 
         if result:
-            return {
-                "timestamp_ms": result[0]["last_cdc_timestamp_ms"],
-                "batch_id": result[0]["last_spark_batch_id"]
-            }
+            return {"timestamp_ms": result[0]["last_cdc_timestamp_ms"], "batch_id": result[0]["last_spark_batch_id"]}
     except Exception:  # noqa: BLE001, S110
         pass
 
@@ -73,8 +73,7 @@ def read_watermark(spark: SparkSession, table_name: str) -> dict:
     return {"timestamp_ms": 0, "batch_id": 0}
 
 
-def update_watermark(spark: SparkSession, table_name: str,
-                     max_timestamp_ms: int, max_batch_id: int):
+def update_watermark(spark: SparkSession, table_name: str, max_timestamp_ms: int, max_batch_id: int):
     """Update watermark after successful MERGE."""
     spark.sql(f"""
         MERGE INTO lakehouse.meta.cdc_watermark t
@@ -98,6 +97,7 @@ def update_watermark(spark: SparkSession, table_name: str,
 # Incremental Read
 # =============================================================================
 
+
 def read_incremental_cdc(spark: SparkSession, config: dict, watermark: dict) -> DataFrame:
     """Read incremental CDC events from Bronze since last watermark."""
     source_table = config["source_table"]
@@ -108,9 +108,9 @@ def read_incremental_cdc(spark: SparkSession, config: dict, watermark: dict) -> 
     df = spark.sql(f"""
         SELECT *
         FROM {source_table}
-        WHERE ({ts_col} > {watermark['timestamp_ms']})
-           OR ({ts_col} = {watermark['timestamp_ms']}
-               AND {batch_col} > {watermark['batch_id']})
+        WHERE ({ts_col} > {watermark["timestamp_ms"]})
+           OR ({ts_col} = {watermark["timestamp_ms"]}
+               AND {batch_col} > {watermark["batch_id"]})
     """)
 
     return df
@@ -119,6 +119,7 @@ def read_incremental_cdc(spark: SparkSession, config: dict, watermark: dict) -> 
 # =============================================================================
 # Type Conversions
 # =============================================================================
+
 
 def cast_columns(df: DataFrame, config: dict) -> DataFrame:
     """Apply type conversions defined in YAML config."""
@@ -133,36 +134,37 @@ def cast_columns(df: DataFrame, config: dict) -> DataFrame:
             # date_add requires INT, so cast BIGINT → INT
             df = df.withColumn(
                 col_name,
-                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""),
-                       F.date_add(F.lit("1970-01-01").cast("date"), F.col(col_name).cast("int")))
-                .otherwise(F.lit(None).cast("date"))
+                F.when(
+                    F.col(col_name).isNotNull() & (F.col(col_name) != ""),
+                    F.date_add(F.lit("1970-01-01").cast("date"), F.col(col_name).cast("int")),
+                ).otherwise(F.lit(None).cast("date")),
             )
 
         elif conv_type == "varchar_to_int":
             # Convert VARCHAR "1"/"0" to INTEGER
             df = df.withColumn(
                 col_name,
-                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""),
-                       F.col(col_name).cast("int"))
-                .otherwise(F.lit(None).cast("int"))
+                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""), F.col(col_name).cast("int")).otherwise(
+                    F.lit(None).cast("int")
+                ),
             )
 
         elif conv_type == "epoch_micros_to_timestamp":
             # Convert epoch microseconds to TIMESTAMP
             df = df.withColumn(
                 col_name,
-                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""),
-                       F.from_unixtime(F.col(col_name) / 1000000.0))
-                .otherwise(F.lit(None).cast("timestamp"))
+                F.when(
+                    F.col(col_name).isNotNull() & (F.col(col_name) != ""), F.from_unixtime(F.col(col_name) / 1000000.0)
+                ).otherwise(F.lit(None).cast("timestamp")),
             )
 
         elif conv_type == "decimal_nullable":
             # Handle empty string → NULL for DECIMAL
             df = df.withColumn(
                 col_name,
-                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""),
-                       F.col(col_name))
-                .otherwise(F.lit(None).cast("decimal(18,2)"))
+                F.when(F.col(col_name).isNotNull() & (F.col(col_name) != ""), F.col(col_name)).otherwise(
+                    F.lit(None).cast("decimal(18,2)")
+                ),
             )
 
     return df
@@ -172,6 +174,7 @@ def cast_columns(df: DataFrame, config: dict) -> DataFrame:
 # Deduplication
 # =============================================================================
 
+
 def deduplicate_latest(df: DataFrame, config: dict) -> DataFrame:
     """Keep only the latest event per business key."""
     business_key = config["business_key"]
@@ -179,17 +182,10 @@ def deduplicate_latest(df: DataFrame, config: dict) -> DataFrame:
     batch_col = config["metadata"]["batch_id_column"]
 
     # Window: order by timestamp DESC, batch_id DESC (deterministic)
-    window = Window.partitionBy(business_key).orderBy(
-        F.col(ts_col).desc(),
-        F.col(batch_col).desc()
-    )
+    window = Window.partitionBy(business_key).orderBy(F.col(ts_col).desc(), F.col(batch_col).desc())
 
     # Keep first row (= latest event)
-    df_deduped = (
-        df.withColumn("__rn", F.row_number().over(window))
-        .filter(F.col("__rn") == 1)
-        .drop("__rn")
-    )
+    df_deduped = df.withColumn("__rn", F.row_number().over(window)).filter(F.col("__rn") == 1).drop("__rn")
 
     return df_deduped
 
@@ -197,6 +193,7 @@ def deduplicate_latest(df: DataFrame, config: dict) -> DataFrame:
 # =============================================================================
 # MERGE into Silver Current
 # =============================================================================
+
 
 def merge_current_state(spark: SparkSession, df: DataFrame, config: dict):
     """MERGE deduplicated CDC events into Silver current-state table."""
@@ -210,9 +207,9 @@ def merge_current_state(spark: SparkSession, df: DataFrame, config: dict):
     # Get source columns that exist in target (exclude business key and operation for UPDATE)
     # Include timestamp columns for traceability
     all_columns = df.columns
-    update_cols = [c for c in all_columns if c in target_columns and c not in [
-        business_key, op_col, "__ingestion_time"
-    ]]
+    update_cols = [
+        c for c in all_columns if c in target_columns and c not in [business_key, op_col, "__ingestion_time"]
+    ]
 
     # Create temporary view
     df.createOrReplaceTempView("cdc_latest")
@@ -225,13 +222,13 @@ def merge_current_state(spark: SparkSession, df: DataFrame, config: dict):
     insert_cols_str = ", ".join([f"t.{c}" for c in insert_cols])
     insert_vals_str = ", ".join([f"s.{c}" for c in insert_cols])
 
-    # Add __consolidated_at timestamp if not exists
-    try:
+    # Add __consolidated_at timestamp if not exists.
+    # The ALTER raises when the column is already present; that is the expected
+    # steady-state case, so it is suppressed rather than handled.
+    with contextlib.suppress(Exception):
         spark.sql(f"""
             ALTER TABLE {target_table} ADD COLUMNS (__consolidated_at TIMESTAMP)
         """)
-    except Exception:  # noqa: BLE001, S110
-        pass  # Column already exists
 
     # MERGE logic
     merge_sql = f"""
@@ -259,22 +256,19 @@ def merge_current_state(spark: SparkSession, df: DataFrame, config: dict):
 # Main Entry Point
 # =============================================================================
 
+
 def run(config_path: str):
     """Main consolidation pipeline."""
     # Load config
     config = load_config(config_path)
     table_name = config["target_table"].split(".")[-1]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"CDC Consolidation: {table_name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Initialize Spark
-    spark = (
-        SparkSession.builder
-        .appName(f"cdc_consolidation_{table_name}")
-        .getOrCreate()
-    )
+    spark = SparkSession.builder.appName(f"cdc_consolidation_{table_name}").getOrCreate()
 
     # Ensure watermark table exists
     ensure_watermark_table(spark)
@@ -311,9 +305,9 @@ def run(config_path: str):
     update_watermark(spark, table_name, max_ts, max_batch)
     print(f"Watermark updated: ts_ms={max_ts}, batch_id={max_batch}")
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Consolidation complete: {table_name}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 # =============================================================================

@@ -156,6 +156,41 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_location (
 USING iceberg
 TBLPROPERTIES ('format-version' = '2');
 
+-- 9. DIM_DEPOSIT
+CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_deposit (
+    deposit_id       BIGINT,
+    account_id       BIGINT,
+    customer_id      BIGINT,
+    product_code     STRING,
+    principal_amount DECIMAL(18,2),
+    interest_rate    DECIMAL(8,4),
+    term_months      INT,
+    open_date        DATE,
+    maturity_date    DATE,
+    status           STRING,
+    last_updated     TIMESTAMP
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
+-- 10. DIM_LOAN
+CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_loan (
+    loan_id              BIGINT,
+    customer_id          BIGINT,
+    product_code         STRING,
+    branch_code          STRING,
+    loan_amount          DECIMAL(18,2),
+    outstanding_balance  DECIMAL(18,2),
+    interest_rate        DECIMAL(8,4),
+    term_months          INT,
+    disbursement_date    DATE,
+    maturity_date        DATE,
+    loan_status          STRING,
+    last_updated         TIMESTAMP
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
 -- =============================================================================
 -- FACTS — partitioned by cob_dt
 -- =============================================================================

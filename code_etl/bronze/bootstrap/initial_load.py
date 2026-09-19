@@ -55,11 +55,11 @@ BRONZE_CONFIGS = [
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Bronze Bootstrap Initial Load")
-    parser.add_argument("--jdbc_url",    required=True, help="JDBC URL to source PostgreSQL")
-    parser.add_argument("--db_user",     required=True, help="Database username")
+    parser.add_argument("--jdbc_url", required=True, help="JDBC URL to source PostgreSQL")
+    parser.add_argument("--db_user", required=True, help="Database username")
     parser.add_argument("--db_password", required=True, help="Database password")
-    parser.add_argument("--cob_dt",      required=True, help="Business date YYYY-MM-DD")
-    parser.add_argument("--config_dir",  default="code_etl/bronze", help="Directory containing YAML configs")
+    parser.add_argument("--cob_dt", required=True, help="Business date YYYY-MM-DD")
+    parser.add_argument("--config_dir", default="code_etl/bronze", help="Directory containing YAML configs")
     return parser.parse_args()
 
 
@@ -70,7 +70,7 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
     for config_path in BRONZE_CONFIGS:
         table_name = Path(config_path).stem
         try:
-            logger.info(f"{'='*60}")
+            logger.info(f"{'=' * 60}")
             logger.info(f"Loading: {table_name} from {config_path}")
 
             config = load_config(config_path)
@@ -80,8 +80,7 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
 
             # JDBC reader
             reader = (
-                spark.read
-                .format("jdbc")
+                spark.read.format("jdbc")
                 .option("url", jdbc_url)
                 .option("dbtable", f"({sql}) t")
                 .option("user", db_user)
@@ -94,8 +93,7 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
             partition_cfg = config["source"].get("jdbc_partition")
             if partition_cfg:
                 reader = (
-                    reader
-                    .option("partitionColumn", partition_cfg["partition_column"])
+                    reader.option("partitionColumn", partition_cfg["partition_column"])
                     .option("lowerBound", str(partition_cfg["lower_bound"]))
                     .option("upperBound", str(partition_cfg["upper_bound"]))
                     .option("numPartitions", str(partition_cfg["num_partitions"]))
@@ -107,17 +105,17 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
             cob_dt_col = config["load"].get("cob_dt_from_column")
             if cob_dt_col:
                 from pyspark.sql import functions as F
+
                 df = df.withColumn("cob_dt", F.col(cob_dt_col).cast("date"))
             else:
                 from pyspark.sql import functions as F
+
                 df = df.withColumn("cob_dt", F.lit(cob_dt).cast("date"))
 
             # Write to Iceberg
             target = config["target"]
             iceberg_table = get_iceberg_table_name(
-                catalog=target["catalog"],
-                schema=target["schema"],
-                table=target["table"]
+                catalog=target["catalog"], schema=target["schema"], table=target["table"]
             )
 
             logger.info(f"Writing to {iceberg_table}")
@@ -146,9 +144,7 @@ def main():
         logger.info("BRONZE BOOTSTRAP — INITIAL LOAD")
         logger.info("=" * 60)
 
-        results = run_initial_load(
-            spark, args.cob_dt, args.jdbc_url, args.db_user, args.db_password, logger
-        )
+        results = run_initial_load(spark, args.cob_dt, args.jdbc_url, args.db_user, args.db_password, logger)
 
         # Summary
         logger.info("=" * 60)
@@ -187,9 +183,7 @@ def main():
     # tưởng thành công. Silver và Gold bootstrap đã có sys.exit(1); Bronze thì
     # chưa. Đã đo trực tiếp: BRONZE_EXIT=0 khi toàn bộ bảng fail.
     if results["failed"]:
-        logger.error(
-            f"Bronze bootstrap FAILED: {len(results['failed'])}/{len(BRONZE_CONFIGS)} bảng lỗi"
-        )
+        logger.error(f"Bronze bootstrap FAILED: {len(results['failed'])}/{len(BRONZE_CONFIGS)} bảng lỗi")
         sys.exit(1)
 
 

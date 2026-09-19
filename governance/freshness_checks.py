@@ -28,8 +28,9 @@ log = getLogger("freshness_checks")
 @dataclass
 class FreshnessResult:
     """Result of freshness check."""
+
     check_name: str
-    status: str          # "PASS", "WARN", "FAIL"
+    status: str  # "PASS", "WARN", "FAIL"
     details: str
     last_updated: str | None = None
     age_hours: float | None = None
@@ -81,9 +82,7 @@ class FreshnessChecker:
 
         try:
             # Get the latest timestamp
-            latest_row = df.select(
-                F.max(date_column).alias("last_updated")
-            ).collect()[0]
+            latest_row = df.select(F.max(date_column).alias("last_updated")).collect()[0]
 
             last_updated = latest_row["last_updated"]
 
@@ -179,9 +178,7 @@ class FreshnessChecker:
             )
 
         try:
-            latest_partition = df.select(
-                F.max(partition_column).alias("latest")
-            ).collect()[0]["latest"]
+            latest_partition = df.select(F.max(partition_column).alias("latest")).collect()[0]["latest"]
 
             if latest_partition is None:
                 return FreshnessResult(
@@ -198,10 +195,12 @@ class FreshnessChecker:
             else:
                 # Try to parse as date string
                 from datetime import date
-                if isinstance(latest_partition, date):
-                    age_days = (datetime.now().date() - latest_partition).days
-                else:
-                    age_days = 0  # Can't calculate, assume fresh
+
+                age_days = (
+                    (datetime.now().date() - latest_partition).days
+                    if isinstance(latest_partition, date)
+                    else 0  # Can't calculate, assume fresh
+                )
 
             if age_days > sla_days:
                 return FreshnessResult(

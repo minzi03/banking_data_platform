@@ -13,7 +13,7 @@ validation:
 sql: |
   WITH l AS (
     SELECT branch_code, product_code, loan_id, loan_amount, outstanding_balance, loan_status
-    FROM lakehouse.silver.dim_loan WHERE is_current=1
+    FROM lakehouse.silver.dim_loan
   ), agg AS (
     SELECT branch_code, product_code,
       COUNT(DISTINCT loan_id) AS total_loans,

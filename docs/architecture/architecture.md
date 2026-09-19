@@ -127,7 +127,7 @@ flowchart LR
         end
 
         subgraph ServingLayer["Serving Layer"]
-            SV["iceberg.serving<br/>9 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
+            SV["iceberg.serving<br/>13 dbt-managed Tables<br/><br/>Single cob_dt snapshot<br/>Owned by dbt, not Spark"]
         end
     end
 
@@ -145,7 +145,7 @@ flowchart LR
     %% =========================================================
 
     subgraph Orchestration["Orchestration"]
-        AF["Apache Airflow<br/>16 DAGs"]
+        AF["Apache Airflow<br/>21 DAGs"]
         MAINT["Iceberg<br/>Maintenance"]
     end
 
@@ -156,7 +156,7 @@ flowchart LR
     subgraph Governance["Governance, Data Quality & Security"]
         CTR["Data Contracts<br/>33"]
         DQ["Data Quality Checks<br/>8"]
-        OM["OpenMetadata<br/>53 Production Data Tables<br/>22 Lineage Edges"]
+        OM["OpenMetadata<br/>Catalog UI + lineage"]
         SEC["Security & Governance<br/>RBAC<br/>Column Masking<br/>PII Controls<br/>Audit Trail"]
     end
 
@@ -178,7 +178,7 @@ flowchart LR
         DEV["Developer"]
         GH["GitHub"]
         GHA["GitHub Actions"]
-        TEST["Tests / Validation<br/>472 Automated Tests"]
+        TEST["Tests / Validation<br/>476 Automated Tests"]
         DOCKER["Docker Compose"]
     end
 
@@ -470,7 +470,7 @@ Gold tables are produced from the **batch Silver analytical model**.
 
 The current portfolio baseline contains:
 
-- **10 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
+- **14 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
 - **9 current-serving tables** — dbt-managed in `iceberg.serving`, published
   through Trino
 
@@ -1068,7 +1068,7 @@ dbt + Trino
 ```
 
 dbt acts as the **serving publisher**, not the primary transformation engine.
-The platform contains **9 dbt serving models**. The previous 12 `sm_*` semantic
+The platform contains **13 dbt serving models**. The previous 12 `sm_*` semantic
 models were removed: all were pure passthroughs and all were `ephemeral`, so
 they created no queryable object — declaring that consumers depended on them
 described a path that did not exist.
@@ -1112,7 +1112,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-16 DAGs
+21 DAGs loaded (zero import errors)
 ```
 
 Representative orchestration responsibilities include:
@@ -1167,11 +1167,13 @@ Applied across analytical pipelines to detect invalid or unexpected data states.
 
 ## OpenMetadata
 
-The platform catalogs:
+OpenMetadata runs and serves the catalog UI. Catalog population is a separate
+ingestion step that has not been re-verified after the last stack recreate, so
+no registered-table or lineage-edge count is claimed here:
 
 ```text
-53 production data tables
-22 lineage edges
+OpenMetadata 1.5.6
+catalog UI healthy, ingestion not re-verified
 ```
 
 Capabilities include:
@@ -1361,30 +1363,34 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 
 | Category          | Metric                         | Verified Value |
 | ----------------- | ------------------------------ | -------------: |
-| **Source**        | Source datasets                |             16 |
-| **Bronze**        | Batch tables                   |             16 |
+| **Source**        | Source datasets                |             17 |
+| **Bronze**        | Batch tables                   |             17 |
 |                   | CDC tables                     |              6 |
 | **Silver**        | SCD Type 2 dimensions          |              2 |
-|                   | SCD Type 1 dimensions          |              6 |
-|                   | Fact tables                    |              5 |
+|                   | SCD Type 1 dimensions          |              8 |
+|                   | Fact tables                    |              6 |
 |                   | CDC current-state tables       |              2 |
-| **Gold**          | Analytics tables               |             18 |
-| **Scale**         | Curated financial transactions |          4.6M+ |
+| **Gold**          | Historical marts               |             14 |
+|                   | Current-serving tables         |             13 |
+| **Scale**         | Curated financial transactions |         2.3M |
 | **CDC**           | Debezium connectors            |              3 |
 |                   | Kafka CDC topics               |             12 |
-| **Serving**       | dbt models                     |             12 |
+| **Serving**       | dbt models                     |             13 |
 | **Governance**    | Data contracts                 |             33 |
-|                   | Data-quality checks            |              8 |
-| **Catalog**       | Production data tables         |             53 |
-|                   | Lineage edges                  |             22 |
-| **Orchestration** | Airflow DAGs                   |             16 |
-| **Testing**       | Automated tests                |            472 |
-| **Platform**      | Docker services                |             24 |
+|                   | Data-quality check types       |              9 |
+| **Orchestration** | Airflow DAGs                   |             21 |
+| **Testing**       | Automated tests                |            476 |
+|                   | dbt data tests                 |            117 |
+| **Platform**      | Docker services                |             29 |
 | **CDC Current**   | Customer rows                  |         10,000 |
 |                   | Account rows                   |         30,000 |
 | **CDC Freshness** | Median local E2E               |         409.8s |
 |                   | Local E2E range                |    65.9–576.2s |
 |                   | Consolidation cadence          |           600s |
+
+> Catalog metrics (registered tables, lineage edges) are omitted: OpenMetadata
+> ingestion is a separate step that was not re-verified after the last stack
+> recreate — see README, OpenMetadata section.
 
 ---
 
