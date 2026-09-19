@@ -427,6 +427,10 @@ class TestCheckDispatch:
             "anomaly_detection",
             "freshness_check",
             "schema_drift",
+            # Phase 1 reconciliation checks were registered in CHECK_DISPATCH
+            # but never added here, so this test could not catch a regression
+            # in them. Reconciled with the manifest's dq_check_types metric.
+            "reconciliation",
         }
         assert set(CHECK_DISPATCH.keys()) == expected
 

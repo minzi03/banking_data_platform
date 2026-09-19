@@ -1,0 +1,65 @@
+# =============================================================================
+# Bandit configuration — Banking Data Platform
+# =============================================================================
+# Run by .github/workflows/ci.yml:
+#     bandit -r code_etl/ governance/ --severity-level medium
+#
+# Every skip below is a deliberate acceptance with a stated reason, not a
+# blanket suppression. The distinction matters: B608 is a real finding class,
+# and the reason it does not apply here is specific to how SQL is built in this
+# codebase.
+# =============================================================================
+
+skips:
+  # ---------------------------------------------------------------------------
+  # B608 — "Possible SQL injection vector through string-based query
+  # construction."
+  #
+  # SQL in this platform is assembled by f-string from values that come from
+  # three sources, none of them user input:
+  #
+  #   1. YAML job configs committed to this repository
+  #      (code_etl/{bronze,silver,gold,cdc}/**/*.yml). Table names, column
+  #      lists and predicates are author-controlled, reviewed, and versioned.
+  #   2. Iceberg table identifiers derived from those same configs
+  #      (catalog.schema.table).
+  #   3. Literals the jobs render themselves: cob_dt values parsed from the
+  #      Airflow execution date, and constants such as 'Asia/Ho_Chi_Minh'.
+  #
+  # There is no request path from an untrusted caller to a SQL string. The
+  # jobs run inside the platform's own containers with no exposed query
+  # surface; the API service reads pre-built Iceberg tables rather than
+  # accepting SQL.
+  #
+  # Parameterisation is also not available for the parts Bandit is flagging:
+  # Spark and Trino do not accept bind parameters for identifiers (table and
+  # column names), which is exactly what most of these f-strings interpolate.
+  # The remaining interpolations are already-validated date literals.
+  #
+  # If a job ever takes SQL text or an identifier from outside the repository
+  # — an API request, a user-supplied filter, a queue message — this skip must
+  # be removed and that path parameterised. The finding would be real there.
+  - B608
+
+  # ---------------------------------------------------------------------------
+  # B110 — try/except/pass.
+  #
+  # Accepted where the operation is genuinely best-effort and the failure mode
+  # is "already done". Concretely: ALTER TABLE ... ADD COLUMN raising when the
+  # column exists, and optional cleanup of temporary objects. Silently
+  # continuing is the intended behaviour; the alternative is checking for
+  # existence first, which races.
+  #
+  # This is NOT accepted for data-path failures. Where a failure means the
+  # pipeline produced wrong output, the code raises instead — see the
+  # snapshot guard in code_etl/gold/base_job/gold_job.py.
+  - B110
+
+  # ---------------------------------------------------------------------------
+  # B101 — assert used.
+  #
+  # Test modules only. Asserts in test code are the language feature, not a
+  # defect. Non-test modules in code_etl/ and governance/ raise explicit
+  # exceptions instead, because `python -O` strips asserts and a validation
+  # step that vanishes under an optimisation flag is worse than no validation.
+  - B101
