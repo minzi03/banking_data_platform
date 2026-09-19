@@ -233,7 +233,7 @@ counts are ambiguous without them.
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
 | Historical Gold tables     |             14 | Spark-managed Gold history, partitioned by `cob_dt`                             |
-| Current-serving tables     |             11 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Current-serving tables     |             13 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
@@ -1007,7 +1007,7 @@ Unknown __op = x
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
 | Historical Gold tables |    14 | Spark-managed marts, partitioned by `cob_dt`       |
-| Current-serving tables |    11 | dbt-managed, in `serving` schema, served via Trino |
+| Current-serving tables |    13 | dbt-managed, in `serving` schema, served via Trino |
 
 ---
 
