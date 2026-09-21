@@ -1,0 +1,82 @@
+# Dataset Contract: aml_monitoring (Gold History Snapshot)
+# Transaction-level AML typology scoring
+
+dataset_id: banking.aml_monitoring_gold
+owner: Data Engineering Team
+business_purpose: >
+  Daily snapshot of AML typology flags scored at transaction grain. Five
+  typologies: high value, structuring, velocity, multi-channel and
+  geo-velocity. Grain is one row per account transaction per cob_dt. Used for
+  suspicious activity review and regulatory reporting.
+refresh_sla: daily
+quality_class: critical
+layer: gold
+
+physical_location:
+  catalog: lakehouse
+  namespace: gold
+  table: aml_monitoring
+
+dag_id: gold_all_dag
+
+# dim_location và fact_online_transaction là nguồn của geo_velocity_flag.
+# Kênh online là nơi DUY NHẤT mang location_id — fact_txn_account không có
+# cột địa lý nào.
+upstream_dataset_ids:
+  - banking.fact_txn_account_silver
+  - banking.dim_customer_silver
+  - banking.dim_account_silver
+  - banking.fact_online_transaction_silver
+  - banking.dim_location_silver
+
+quality_rules:
+  required_columns:
+    - txn_id
+    - account_id
+    - customer_id
+    - txn_amount
+    - channel
+    - txn_date
+    - distinct_states
+    - high_risk_locations
+    - high_value_flag
+    - structuring_flag
+    - velocity_flag
+    - multi_channel_flag
+    - geo_velocity_flag
+    - alert_score
+    - risk_level
+    - alert_generated
+    - cob_dt
+  non_null_columns:
+    - txn_id
+    - customer_id
+    - alert_score
+    - risk_level
+    - cob_dt
+  # Đặt thấp có chủ ý: CI chạy seed đã giảm quy mô (--scale, xem TD-6), nên
+  # ngưỡng theo khối lượng production sẽ đỏ giả ở đó. Snapshot 2026-09-20 local
+  # có 1.200.000 dòng.
+  min_row_count: 1000
+  unique_column_sets:
+    - [txn_id, cob_dt]
+  date_column: cob_dt
+  forbid_future_dates: true
+  freshness_sla_hours: 24
+
+ai_governance:
+  ai_use_allowed: true
+  risk_tier: high_risk
+  intended_uses:
+    - suspicious_activity_review
+    - regulatory_reporting
+    - typology_backtesting
+  # Cảnh báo AML là ĐẦU VÀO cho điều tra viên, không phải phán quyết. Đóng băng
+  # hay từ chối giao dịch dựa thẳng vào alert_score là dùng sai công cụ:
+  # ngưỡng hiện tại chưa được hiệu chỉnh cho mục đích đó (xem ghi chú
+  # hiệu chỉnh trong code_etl/gold/risk/aml_monitoring.yml).
+  prohibited_uses:
+    - automated_account_freeze
+    - automated_transaction_blocking
+    - external_sharing
+  human_oversight_required: true

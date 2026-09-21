@@ -8,7 +8,7 @@
 Đây là lineage **khai báo** — thứ contract nói. Lineage **quan sát được**
 (thực sự chạy) nằm ở OpenMetadata. Hai cái lệch nhau là tín hiệu đáng điều tra.
 
-**33 dataset · 45 cạnh phụ thuộc**
+**34 dataset · 50 cạnh phụ thuộc**
 
 ---
 
@@ -31,13 +31,12 @@ và chưa có gì dùng tới.
 
 | Dataset | Tầng | Ghi chú |
 |---|---|---|
+| `banking.aml_monitoring_gold` | gold | **đáng xem lại** |
 | `banking.branch_monthly_summary_gold` | gold | **đáng xem lại** |
 | `banking.dim_device_silver` | silver | **đáng xem lại** |
 | `banking.dim_employee_silver` | silver | **đáng xem lại** |
-| `banking.dim_location_silver` | silver | **đáng xem lại** |
 | `banking.dim_product_silver` | silver | **đáng xem lại** |
 | `banking.fact_crm_interaction_silver` | silver | **đáng xem lại** |
-| `banking.fact_online_transaction_silver` | silver | **đáng xem lại** |
 | `banking.fact_support_ticket_silver` | silver | **đáng xem lại** |
 | `banking.campaign_target_current_gold` | gold | serving — lá hợp lệ |
 | `banking.churn_prediction_current_gold` | gold | serving — lá hợp lệ |
@@ -49,7 +48,7 @@ và chưa có gì dùng tới.
 | `banking.mart_customer_360_current_gold` | gold | serving — lá hợp lệ |
 | `banking.rfm_segment_current_gold` | gold | serving — lá hợp lệ |
 
-**8 lá đáng xem lại · 9 lá serving hợp lệ.**
+**7 lá đáng xem lại · 9 lá serving hợp lệ.**
 
 ---
 
@@ -71,7 +70,7 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 **`banking.dim_account_silver`** · `silver.dim_account` · DAG `silver_all_dag`
 
 - ↑ đọc từ: `banking.core_customer_bronze`
-- ↓ được đọc bởi: `banking.mart_customer_360_gold`
+- ↓ được đọc bởi: `banking.aml_monitoring_gold`, `banking.mart_customer_360_gold`
 
 **`banking.dim_branch_silver`** · `silver.dim_branch` · DAG `silver_all_dag`
 
@@ -86,7 +85,7 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 **`banking.dim_customer_silver`** · `silver.dim_customer` · DAG `silver_all_dag`
 
 - ↑ đọc từ: `banking.core_customer_bronze`
-- ↓ được đọc bởi: `banking.churn_prediction_gold`, `banking.cross_sell_segment_gold`, `banking.mart_customer_360_gold`, `banking.rfm_segment_gold`
+- ↓ được đọc bởi: `banking.aml_monitoring_gold`, `banking.churn_prediction_gold`, `banking.cross_sell_segment_gold`, `banking.mart_customer_360_gold`, `banking.rfm_segment_gold`
 
 **`banking.dim_device_silver`** · `silver.dim_device` · DAG `silver_all_dag`
 
@@ -101,7 +100,7 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 **`banking.dim_location_silver`** · `silver.dim_location` · DAG `silver_all_dag`
 
 - ↑ đọc từ: `banking.core_customer_bronze`
-- ↓ được đọc bởi: _(không có)_
+- ↓ được đọc bởi: `banking.aml_monitoring_gold`
 
 **`banking.dim_product_silver`** · `silver.dim_product` · DAG `silver_all_dag`
 
@@ -121,7 +120,7 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 **`banking.fact_online_transaction_silver`** · `silver.fact_online_transaction` · DAG `silver_all_dag`
 
 - ↑ đọc từ: `banking.core_customer_bronze`
-- ↓ được đọc bởi: _(không có)_
+- ↓ được đọc bởi: `banking.aml_monitoring_gold`
 
 **`banking.fact_support_ticket_silver`** · `silver.fact_support_ticket` · DAG `silver_all_dag`
 
@@ -131,11 +130,16 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 **`banking.fact_txn_account_silver`** · `silver.fact_txn_account` · DAG `silver_all_dag`
 
 - ↑ đọc từ: `banking.core_customer_bronze`
-- ↓ được đọc bởi: `banking.branch_monthly_summary_gold`, `banking.churn_prediction_gold`, `banking.mart_customer_360_gold`, `banking.rfm_segment_gold`
+- ↓ được đọc bởi: `banking.aml_monitoring_gold`, `banking.branch_monthly_summary_gold`, `banking.churn_prediction_gold`, `banking.mart_customer_360_gold`, `banking.rfm_segment_gold`
 
 ---
 
 ### gold
+
+**`banking.aml_monitoring_gold`** · `gold.aml_monitoring` · DAG `gold_all_dag`
+
+- ↑ đọc từ: `banking.fact_txn_account_silver`, `banking.dim_customer_silver`, `banking.dim_account_silver`, `banking.fact_online_transaction_silver`, `banking.dim_location_silver`
+- ↓ được đọc bởi: _(không có)_
 
 **`banking.branch_monthly_summary_gold`** · `gold.branch_monthly_summary` · DAG `gold_mart360_dag`
 
