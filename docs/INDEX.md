@@ -98,10 +98,10 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 
 > Bốn tài liệu tra cứu trên đều **sinh tự động** và có test chặn drift. Đừng sửa tay.
 >
-> ⚠️ `LINEAGE.md` hiện ghi nhận **4 tham chiếu treo** — bốn Gold contract trỏ tới
-> `banking.dim_customer_silver` trong khi contract của `silver.dim_customer` mang
-> `dataset_id` là `banking.core_customer_silver`. Lineage đứt ở dimension được
-> dùng nhiều nhất của nền tảng.
+> `LINEAGE.md` kiểm thêm hai thứ khó thấy khi đọc contract từng file một:
+> tham chiếu upstream trỏ tới `dataset_id` không tồn tại (hiện **0**, có assert
+> cứng chặn tái diễn), và dataset không có consumer nào (hiện **8** không phải
+> serving — trong đó `dim_device` và `dim_location` là mục 2.1 của ROADMAP).
 
 ## 4. Vận hành
 

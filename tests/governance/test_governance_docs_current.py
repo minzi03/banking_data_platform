@@ -70,40 +70,46 @@ def test_generator_is_deterministic():
     assert before == after, "Generator không tất định — nghi ngờ thiếu sort ở đâu đó."
 
 
-def test_dangling_reference_detection_works():
+def test_no_dangling_upstream_references():
     """
-    Cơ chế phát hiện tham chiếu treo phải THỰC SỰ hoạt động.
+    KHÔNG contract nào được trỏ upstream tới một dataset_id không tồn tại.
 
-    Không assert "hiện có 0 tham chiếu treo" — hiện tại repo ĐANG CÓ 4 cái
-    (bốn Gold contract trỏ tới `banking.dim_customer_silver`, trong khi
-    contract của `silver.dim_customer` lại mang dataset_id
-    `banking.core_customer_silver`). Sửa việc đó phải đụng 8 chỗ trong code
-    và test, nên nằm ngoài phạm vi PR tài liệu.
+    Đây là assert CỨNG. Bản đầu của test này chỉ kiểm "cơ chế phát hiện có
+    chạy không", vì lúc viết repo đang có 4 tham chiếu treo: bốn Gold contract
+    trỏ tới `banking.dim_customer_silver`, trong khi contract của
+    `silver.dim_customer` lại mang `dataset_id` là `banking.core_customer_silver`
+    — đặt theo tổ tiên Bronze thay vì theo bảng nó mô tả.
 
-    Cái test này bảo đảm: nếu có tham chiếu treo, nó PHẢI xuất hiện trong
-    LINEAGE.md. Một cơ chế phát hiện âm thầm hỏng còn tệ hơn không có.
+    Bốn tham chiếu kia đúng: 12/13 contract silver theo quy ước
+    `banking.<physical_table>_silver`. `dim_customer` là ngoại lệ duy nhất, nên
+    contract đã được đổi tên cho khớp. Giờ siết lại thành assert cứng để lineage
+    không thể đứt lần nữa mà không ai biết.
 
-    Khi 4 tham chiếu kia được sửa, đổi test này thành assert cứng
-    `analyse_lineage(...)["dangling"] == {}` để chặn tái diễn.
+    Vì sao đáng siết: khi tham chiếu treo, dataset nguồn trông như không có ai
+    dùng còn dataset đích trông như không có nguồn — cả hai đều SAI, và cả hai
+    đều trông bình thường nếu chỉ đọc từng file contract riêng lẻ.
     """
     from generate_governance_docs import analyse_lineage, load_contracts
 
     graph = analyse_lineage(load_contracts())
     dangling = graph["dangling"]
 
-    content = LINEAGE_DOC.read_text(encoding="utf-8")
+    assert dangling == {}, (
+        "Có contract khai báo upstream trỏ tới dataset_id không tồn tại:\n"
+        + "\n".join(f"  - {cid} → {missing}" for cid, missing in sorted(dangling.items()))
+        + "\n\nLineage đứt tại đây. Sửa `upstream_dataset_ids`, hoặc đổi "
+        "`dataset_id` của contract đích cho khớp quy ước "
+        "`banking.<physical_table>_<layer>`."
+    )
 
-    if dangling:
-        assert "Tham chiếu treo" in content, (
-            f"Có {len(dangling)} contract với upstream không tồn tại, "
-            "nhưng LINEAGE.md không hề nêu — cơ chế phát hiện đã hỏng."
-        )
-        for cid in dangling:
-            assert cid in content, f"Tham chiếu treo của `{cid}` không xuất hiện trong LINEAGE.md"
-    else:
-        assert "Tham chiếu treo" not in content, (
-            "Không còn tham chiếu treo nhưng LINEAGE.md vẫn còn mục cảnh báo — sinh lại tài liệu."
-        )
+
+def test_lineage_doc_has_no_stale_dangling_section():
+    """LINEAGE.md không được còn mục cảnh báo khi đã hết tham chiếu treo."""
+    content = LINEAGE_DOC.read_text(encoding="utf-8")
+    assert "Tham chiếu treo" not in content, (
+        "Không còn tham chiếu treo nhưng LINEAGE.md vẫn còn mục cảnh báo — "
+        "chạy: py -3 scripts/generate_governance_docs.py"
+    )
 
 
 def test_lineage_graph_is_not_empty():

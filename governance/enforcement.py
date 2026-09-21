@@ -9,7 +9,7 @@ Usage:
     from governance.enforcement import ContractEnforcer
 
     registry = ContractRegistry()
-    contract = registry.get_contract("banking.core_customer_silver")
+    contract = registry.get_contract("banking.dim_customer_silver")
 
     enforcer = ContractEnforcer()
     result = enforcer.validate_before_write(spark, df, contract)

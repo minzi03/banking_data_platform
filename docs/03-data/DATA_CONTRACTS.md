@@ -29,10 +29,10 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 
 | Dataset | Bảng vật lý | Grain | Quality | AI risk | DAG |
 |---|---|---|---|---|---|
-| `banking.core_customer_silver` | `silver.dim_customer` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_account_silver` | `silver.dim_account` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_branch_silver` | `silver.dim_branch` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_card_silver` | `silver.dim_card` | — | critical | `limited_risk` | `silver_all_dag` |
+| `banking.dim_customer_silver` | `silver.dim_customer` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_device_silver` | `silver.dim_device` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_employee_silver` | `silver.dim_employee` | — | critical | `limited_risk` | `silver_all_dag` |
 | `banking.dim_location_silver` | `silver.dim_location` | — | critical | `limited_risk` | `silver_all_dag` |
@@ -93,10 +93,10 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 | `banking.mart_customer_360_gold` | 33 | 3 | 5,000 | 24h |
 | `banking.rfm_segment_current_gold` | 11 | 4 | 1,000 | 24h |
 | `banking.rfm_segment_gold` | 11 | 4 | 1,000 | 24h |
-| `banking.core_customer_silver` | 18 | 6 | 5,000 | 24h |
 | `banking.dim_account_silver` | 12 | 6 | 5,000 | 24h |
 | `banking.dim_branch_silver` | 6 | 4 | 5 | 24h |
 | `banking.dim_card_silver` | 8 | 6 | 1,000 | 24h |
+| `banking.dim_customer_silver` | 18 | 6 | 5,000 | 24h |
 | `banking.dim_device_silver` | 6 | 3 | 500 | 24h |
 | `banking.dim_employee_silver` | 6 | 4 | 100 | 24h |
 | `banking.dim_location_silver` | 6 | 4 | 200 | 24h |

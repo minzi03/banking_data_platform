@@ -24,7 +24,7 @@ def governance_contracts_dir(tmp_path):
         {
             "filename": "customer_silver.yaml",
             "content": """
-dataset_id: banking.core_customer_silver
+dataset_id: banking.dim_customer_silver
 owner: Data Engineering Team
 business_purpose: Customer dimension with SCD2
 refresh_sla: daily
@@ -73,7 +73,7 @@ physical_location:
   table: mart_customer_360
 dag_id: gold_mart360_dag
 upstream_dataset_ids:
-  - banking.core_customer_silver
+  - banking.dim_customer_silver
   - banking.dim_account_silver
 quality_rules:
   required_columns:
@@ -132,7 +132,7 @@ class TestGovernanceFlow:
         assert not registry.has_errors
 
         # 2. Get contract
-        customer_contract = registry.get_contract("banking.core_customer_silver")
+        customer_contract = registry.get_contract("banking.dim_customer_silver")
         assert customer_contract is not None
         assert customer_contract.quality_class == "critical"
 
@@ -140,7 +140,7 @@ class TestGovernanceFlow:
         enforcer = ContractEnforcer()
         result = enforcer.validate_before_write(mock_spark, mock_df_valid, customer_contract)
         assert isinstance(result, ValidationResult)
-        assert result.dataset_id == "banking.core_customer_silver"
+        assert result.dataset_id == "banking.dim_customer_silver"
 
         # 4. Check results
         pass_count = sum(1 for c in result.checks if c.status == "PASS")
@@ -257,7 +257,7 @@ class TestGovernanceFlow:
     def test_contract_validation_failure_flow(self, governance_contracts_dir, mock_spark):
         """Flow when contract validation fails."""
         registry = ContractRegistry(str(governance_contracts_dir))
-        contract = registry.get_contract("banking.core_customer_silver")
+        contract = registry.get_contract("banking.dim_customer_silver")
 
         # Mock DataFrame with missing required columns
         df = MagicMock()

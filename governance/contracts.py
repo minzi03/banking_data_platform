@@ -121,7 +121,7 @@ class DatasetContract(BaseModel):
     for a governed dataset in the lakehouse.
     """
 
-    dataset_id: str = Field(..., description="Unique identifier (e.g., 'banking.core_customer_silver')")
+    dataset_id: str = Field(..., description="Unique identifier (e.g., 'banking.dim_customer_silver')")
     owner: str = Field(..., description="Team or person responsible for this dataset")
     business_purpose: str = Field(..., description="Business description of the dataset")
     refresh_sla: RefreshSLA = Field(default=RefreshSLA.DAILY, description="Expected refresh frequency")

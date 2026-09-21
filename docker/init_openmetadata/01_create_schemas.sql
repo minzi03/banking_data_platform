@@ -80,5 +80,5 @@ ON CONFLICT DO NOTHING;
 
 -- Insert sample contract validation record
 INSERT INTO opslakehouse.contract_validation_log (dataset_id, check_name, check_status, expected_value, actual_value, details, cob_dt)
-VALUES ('banking.core_customer_silver', 'row_count', 'PASS', '5000', '10000', 'Row count OK: 10000', CURRENT_DATE)
+VALUES ('banking.dim_customer_silver', 'row_count', 'PASS', '5000', '10000', 'Row count OK: 10000', CURRENT_DATE)
 ON CONFLICT DO NOTHING;
