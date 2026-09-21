@@ -1,18 +1,39 @@
 # =============================================================================
 # CD Pipeline — Banking Data Platform
 # =============================================================================
-# Trigger: Push to main (after CI passes)
+# Trigger: CI Pipeline hoàn tất THÀNH CÔNG trên main.
 # Steps: Build Docker images → Push to GHCR
+#
+# Vì sao CHỈ có workflow_run, không có `push: main`:
+#
+#   Trước đây workflow này có CẢ HAI trigger. Mỗi lần main đổi, `push` fire một
+#   lần và `workflow_run` fire thêm một lần nữa khi CI xong — hai run CD chạy
+#   chồng nhau. Thêm vào đó, `workflow_run` không lọc branch, nên CI của MỌI
+#   PR cũng kích hoạt CD: build và push image từ code chưa merge.
+#
+#   Hậu quả đo được (2026-09-21): commit 44f979e vừa thành công (16:45, 17:03)
+#   vừa thất bại (17:15, 17:26) với `ERROR: failed to reserve cache`. Cùng một
+#   SHA, kết quả khác nhau — hai run tranh cùng một buildx GHA cache key.
+#   Hai lần đỏ khớp đúng giờ CI của PR #7 (17:07) và PR #8 (17:14) kết thúc.
+#
+#   `push: main` bị bỏ vì nó chạy CD SONG SONG với CI thay vì sau CI — tức là
+#   có thể publish image của một commit mà CI đang đỏ. workflow_run có gate
+#   conclusion == 'success' giữ đúng ý định ban đầu: chỉ build khi CI đã xanh.
 # =============================================================================
 
 name: CD Pipeline
 
 on:
-  push:
-    branches: [main]
   workflow_run:
     workflows: ["CI Pipeline"]
     types: [completed]
+
+# Một run CD tại một thời điểm. Không cancel-in-progress: một run đang push
+# image dở dang mà bị huỷ sẽ để lại tag không đầy đủ trên registry. Deploy
+# thưa nên xếp hàng rẻ hơn rủi ro đó.
+concurrency:
+  group: cd-${{ github.workflow }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -29,7 +50,13 @@ jobs:
   build:
     name: 🐳 Build Docker Images
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    # Hai điều kiện, cả hai đều cần:
+    #   conclusion == 'success'  → không build khi CI đỏ
+    #   head_branch == 'main'    → không build từ nhánh PR chưa merge
+    # Thiếu điều kiện thứ hai là lý do CD từng chạy trên CI của mọi PR.
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_branch == 'main' }}
     strategy:
       matrix:
         include:
@@ -43,8 +70,14 @@ jobs:
             image: banking-airflow
 
     steps:
-      - name: Checkout code
+      # workflow_run chạy trong context của DEFAULT BRANCH, không phải của
+      # commit đã kích hoạt CI. Không chỉ định ref thì checkout lấy HEAD của
+      # main tại thời điểm chạy — có thể đã khác commit mà CI vừa xanh.
+      # Build đúng thứ đã được kiểm, không phải thứ tình cờ đang ở HEAD.
+      - name: Checkout the commit CI verified
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,11 +94,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          # Tag lấy từ head_sha của workflow_run, không dùng type=sha/type=ref.
+          # Hai loại đó đọc github.sha và github.ref, mà trong context
+          # workflow_run chúng trỏ tới default branch chứ không tới commit đã
+          # kích hoạt — image sẽ mang tag của một commit khác với nội dung.
+          # Job chỉ chạy khi head_branch == 'main' nên `latest` luôn đúng.
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.workflow_run.head_sha }}
+            type=raw,value=main
+            type=raw,value=latest
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -75,8 +112,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # scope PHẢI khác nhau giữa các leg của matrix. Không có scope, cả
+          # spark-worker và airflow dùng chung một cache key mặc định; chúng
+          # chạy song song, cùng reserve một key, và một cái thua với
+          # `ERROR: failed to reserve cache`. Đây là nguyên nhân trực tiếp của
+          # các lần đỏ ngày 2026-09-21.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   # ===========================================================================
   # Job 2: Validate Deployment
@@ -86,8 +128,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     steps:
-      - name: Checkout code
+      # Cùng lý do với job build: phải validate đúng commit đã được build,
+      # không phải HEAD của main tại thời điểm chạy.
+      - name: Checkout the commit CI verified
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Validate Docker Compose
         run: |
