@@ -35,12 +35,17 @@ sql: |
     LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND a.is_current=1
     WHERE t.cob_dt = DATE '{{ cob_dt }}'
   ),
+  -- Grain toàn partition. CHỈ dùng cho tổng credit/debit, KHÔNG dùng cho flag.
+  --
+  -- Một partition cob_dt chứa giao dịch trải 432 ngày nghiệp vụ đo được
+  -- (2025-05-30 → 2026-08-04 trên snapshot 2026-09-20), vì cob_dt là ngày NẠP
+  -- chứ không phải ngày giao dịch. Mọi typology AML đều nói về hành vi trong
+  -- MỘT ngày, nên tính chúng ở đây là sai grain.
   customer_stats AS (
     SELECT customer_id,
       SUM(CASE WHEN debit_credit='CREDIT' THEN txn_amount ELSE 0 END) AS total_credit,
       SUM(CASE WHEN debit_credit='DEBIT' THEN txn_amount ELSE 0 END) AS total_debit,
-      COUNT(txn_id) AS txn_count,
-      COUNT(DISTINCT channel) AS channel_count
+      COUNT(txn_id) AS txn_count
     FROM txn GROUP BY customer_id
   ),
   daily_agg AS (
@@ -48,7 +53,17 @@ sql: |
       CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
       COUNT(txn_id) AS daily_txn_count,
       SUM(txn_amount) AS daily_total_amount,
-      COUNT(CASE WHEN txn_amount BETWEEN 50000000 AND 99999999 THEN 1 END) AS structured_count
+      COUNT(CASE WHEN txn_amount BETWEEN 50000000 AND 99999999 THEN 1 END) AS structured_count,
+      -- channel_count CHUYỂN từ customer_stats sang đây. Ở grain partition nó
+      -- đếm kênh trên ~14 tháng: 94,9% khách chạm đủ 5 kênh, nên `>= 4` gắn cờ
+      -- 99,9% — vô nghĩa. Ở grain ngày, phân phối thật là:
+      --     1 kênh  873.800  87,9%
+      --     2 kênh  112.750  11,3%
+      --     3 kênh    7.745   0,8%
+      --     4 kênh      263   0,03%   ← ngưỡng >= 4 giữ nguyên
+      --     5 kênh        2   0,00%
+      -- Ngưỡng chưa bao giờ sai; GRAIN mới sai.
+      COUNT(DISTINCT channel) AS daily_channel_count
     FROM txn
     GROUP BY customer_id, CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
   ),
@@ -71,14 +86,27 @@ sql: |
       CAST(from_utc_timestamp(ot.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
   ),
   flagged AS (
-    SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count, cs.channel_count,
+    SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count,
       da.daily_txn_count, da.daily_total_amount, da.structured_count,
+      da.daily_channel_count AS channel_count,
       COALESCE(ga.distinct_states, 0) AS distinct_states,
       COALESCE(ga.high_risk_locations, 0) AS high_risk_locations,
+      -- ⚠ high_value_flag CHƯA hiệu chỉnh được, và đây là lý do — ghi ra để
+      -- không ai tưởng 200tr là con số đã cân nhắc theo dữ liệu.
+      -- Generator sinh txn_amount bằng random.uniform(10.000, 500.000.000),
+      -- nên median là 250tr — NẰM TRÊN ngưỡng. Kết quả: gắn cờ 60% giao dịch.
+      -- Nâng ngưỡng lên p99 (≈495tr) sẽ cho tỷ lệ đẹp nhưng là con số vô nghĩa
+      -- với ngân hàng thật; gốc rễ là phân phối amount không thực tế, không
+      -- phải ngưỡng. Sửa đúng chỗ là generator — ROADMAP 3.6 (amount lệch phải
+      -- thay vì đều). Giữ 200tr vì nó hợp lý với dữ liệu THẬT.
       CASE WHEN t.txn_amount >= 200000000 THEN 1 ELSE 0 END AS high_value_flag,
-      CASE WHEN da.structured_count >= 3 THEN 1 ELSE 0 END AS structuring_flag,
-      CASE WHEN da.daily_txn_count >= 10 THEN 1 ELSE 0 END AS velocity_flag,
-      CASE WHEN cs.channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag,
+      -- >= 3 không bao giờ chạy (0,0%). Ở grain ngày, >= 2 gắn cờ 0,2%.
+      CASE WHEN da.structured_count >= 2 THEN 1 ELSE 0 END AS structuring_flag,
+      -- >= 10 là BẤT KHẢ THI: số giao dịch/khách/ngày tối đa đo được là 8,
+      -- nên rule này chưa từng gắn cờ dòng nào. Phân phối thật:
+      --     >= 3 txn  2,7%   ·   >= 4 txn  0,4%   ·   >= 5 txn  0,0%
+      CASE WHEN da.daily_txn_count >= 4 THEN 1 ELSE 0 END AS velocity_flag,
+      CASE WHEN da.daily_channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag,
       -- Ngưỡng >= 3 ĐO ĐƯỢC, không phải chọn cảm tính. Phân phối số tỉnh/thành
       -- riêng biệt mỗi customer-day trên snapshot 2026-09-20:
       --     1 state  412.786  95,0%
