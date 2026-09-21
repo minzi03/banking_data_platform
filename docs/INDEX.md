@@ -40,8 +40,18 @@ Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và 
 | [`code_etl/cdc/README.md`](../code_etl/cdc/README.md) | Cài đặt CDC ở mức code |
 | [`p2-observability-design.md`](p2-observability-design.md) | Prometheus · Grafana · alerting |
 | [`architecture-image-prompt.md`](architecture-image-prompt.md) | Nguồn sinh sơ đồ kiến trúc |
+| [`adr/`](adr/README.md) | **Architecture Decision Records** — vì sao hệ thống được xây như vậy |
 
-> **Chưa có**: `DATA_FLOW.md` và thư mục `adr/` (14 quyết định kiến trúc hiện nằm trong comment code) — xem [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) §3 nhóm B.
+### Quyết định kiến trúc (ADR)
+
+| # | Quyết định |
+|---|---|
+| [0002](adr/0002-cross-engine-catalog-naming.md) | Spark catalog `lakehouse` ≠ Trino catalog `iceberg` — và vì sao cần static check |
+| [0003](adr/0003-serving-as-table-not-view.md) | Tầng serving là `table`, không phải `view` |
+| [0004](adr/0004-business-date-under-utc-session.md) | Business date suy ra tường minh, Spark session bắt buộc UTC |
+| [0005](adr/0005-fail-loud-before-overwrite.md) | Fail loud trước khi ghi đè partition |
+
+> **Chưa có**: `DATA_FLOW.md`, và 10 ADR còn lại — xem [`adr/README.md`](adr/README.md) để biết cái nào chỉ cần chuyển thể từ comment, cái nào cần tác giả xác nhận lý do.
 
 ## 3. Dữ liệu
 
