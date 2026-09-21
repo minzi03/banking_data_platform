@@ -1,5 +1,15 @@
 # Silver: fact_online_transaction (overwritePartitions by cob_dt)
-# Joins: dim_customer (customer_sk) + dim_device (device_id) + dim_location (location_id)
+# Joins: dim_customer (customer_sk).
+#
+# device_id và location_id được giữ nguyên dạng FK, KHÔNG join dim ở tầng này —
+# fact giữ khoá, dim được join ở Gold khi cần thuộc tính. Trước đây
+# silver.dim_device và silver.dim_location bị khai báo nhầm trong source.tables
+# (và header ghi "Joins: ... dim_device + dim_location") dù SQL không hề đọc
+# chúng: khai báo sai làm lineage sai và có thể biến thành lỗi giả nếu về sau
+# thêm require_snapshots. Xem tests/governance/test_declared_sources_match_sql.py
+#
+# Hai dim này hiện chưa có consumer nào ở Gold — việc dùng chúng nằm ở
+# docs/ROADMAP.md mục 2.1 (geo_velocity_flag cho aml_monitoring).
 job:
   type: fact_txn
 
@@ -7,8 +17,6 @@ source:
   tables:
     - bronze.core_online_transaction
     - silver.dim_customer
-    - silver.dim_device
-    - silver.dim_location
 
 target:
   catalog: lakehouse
