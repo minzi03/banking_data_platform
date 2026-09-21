@@ -85,9 +85,9 @@ class TestGoldJobOrder:
                 assert "depends_on" not in job, f"Phase 1 job '{job['name']}' should not have depends_on"
 
     def test_mart360_jobs_count(self):
-        """Should have 5 mart360 jobs."""
+        """Should have 6 mart360 jobs."""
         mart360_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "mart360"]
-        assert len(mart360_jobs) == 5
+        assert len(mart360_jobs) == 6
 
     def test_segment_jobs_count(self):
         """Should have 4 segment jobs (rfm, churn, cross_sell, campaign)."""
@@ -98,6 +98,27 @@ class TestGoldJobOrder:
         """Should have 1 time_analytics job."""
         time_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "time_analytics"]
         assert len(time_jobs) == 1
+
+    def test_risk_jobs_count(self):
+        """Should have 3 risk jobs (loan_portfolio, fraud, aml)."""
+        risk_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "risk"]
+        assert len(risk_jobs) == 3
+
+    def test_every_config_on_disk_is_scheduled(self):
+        """
+        Mọi YAML trong code_etl/gold phải có mặt trong GOLD_JOB_ORDER.
+
+        Đây là regression test cho lớp bug đã gặp: YAML được thêm vào repo,
+        gold_job.py biết cách chạy nó, nhưng bootstrap không liệt kê — nên
+        bảng không bao giờ được tạo, và chỉ lộ ra khi Gold chạy thật.
+        """
+        gold_root = Path(GOLD_JOB_ORDER[0]["config"]).parent.parent
+        scheduled = {Path(j["config"]).resolve() for j in GOLD_JOB_ORDER}
+        on_disk = {p.resolve() for p in gold_root.rglob("*.yml") if "base_job" not in p.parts}
+        assert on_disk == scheduled, (
+            f"Chưa schedule: {sorted(str(p) for p in on_disk - scheduled)}; "
+            f"schedule nhưng không có file: {sorted(str(p) for p in scheduled - on_disk)}"
+        )
 
 
 class TestParseArguments:

@@ -70,17 +70,17 @@ class TestBronzeLayer:
 
     @pytest.mark.integration
     def test_bronze_row_counts_reasonable(self):
-        """Bronze tables should have reasonable row counts."""
-        tables = {
-            "core_customer": 1000,  # At least 1000 customers
-            "core_account": 1000,  # At least 1000 accounts
-            "core_branch": 10,  # At least 10 branches
-            "core_product": 5,  # At least 5 products
-        }
+        """Bronze tables should be non-empty.
 
-        for table, min_count in tables.items():
+        Không ghim volume: CI seed bằng `--scale 0.01` nên số dòng nhỏ hơn
+        production nhiều bậc. Ghim ở đây sẽ đỏ mỗi lần đổi scale, mà không
+        bảo vệ thêm được gì — cái cần bắt là bảng rỗng.
+        """
+        tables = ["core_customer", "core_account", "core_branch", "core_product"]
+
+        for table in tables:
             count = get_row_count(table, schema="bronze")
-            assert count >= min_count, f"{table} has {count} rows, expected >= {min_count}"
+            assert count > 0, f"{table} rỗng — Bronze chưa load được gì"
 
 
 # ---------------------------------------------------------------------------

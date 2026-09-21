@@ -38,6 +38,10 @@ BRONZE_CONFIGS = [
     "code_etl/bronze/core_banking/account.yml",
     "code_etl/bronze/core_banking/deposit.yml",
     "code_etl/bronze/core_banking/loan.yml",
+    # loan_payment nuôi silver.fact_loan_payment, thứ mà Gold mart_customer_360
+    # và loan_portfolio_risk khai báo require_snapshots. Thiếu ở đây thì cả
+    # chuỗi xuống Gold đứt, dù YAML đã có sẵn trên đĩa.
+    "code_etl/bronze/core_banking/loan_payment.yml",
     "code_etl/bronze/core_banking/txn_account.yml",
     "code_etl/bronze/core_banking/employee.yml",
     # card_crm (3 tables)

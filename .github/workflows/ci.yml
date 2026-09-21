@@ -790,12 +790,12 @@ jobs:
         echo "=== Installing seed dependencies ==="
         python -m pip install -r requirements-ci-seed.txt
 
-        echo "=== Generating seed data ==="
-        python data_generator/generate_all.py
+        echo "=== Generating seed data (CI: scaled 1%) ==="
+        python data_generator/generate_all.py --scale 0.01
 
         # Post-condition trên chính source, không tin generator tự báo.
-        # `> 0` chứ không ghim số: khối lượng do seed_config.yaml quyết định,
-        # ghim ở đây sẽ tạo ra hai nơi định nghĩa cùng một con số.
+        # `> 0` chứ không ghim số: khối lượng do seed_config.yaml + --scale
+        # quyết định, ghim ở đây sẽ tạo ra hai nơi định nghĩa cùng một con số.
         echo "=== Xác nhận PostgreSQL source có dữ liệu ==="
         for table in core_banking.customer core_banking.txn_account; do
           count=$(docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
@@ -937,13 +937,10 @@ jobs:
 
         echo "✅ ETL pipeline complete"
     - name: 'FIXTURE: SCD2 second snapshot with a tracked change'
-      env:
-        SCD2_CUSTOMER_ID: '1000'
       run: |
         set -euo pipefail
         D1="$BENCHMARK_COB_DT"
         D2=$(date -u -d "$D1 +1 day" +%F)
-        echo "D1=${D1}  D2=${D2}  customer=${SCD2_CUSTOMER_ID}"
 
         psql() {
           docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1"
@@ -951,6 +948,19 @@ jobs:
         trino_q() {
           docker exec ci-trino trino --output-format CSV_UNQUOTED --execute "$1"
         }
+
+        # Chọn customer_id ĐỘNG thay vì ghim '1000'.
+        # --scale làm seed sinh ít khách hơn, nên một ID cố định có thể không
+        # tồn tại — fixture sẽ hỏng vì lý do không liên quan tới SCD2. Lấy
+        # thẳng ID có trong Bronze của cob_dt đang xử lý.
+        SCD2_CUSTOMER_ID=$(trino_q "SELECT customer_id FROM iceberg.bronze.core_customer
+                                    WHERE cob_dt = DATE '${D1}'
+                                    ORDER BY customer_id LIMIT 1" | tr -d ' \r')
+        if [ -z "$SCD2_CUSTOMER_ID" ]; then
+          echo "::error::không tìm được customer_id nào trong bronze.core_customer @ ${D1}"
+          exit 1
+        fi
+        echo "D1=${D1}  D2=${D2}  customer=${SCD2_CUSTOMER_ID}"
 
         before=$(psql "SELECT customer_segment FROM core_banking.customer
                        WHERE customer_id = ${SCD2_CUSTOMER_ID}")

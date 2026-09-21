@@ -4,6 +4,7 @@ AML (Anti-Money Laundering) Data Generator
 Generates realistic AML rules, alerts, and customer risk profiles.
 """
 
+import json
 import random
 import string
 from datetime import datetime, timedelta
@@ -326,7 +327,10 @@ def generate_aml_alerts(
             risk_score,
             risk_category,
             random.choice(FRAUD_DESCRIPTIONS),
-            _generate_evidence(alert_type, txn_amount),
+            # evidence_json là cột JSONB: phải serialize dict -> JSON string,
+            # nếu không psycopg2 sẽ cố bind dict như text và Postgres báo
+            # "invalid input syntax for type json".
+            json.dumps(_generate_evidence(alert_type, txn_amount)),
             txn_amount,
             txn_date,
             random.choice(["BRANCH", "ATM", "INTERNET_BANKING", "MOBILE_BANKING"]),
@@ -360,8 +364,15 @@ def generate_aml_customer_risk(num_customers: int = 200, max_customer_id: int = 
     end_date = datetime(2025, 12, 31)
     date_range = (end_date - start_date).days
 
-    for i in range(1, num_customers + 1):
-        customer_id = random.randint(1, max_customer_id)
+    # customer_id là PRIMARY KEY của bảng này, nên phải sinh không trùng.
+    # Trước đây dùng random.randint(1, max_customer_id) trong vòng lặp:
+    # khi --scale làm max_customer_id nhỏ hơn num_customers thì gần như
+    # chắc chắn có duplicate. random.sample lấy không hoàn lại, và bị chặn
+    # trên bởi max_customer_id nên sinh ra ít hơn num_customers là đúng.
+    num_to_generate = min(num_customers, max_customer_id)
+    customer_ids = random.sample(range(1, max_customer_id + 1), num_to_generate)
+
+    for customer_id in customer_ids:
         risk_level = random.choices(risk_levels, weights=risk_weights, k=1)[0]
 
         if risk_level == "STANDARD":

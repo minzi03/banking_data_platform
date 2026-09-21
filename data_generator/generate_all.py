@@ -8,6 +8,7 @@ Usage:
     python generate_all.py
     python generate_all.py --config config/seed_config.yaml
     python generate_all.py --host localhost --port 5432
+    python generate_all.py --scale 0.01      # CI smoke test — tiny volume
 """
 
 import argparse
@@ -56,6 +57,33 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def apply_scale(config: dict, scale: float) -> dict:
+    """Apply a scale factor to all table row_counts.
+
+    Preserves ratios between tables. Reference/dimension tables keep a
+    minimum of 10 rows to ensure lookups still work in tests.
+    """
+    import copy
+    config = copy.deepcopy(config)
+
+    REFERENCE_TABLES = {
+        "branch", "product", "employee", "mcc_code", "source_table_registry",
+    }
+    MIN_ROWS = 10
+
+    for section in ("core_banking", "card_crm", "digital_banking"):
+        if section not in config:
+            continue
+        for table_name, table_cfg in config[section].items():
+            if isinstance(table_cfg, dict) and "row_count" in table_cfg:
+                original = table_cfg["row_count"]
+                if table_name in REFERENCE_TABLES:
+                    table_cfg["row_count"] = max(MIN_ROWS, int(original * scale))
+                else:
+                    table_cfg["row_count"] = max(1, int(original * scale))
+    return config
+
+
 def main():
     parser = argparse.ArgumentParser(description="Banking Data Platform — Seed Data Generator")
     parser.add_argument("--config", default=str(Path(__file__).parent / "config" / "seed_config.yaml"),
@@ -74,6 +102,10 @@ def main():
                         help="Truncate all tables before inserting (clear old data)")
     parser.add_argument("--csv-dir", default=None,
                         help="Also export to CSV files in this directory (e.g., ./output/csv)")
+    parser.add_argument("--scale", type=float, default=float(os.environ.get("SEED_SCALE", 1.0)),
+                        help="Scale factor applied to every table's row_count "
+                             "(e.g. 0.01 for CI smokes). Ratios between tables are preserved. "
+                             "Reference tables keep at least 10 rows.")
     args = parser.parse_args()
 
     logger.info("=" * 60)
@@ -81,8 +113,12 @@ def main():
     logger.info("=" * 60)
     logger.info("Config: %s", args.config)
     logger.info("Target: %s@%s:%d/%s", args.user, args.host, args.port, args.dbname)
+    if args.scale != 1.0:
+        logger.info("Scale factor: %s (small-volume mode)", args.scale)
 
     config = load_config(args.config)
+    if args.scale != 1.0:
+        config = apply_scale(config, args.scale)
     cb_cfg = config["core_banking"]
     cc_cfg = config["card_crm"]
     db_cfg = config["digital_banking"]

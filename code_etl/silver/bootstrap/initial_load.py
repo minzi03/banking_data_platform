@@ -57,6 +57,16 @@ SILVER_JOB_ORDER = [
         "type": "scd_type1",
         "config": "code_etl/silver/dims/dim_location.yml",
     },
+    {
+        "name": "dim_deposit",
+        "type": "scd_type1",
+        "config": "code_etl/silver/dims/dim_deposit.yml",
+    },
+    {
+        "name": "dim_loan",
+        "type": "scd_type1",
+        "config": "code_etl/silver/dims/dim_loan.yml",
+    },
     # === Phase 2: Dimensions SCD2 (no dependency on other dims) ===
     {
         "name": "dim_customer",
@@ -98,6 +108,17 @@ SILVER_JOB_ORDER = [
         "type": "fact_txn",
         "config": "code_etl/silver/facts/fact_support_ticket.yml",
         "depends_on": ["dim_customer"],
+    },
+    {
+        # Gold mart_customer_360 / customer_loan_summary / loan_portfolio_risk
+        # khai báo require_snapshots: silver.fact_loan_payment, nên bảng này
+        # bắt buộc phải có partition cob_dt trước khi Gold chạy. Thiếu nó thì
+        # assert_source_snapshots dừng Gold — đúng như thiết kế, nhưng bootstrap
+        # từng không chạy nó (Airflow DAG thì có), tạo ra lệch giữa hai entrypoint.
+        "name": "fact_loan_payment",
+        "type": "fact_txn",
+        "config": "code_etl/silver/facts/fact_loan_payment.yml",
+        "depends_on": ["dim_loan", "dim_customer"],
     },
 ]
 
