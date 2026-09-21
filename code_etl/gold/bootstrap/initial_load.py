@@ -69,6 +69,27 @@ GOLD_JOB_ORDER = [
         "type": "time_analytics",
         "config": "code_etl/gold/time_analytics/branch_monthly_summary.yml",
     },
+    {
+        # Đọc silver.fact_loan_payment + silver.dim_loan, không phụ thuộc Gold khác.
+        "name": "customer_loan_summary",
+        "type": "mart360",
+        "config": "code_etl/gold/mart360/customer_loan_summary.yml",
+    },
+    {
+        "name": "loan_portfolio_risk",
+        "type": "risk",
+        "config": "code_etl/gold/risk/loan_portfolio_risk.yml",
+    },
+    {
+        "name": "fraud_risk_txn",
+        "type": "risk",
+        "config": "code_etl/gold/risk/fraud_risk_txn.yml",
+    },
+    {
+        "name": "aml_monitoring",
+        "type": "risk",
+        "config": "code_etl/gold/risk/aml_monitoring.yml",
+    },
     # === Phase 2: Depends on Phase 1 outputs ===
     {
         "name": "campaign_target",
@@ -83,6 +104,7 @@ JOB_TYPE_MAP = {
     "mart360": "code_etl.gold.base_job.gold_job",
     "segment": "code_etl.gold.base_job.gold_job",
     "time_analytics": "code_etl.gold.base_job.gold_job",
+    "risk": "code_etl.gold.base_job.gold_job",
 }
 
 
