@@ -69,13 +69,20 @@ Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và 
 | [`DATA_INPUT_BASE_REPORT.md`](DATA_INPUT_BASE_REPORT.md) | Báo cáo hồ sơ dữ liệu nguồn |
 | [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md) | **Sinh tự động** — 85 bảng, 961 cột, kiểu dữ liệu, cờ PII, metadata contract |
 | [`GLOSSARY.md`](GLOSSARY.md) | Thuật ngữ: `cob_dt`, SCD, AUM, NPL, RFM, structuring, BCBS 239… |
+| [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md) | **Sinh tự động** — 33 contract: grain, quality class, AI risk tier, DAG |
+| [`LINEAGE.md`](LINEAGE.md) | **Sinh tự động** — đồ thị phụ thuộc, tham chiếu treo, dataset không có consumer |
 | [`DATA_VAULT_MAPPING.md`](DATA_VAULT_MAPPING.md) | Ánh xạ Kimball star schema → Data Vault 2.0 |
 | [`DBT_DEPLOYMENT.md`](DBT_DEPLOYMENT.md) | Tầng serving qua dbt + Trino |
 | [`dbt/README.md`](../dbt/README.md) · [`dbt/SUMMARY.md`](../dbt/SUMMARY.md) | dbt project |
 | [`api/README.md`](../api/README.md) | Customer 360 REST API |
 | [`openmetadata/README.md`](../openmetadata/README.md) | Catalog và lineage |
 
-> **Chưa có**: `DATA_CONTRACTS.md` (bản tổng hợp 33 contract), `LINEAGE.md` (bản đồ phụ thuộc đọc được cho người).
+> Bốn tài liệu tra cứu trên đều **sinh tự động** và có test chặn drift. Đừng sửa tay.
+>
+> ⚠️ `LINEAGE.md` hiện ghi nhận **4 tham chiếu treo** — bốn Gold contract trỏ tới
+> `banking.dim_customer_silver` trong khi contract của `silver.dim_customer` mang
+> `dataset_id` là `banking.core_customer_silver`. Lineage đứt ở dimension được
+> dùng nhiều nhất của nền tảng.
 
 ## 4. Vận hành
 
