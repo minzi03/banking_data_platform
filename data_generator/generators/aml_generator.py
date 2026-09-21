@@ -4,6 +4,7 @@ AML (Anti-Money Laundering) Data Generator
 Generates realistic AML rules, alerts, and customer risk profiles.
 """
 
+import json
 import random
 import string
 from datetime import datetime, timedelta
@@ -326,7 +327,10 @@ def generate_aml_alerts(
             risk_score,
             risk_category,
             random.choice(FRAUD_DESCRIPTIONS),
-            _generate_evidence(alert_type, txn_amount),
+            # evidence_json là cột JSONB: phải serialize dict -> JSON string,
+            # nếu không psycopg2 sẽ cố bind dict như text và Postgres báo
+            # "invalid input syntax for type json".
+            json.dumps(_generate_evidence(alert_type, txn_amount)),
             txn_amount,
             txn_date,
             random.choice(["BRANCH", "ATM", "INTERNET_BANKING", "MOBILE_BANKING"]),
