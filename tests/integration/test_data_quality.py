@@ -79,37 +79,48 @@ def assert_unique_grain(table: str, key: str, schema: str = "bronze") -> None:
 
 
 class TestRowCounts:
-    """Test minimum row count thresholds."""
+    """Test that each layer actually materialized data.
+
+    Ngưỡng là "có dữ liệu", KHÔNG phải một con số volume cụ thể. Khối lượng
+    do seed_config.yaml quyết định, và CI chạy `--scale 0.01` để seed nhanh —
+    ghim ở đây sẽ tạo ra nơi định nghĩa thứ hai cho cùng một con số, rồi đỏ
+    mỗi lần ai đó đổi scale.
+
+    Điều test này THỰC SỰ bảo vệ: bảng rỗng. Một job exit 0 mà không ghi được
+    dòng nào là failure mode đã gặp nhiều lần (gold_job thiếu CONFIG_MAP,
+    bootstrap thiếu YAML). Grain và tính đúng của từng dòng được kiểm ở
+    tests/gold/test_initial_load.py và tests/governance/test_bootstrap_contracts.py.
+    """
 
     @pytest.mark.integration
     def test_bronze_core_customer_min_rows(self):
-        """core_customer should have at least 1000 rows."""
+        """core_customer should have data."""
         count = get_row_count("core_customer", schema="bronze")
-        assert count >= 1000, f"core_customer has {count} rows, expected >= 1000"
+        assert count > 0, "core_customer rỗng — Bronze chưa load được gì"
 
     @pytest.mark.integration
     def test_bronze_core_account_min_rows(self):
-        """core_account should have at least 1000 rows."""
+        """core_account should have data."""
         count = get_row_count("core_account", schema="bronze")
-        assert count >= 1000, f"core_account has {count} rows, expected >= 1000"
+        assert count > 0, "core_account rỗng — Bronze chưa load được gì"
 
     @pytest.mark.integration
     def test_bronze_core_branch_min_rows(self):
-        """core_branch should have at least 10 rows."""
+        """core_branch should have data."""
         count = get_row_count("core_branch", schema="bronze")
-        assert count >= 10, f"core_branch has {count} rows, expected >= 10"
+        assert count > 0, "core_branch rỗng — Bronze chưa load được gì"
 
     @pytest.mark.integration
     def test_silver_dim_customer_min_rows(self):
-        """dim_customer should have at least 500 rows."""
+        """dim_customer should have data."""
         count = get_row_count("dim_customer", schema="silver")
-        assert count >= 500, f"dim_customer has {count} rows, expected >= 500"
+        assert count > 0, "dim_customer rỗng — Silver chưa chạy"
 
     @pytest.mark.integration
     def test_gold_mart_customer_360_min_rows(self):
-        """mart_customer_360 should have at least 500 rows."""
+        """mart_customer_360 should have data."""
         count = get_row_count("mart_customer_360", schema="gold")
-        assert count >= 500, f"mart_customer_360 has {count} rows, expected >= 500"
+        assert count > 0, "mart_customer_360 rỗng — Gold chưa chạy"
 
 
 # ---------------------------------------------------------------------------
