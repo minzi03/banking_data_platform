@@ -2,6 +2,7 @@
 
 > **Lập ngày**: 2026-09-21 · `main` @ `b787616`
 > **Căn cứ**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) · [`BOOTCAMP_CURRICULUM_ANALYSIS.md`](BOOTCAMP_CURRICULUM_ANALYSIS.md) · [`COURSE_BASELINE_DIFF.md`](COURSE_BASELINE_DIFF.md) · [`REFERENCE_DATASET_ANALYSIS.md`](REFERENCE_DATASET_ANALYSIS.md) · [`technical-debt.md`](technical-debt.md)
+> **Song song**: [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) — kế hoạch bộ tài liệu, chạy độc lập với kế hoạch kỹ thuật này
 > **Nguyên tắc xuyên suốt**: *Một test xanh chỉ có giá trị khi bản thân invariant là đúng.* Không làm gate xanh bằng cách làm yếu invariant.
 
 ---
@@ -165,13 +166,25 @@ Hiện `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, kh�
 
 - **Size**: S
 
-### 2.5 BỔ SUNG — runbook + RCA
+### 2.5 BỔ SUNG — incident runbook + RCA
 
-Khoảng trống **tài liệu hoá**, không phải năng lực. Viết cho 3 pipeline chính: batch Gold, CDC, serving.
+> **Đính chính (2026-09-21)**: bản đầu của mục này ghi "runbook chưa có" — sai.
+> `RUNBOOK.md` (313 dòng) **đã tồn tại**, nhưng là **runbook vận hành**:
+> start/stop service, chạy ETL, query, xử lý service không lên.
+>
+> Cái thiếu là **runbook sự cố dữ liệu** — một loại khác:
+
+| | `RUNBOOK.md` (đã có) | `INCIDENT_RUNBOOK.md` (thiếu) |
+|---|---|---|
+| Câu hỏi | "Chạy cái này thế nào?" | "Nó hỏng rồi, làm gì?" |
+| Nội dung | docker compose, spark-submit, trino CLI | partition nguồn thiếu · DQ fail → quarantine · schema drift → contract vỡ · CDC lag / DLQ đầy · backfill sai ngày |
+| Cấu trúc | theo thao tác | triệu chứng → chẩn đoán → xử lý → **xác minh đã khỏi** |
+
+Viết cho 3 pipeline chính: batch Gold, CDC, serving.
 
 Dùng đúng từ vựng thị trường: `runbook` (37 lần) · `incident response` (23) · `RCA` (64). **Không** dùng `RTO`/`RPO` — 0 lần trong toàn corpus JD.
 
-- **Size**: M
+- **Size**: M · Chi tiết: [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) §3 nhóm C
 
 ### 2.6 BỔ SUNG — `dbt_expectations`
 
