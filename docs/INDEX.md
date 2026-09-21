@@ -67,13 +67,15 @@ Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và 
 | [`data-input-documentation.md`](data-input-documentation.md) | 17 nguồn: schema, khối lượng, cách sinh |
 | [`data-output-documentation.md`](data-output-documentation.md) | Gold + serving: bảng, cột, ý nghĩa nghiệp vụ |
 | [`DATA_INPUT_BASE_REPORT.md`](DATA_INPUT_BASE_REPORT.md) | Báo cáo hồ sơ dữ liệu nguồn |
+| [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md) | **Sinh tự động** — 85 bảng, 961 cột, kiểu dữ liệu, cờ PII, metadata contract |
+| [`GLOSSARY.md`](GLOSSARY.md) | Thuật ngữ: `cob_dt`, SCD, AUM, NPL, RFM, structuring, BCBS 239… |
 | [`DATA_VAULT_MAPPING.md`](DATA_VAULT_MAPPING.md) | Ánh xạ Kimball star schema → Data Vault 2.0 |
 | [`DBT_DEPLOYMENT.md`](DBT_DEPLOYMENT.md) | Tầng serving qua dbt + Trino |
 | [`dbt/README.md`](../dbt/README.md) · [`dbt/SUMMARY.md`](../dbt/SUMMARY.md) | dbt project |
 | [`api/README.md`](../api/README.md) | Customer 360 REST API |
 | [`openmetadata/README.md`](../openmetadata/README.md) | Catalog và lineage |
 
-> **Chưa có**: `DATA_DICTIONARY.md` (nên sinh tự động từ 33 contract + DDL), `GLOSSARY.md`, `DATA_CONTRACTS.md`, `LINEAGE.md`.
+> **Chưa có**: `DATA_CONTRACTS.md` (bản tổng hợp 33 contract), `LINEAGE.md` (bản đồ phụ thuộc đọc được cho người).
 
 ## 4. Vận hành
 
