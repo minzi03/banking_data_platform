@@ -1,6 +1,6 @@
 # Glossary — Thuật Ngữ Dự Án
 
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`INDEX.md`](INDEX.md)
+> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`INDEX.md`](../INDEX.md)
 >
 > Tài liệu này **viết tay** (khác [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md) được sinh tự động).
 > Nghĩa của một thuật ngữ không suy ra được từ schema.
@@ -29,11 +29,11 @@ CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
 
 Một giao dịch lúc `2026-09-17 23:30 ICT` có business date `2026-09-17`, nhưng timestamp UTC của nó là `2026-09-17 16:30`. Nếu dùng `CAST(ts AS DATE)` trần sẽ ra đúng trong trường hợp này nhưng sai ở các giao dịch sau 17:00 UTC.
 
-Biểu thức trên **chỉ đúng dưới session UTC** — xem [`adr/0004`](adr/0004-business-date-under-utc-session.md).
+Biểu thức trên **chỉ đúng dưới session UTC** — xem [`adr/0004`](../02-architecture/adr/0004-business-date-under-utc-session.md).
 
 ### Watermark (CDC)
 
-Mốc đánh dấu consolidation đã xử lý tới đâu, lưu ở `lakehouse.meta.cdc_watermark`. Cặp `(last_cdc_timestamp_ms, last_spark_batch_id)` — **không phải Kafka offset**. Xem [`adr/0010`](adr/0010-cdc-event-ordering.md).
+Mốc đánh dấu consolidation đã xử lý tới đâu, lưu ở `lakehouse.meta.cdc_watermark`. Cặp `(last_cdc_timestamp_ms, last_spark_batch_id)` — **không phải Kafka offset**. Xem [`adr/0010`](../02-architecture/adr/0010-cdc-event-ordering.md).
 
 ### Freshness
 
@@ -57,7 +57,7 @@ Nguyên tắc đi kèm: *Bronze nhận linh hoạt → Silver chuẩn hoá → G
 
 ### Serving
 
-Tầng thứ tư, nằm sau Gold. Là **lát cắt hiện tại** (`cob_dt` mới nhất) của bảng Gold lịch sử, do dbt sở hữu và Trino truy vấn. Materialize thành `table` chứ không phải `view` — xem [`adr/0003`](adr/0003-serving-as-table-not-view.md).
+Tầng thứ tư, nằm sau Gold. Là **lát cắt hiện tại** (`cob_dt` mới nhất) của bảng Gold lịch sử, do dbt sở hữu và Trino truy vấn. Materialize thành `table` chứ không phải `view` — xem [`adr/0003`](../02-architecture/adr/0003-serving-as-table-not-view.md).
 
 ### Dimension / Fact
 
@@ -118,7 +118,7 @@ PostgreSQL WAL → Debezium → Kafka → Spark Structured Streaming
 
 ### `DLQ` — Dead Letter Queue
 
-Nơi cách ly sự kiện CDC không xử lý được, để điều tra thay vì làm chết cả luồng. **Chỉ DLQ giữ toạ độ Kafka** (`kafka_partition`, `kafka_offset`, `kafka_timestamp`) — Bronze CDC thì không. Xem [`adr/0010`](adr/0010-cdc-event-ordering.md).
+Nơi cách ly sự kiện CDC không xử lý được, để điều tra thay vì làm chết cả luồng. **Chỉ DLQ giữ toạ độ Kafka** (`kafka_partition`, `kafka_offset`, `kafka_timestamp`) — Bronze CDC thì không. Xem [`adr/0010`](../02-architecture/adr/0010-cdc-event-ordering.md).
 
 ### Idempotent
 
@@ -126,7 +126,7 @@ Chạy lại cho cùng kết quả, không nhân đôi hay làm hỏng dữ li�
 
 ### Backfill
 
-Chạy lại pipeline cho một ngày trong quá khứ. An toàn nhờ tính idempotent — nhưng backfill **sai ngày** vẫn ghi đè dữ liệu tốt. Xem [`INCIDENT_RUNBOOK.md`](INCIDENT_RUNBOOK.md) S7.
+Chạy lại pipeline cho một ngày trong quá khứ. An toàn nhờ tính idempotent — nhưng backfill **sai ngày** vẫn ghi đè dữ liệu tốt. Xem [`INCIDENT_RUNBOOK.md`](../04-operations/INCIDENT_RUNBOOK.md) S7.
 
 ---
 
@@ -153,7 +153,7 @@ Schema nguồn đổi mà pipeline không biết. **Nguy hiểm vì thường kh
 
 ### Fail loud
 
-Nguyên tắc: dừng ngay khi phát hiện điều kiện không thoả, thay vì ghi dữ liệu sai rồi báo thành công. Cài đặt bằng `assert_source_snapshots` và `assert_non_empty` — xem [`adr/0005`](adr/0005-fail-loud-before-overwrite.md).
+Nguyên tắc: dừng ngay khi phát hiện điều kiện không thoả, thay vì ghi dữ liệu sai rồi báo thành công. Cài đặt bằng `assert_source_snapshots` và `assert_non_empty` — xem [`adr/0005`](../02-architecture/adr/0005-fail-loud-before-overwrite.md).
 
 ### `not_collected ≠ verified`
 
@@ -161,7 +161,7 @@ Quy tắc của evidence manifest: một metric chưa đo được ghi `not_coll
 
 ### `PII` — Personally Identifiable Information
 
-Dữ liệu định danh cá nhân: họ tên, email, điện thoại, địa chỉ, ngày sinh, IP. Masking áp ở tầng **Gold/serving**, không ở Bronze — xem [`../SECURITY.md`](../SECURITY.md).
+Dữ liệu định danh cá nhân: họ tên, email, điện thoại, địa chỉ, ngày sinh, IP. Masking áp ở tầng **Gold/serving**, không ở Bronze — xem [`../SECURITY.md`](../../SECURITY.md).
 
 ### `RBAC` — Role-Based Access Control
 
@@ -201,7 +201,7 @@ Bán chéo sản phẩm cho khách hàng hiện hữu. NBO là mô hình gợi �
 
 ### `CLV` / `LTV` — Customer Lifetime Value
 
-Giá trị dự kiến của một khách hàng trong toàn bộ vòng đời. **Chưa triển khai** — mục 3.2 trong [`ROADMAP.md`](ROADMAP.md).
+Giá trị dự kiến của một khách hàng trong toàn bộ vòng đời. **Chưa triển khai** — mục 3.2 trong [`ROADMAP.md`](../09-analysis/ROADMAP.md).
 
 ---
 
@@ -228,7 +228,7 @@ Tần suất giao dịch bất thường trong một khoảng ngắn.
 
 ### Geo-velocity
 
-Giao dịch ở nhiều địa điểm xa nhau trong thời gian ngắn tới mức không thể di chuyển kịp. **Chưa cài đặt** — mục 2.1 trong [`ROADMAP.md`](ROADMAP.md), và là lý do `dim_location` hiện chưa có consumer nào.
+Giao dịch ở nhiều địa điểm xa nhau trong thời gian ngắn tới mức không thể di chuyển kịp. **Chưa cài đặt** — mục 2.1 trong [`ROADMAP.md`](../09-analysis/ROADMAP.md), và là lý do `dim_location` hiện chưa có consumer nào.
 
 ### `alert_score` và `risk_level`
 
@@ -264,7 +264,7 @@ Chứng chỉ quản trị dữ liệu của DAMA International. Đáng nhắc v
 
 ### Data Vault 2.0
 
-Phương pháp mô hình hoá dùng Hub / Link / Satellite, mạnh về audit trail và hợp nhiều nguồn. Dự án dùng Kimball; Data Vault chỉ tồn tại ở mức **tài liệu ánh xạ** — xem [`adr/0014`](adr/0014-kimball-over-data-vault.md).
+Phương pháp mô hình hoá dùng Hub / Link / Satellite, mạnh về audit trail và hợp nhiều nguồn. Dự án dùng Kimball; Data Vault chỉ tồn tại ở mức **tài liệu ánh xạ** — xem [`adr/0014`](../02-architecture/adr/0014-kimball-over-data-vault.md).
 
 ---
 
@@ -280,8 +280,8 @@ Bảng theo dõi trạng thái job ở `opslakehouse`. Chỉ có hai trạng th�
 
 Hai tài liệu khác nhau, hay bị nhầm:
 
-- [`../RUNBOOK.md`](../RUNBOOK.md) — *"chạy cái này thế nào?"*
-- [`INCIDENT_RUNBOOK.md`](INCIDENT_RUNBOOK.md) — *"nó hỏng rồi, làm gì?"*
+- [`../RUNBOOK.md`](../../RUNBOOK.md) — *"chạy cái này thế nào?"*
+- [`INCIDENT_RUNBOOK.md`](../04-operations/INCIDENT_RUNBOOK.md) — *"nó hỏng rồi, làm gì?"*
 
 ### `RCA` — Root Cause Analysis
 
@@ -289,8 +289,8 @@ Truy nguyên nhân gốc của sự cố. Câu hỏi quan trọng nhất không 
 
 ### `ADR` — Architecture Decision Record
 
-Ghi lại một quyết định kiến trúc: bối cảnh, lựa chọn, hệ quả. **Bất biến** — không sửa, chỉ superseded. Xem [`adr/`](adr/README.md).
+Ghi lại một quyết định kiến trúc: bối cảnh, lựa chọn, hệ quả. **Bất biến** — không sửa, chỉ superseded. Xem [`adr/`](../02-architecture/adr/README.md).
 
 ### `TD` — Technical Debt
 
-Nợ kỹ thuật có tên và có trạng thái trong [`technical-debt.md`](technical-debt.md). Nợ được ghi nhận khác nợ bị bỏ quên.
+Nợ kỹ thuật có tên và có trạng thái trong [`technical-debt.md`](../05-quality/technical-debt.md). Nợ được ghi nhận khác nợ bị bỏ quên.

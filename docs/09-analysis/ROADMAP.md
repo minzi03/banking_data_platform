@@ -1,7 +1,7 @@
 # Kế Hoạch Hoàn Thiện — Banking Data Platform
 
 > **Lập ngày**: 2026-09-21 · `main` @ `b787616`
-> **Căn cứ**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) · [`BOOTCAMP_CURRICULUM_ANALYSIS.md`](BOOTCAMP_CURRICULUM_ANALYSIS.md) · [`COURSE_BASELINE_DIFF.md`](COURSE_BASELINE_DIFF.md) · [`REFERENCE_DATASET_ANALYSIS.md`](REFERENCE_DATASET_ANALYSIS.md) · [`technical-debt.md`](technical-debt.md)
+> **Căn cứ**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) · [`BOOTCAMP_CURRICULUM_ANALYSIS.md`](BOOTCAMP_CURRICULUM_ANALYSIS.md) · [`COURSE_BASELINE_DIFF.md`](COURSE_BASELINE_DIFF.md) · [`REFERENCE_DATASET_ANALYSIS.md`](REFERENCE_DATASET_ANALYSIS.md) · [`technical-debt.md`](../05-quality/technical-debt.md)
 > **Song song**: [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) — kế hoạch bộ tài liệu, chạy độc lập với kế hoạch kỹ thuật này
 > **Nguyên tắc xuyên suốt**: *Một test xanh chỉ có giá trị khi bản thân invariant là đúng.* Không làm gate xanh bằng cách làm yếu invariant.
 

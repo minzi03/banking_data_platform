@@ -205,7 +205,7 @@ Dự án đã cài đặt 3 nguyên lý; **chuỗi sự cố thì chưa có tài
 
 **Mindset**: *Bronze nhận linh hoạt → Silver chuẩn hoá → Gold chỉ publish khi contract ổn định.*
 
-Đây gần như là mô tả `assert_source_snapshots()` trong [`code_etl/gold/base_job/gold_job.py:94`](../code_etl/gold/base_job/gold_job.py) — nhưng ở **tầng schema** thay vì tầng partition. Docstring hiện tại đã nêu đúng nguyên lý cho partition:
+Đây gần như là mô tả `assert_source_snapshots()` trong [`code_etl/gold/base_job/gold_job.py:94`](../../code_etl/gold/base_job/gold_job.py) — nhưng ở **tầng schema** thay vì tầng partition. Docstring hiện tại đã nêu đúng nguyên lý cho partition:
 
 > "Output KHÔNG rỗng, require_non_empty vẫn PASS, và Gold bị ghi đè bằng số 0 trông rất hợp lý. Đó là silent corruption, tệ hơn rỗng."
 

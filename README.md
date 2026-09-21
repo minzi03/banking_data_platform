@@ -188,7 +188,7 @@ For component relationships and major flows, see
 
 For implementation detail — orchestration, CDC semantics, serving mechanics and
 time semantics — see
-**[docs/architecture/architecture.md](docs/architecture/architecture.md)**.
+**[docs/architecture/architecture.md](docs/02-architecture/architecture.md)**.
 
 ---
 
@@ -914,7 +914,7 @@ the evidence manifest under `superseded_claim`.
 
 Evidence:
 
-**[docs/evidence/p1-cdc-consolidation/](docs/evidence/p1-cdc-consolidation/)**
+**[docs/evidence/p1-cdc-consolidation/](docs/evidence/p1-cdc-consolidation)**
 
 ---
 
@@ -1357,7 +1357,7 @@ session timezone, the derivation above is only correct under a UTC session.
 That precondition is enforced at runtime by `assert_utc_session()` rather than
 assumed, so a misconfigured session fails loudly instead of silently shifting
 every daily metric. Details and measurements:
-[`docs/evidence/`](docs/evidence/).
+[`docs/evidence/`](docs/evidence).
 
 ---
 
@@ -1433,7 +1433,7 @@ plus Kafka consumer lag.
 
 Evidence:
 
-**[docs/evidence/p2-observability/](docs/evidence/p2-observability/)**
+**[docs/evidence/p2-observability/](docs/evidence/p2-observability)**
 
 ---
 
@@ -1479,7 +1479,7 @@ covering areas such as:
 
 A 5-minute walkthrough is available at:
 
-**[docs/demo/demo.md](docs/demo/demo.md)**
+**[docs/demo/demo.md](docs/01-getting-started/demo.md)**
 
 Typical demo flow:
 
@@ -1507,7 +1507,7 @@ SQL consumers
 
 Runtime evidence:
 
-**[docs/evidence/](docs/evidence/)**
+**[docs/evidence/](docs/evidence)**
 
 ---
 
@@ -1746,11 +1746,11 @@ FEATURE FREEZE
 
 | Document                                                                   | Purpose                            |
 | -------------------------------------------------------------------------- | ---------------------------------- |
-| [Architecture](docs/architecture/architecture.md)                          | Detailed technical architecture    |
-| [Demo](docs/demo/demo.md)                                                  | 5-minute project walkthrough       |
-| [Evidence](docs/evidence/)                                                 | Runtime screenshots                |
-| [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation/)                     | CDC consolidation verification     |
-| [P2 Observability Evidence](docs/evidence/p2-observability/)               | Observability verification         |
+| [Architecture](docs/02-architecture/architecture.md)                          | Detailed technical architecture    |
+| [Demo](docs/01-getting-started/demo.md)                                                  | 5-minute project walkthrough       |
+| [Evidence](docs/evidence)                                                 | Runtime screenshots                |
+| [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation)                     | CDC consolidation verification     |
+| [P2 Observability Evidence](docs/evidence/p2-observability)               | Observability verification         |
 
 ---
 

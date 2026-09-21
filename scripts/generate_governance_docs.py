@@ -41,8 +41,8 @@ _force_utf8_output()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACTS_DIR = REPO_ROOT / "governance" / "datasets"
-CONTRACTS_OUT = REPO_ROOT / "docs" / "DATA_CONTRACTS.md"
-LINEAGE_OUT = REPO_ROOT / "docs" / "LINEAGE.md"
+CONTRACTS_OUT = REPO_ROOT / "docs" / "03-data" / "DATA_CONTRACTS.md"
+LINEAGE_OUT = REPO_ROOT / "docs" / "03-data" / "LINEAGE.md"
 
 LAYER_ORDER = ["bronze", "silver", "gold", "serving"]
 

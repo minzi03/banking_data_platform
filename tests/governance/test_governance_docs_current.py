@@ -20,8 +20,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = REPO_ROOT / "scripts" / "generate_governance_docs.py"
-CONTRACTS_DOC = REPO_ROOT / "docs" / "DATA_CONTRACTS.md"
-LINEAGE_DOC = REPO_ROOT / "docs" / "LINEAGE.md"
+CONTRACTS_DOC = REPO_ROOT / "docs" / "03-data" / "DATA_CONTRACTS.md"
+LINEAGE_DOC = REPO_ROOT / "docs" / "03-data" / "LINEAGE.md"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 

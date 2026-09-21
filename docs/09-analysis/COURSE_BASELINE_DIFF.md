@@ -108,7 +108,7 @@ _run_zorder_if_needed(spark, target, job_type, logger)   # ④ tối ưu đọc
 
 ### 3.3 Vì sao guard ① là bắt buộc — và vì sao template gốc nguy hiểm
 
-Docstring trong [`code_etl/gold/base_job/gold_job.py`](../code_etl/gold/base_job/gold_job.py) giải thích chính xác lỗ hổng của template:
+Docstring trong [`code_etl/gold/base_job/gold_job.py`](../../code_etl/gold/base_job/gold_job.py) giải thích chính xác lỗ hổng của template:
 
 > "các model grain customer neo vào `dim_customer` rồi LEFT JOIN fact. Nếu partition fact của `cob_dt` không tồn tại, query vẫn trả về đủ 1 dòng/khách với mọi metric = 0. **Output KHÔNG rỗng, `require_non_empty` vẫn PASS, và Gold bị ghi đè bằng số 0 trông rất hợp lý. Đó là silent corruption, tệ hơn rỗng.**"
 

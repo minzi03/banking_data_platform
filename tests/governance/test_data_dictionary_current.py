@@ -27,7 +27,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = REPO_ROOT / "scripts" / "generate_data_dictionary.py"
-DICTIONARY = REPO_ROOT / "docs" / "DATA_DICTIONARY.md"
+DICTIONARY = REPO_ROOT / "docs" / "03-data" / "DATA_DICTIONARY.md"
 
 
 def _run_generator(*args: str) -> subprocess.CompletedProcess[str]:

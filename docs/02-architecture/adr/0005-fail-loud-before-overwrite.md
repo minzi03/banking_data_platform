@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Ngày**: 2026-09 (chuyển thể thành ADR 2026-09-22)
-**Liên quan**: [`0004`](0004-business-date-under-utc-session.md) · [`../COURSE_BASELINE_DIFF.md`](../COURSE_BASELINE_DIFF.md) §3
+**Liên quan**: [`0004`](0004-business-date-under-utc-session.md) · [`../COURSE_BASELINE_DIFF.md`](../../09-analysis/COURSE_BASELINE_DIFF.md) §3
 
 ---
 

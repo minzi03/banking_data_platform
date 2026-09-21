@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Ngày**: 2026-09 (chuyển thể thành ADR 2026-09-22)
-**Liên quan**: [`0002`](0002-cross-engine-catalog-naming.md) · [`../DBT_DEPLOYMENT.md`](../DBT_DEPLOYMENT.md)
+**Liên quan**: [`0002`](0002-cross-engine-catalog-naming.md) · [`../DBT_DEPLOYMENT.md`](../../04-operations/DBT_DEPLOYMENT.md)
 
 ---
 

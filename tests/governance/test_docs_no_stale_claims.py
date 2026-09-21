@@ -22,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS = [
     REPO_ROOT / "README.md",
     REPO_ROOT / "ARCHITECTURE.md",
-    REPO_ROOT / "docs" / "architecture" / "architecture.md",
+    REPO_ROOT / "docs" / "02-architecture" / "architecture.md",
 ]
 
 # (chuỗi bị cấm, lý do)

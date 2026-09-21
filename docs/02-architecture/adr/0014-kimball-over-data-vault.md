@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Ngày**: 2026-09-07 · chuyển thể thành ADR 2026-09-22
-**Liên quan**: [`../DATA_VAULT_MAPPING.md`](../DATA_VAULT_MAPPING.md)
+**Liên quan**: [`../DATA_VAULT_MAPPING.md`](../../03-data/DATA_VAULT_MAPPING.md)
 
 ---
 
