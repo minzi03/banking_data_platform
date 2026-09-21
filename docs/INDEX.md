@@ -50,8 +50,15 @@ Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và 
 | [0003](adr/0003-serving-as-table-not-view.md) | Tầng serving là `table`, không phải `view` |
 | [0004](adr/0004-business-date-under-utc-session.md) | Business date suy ra tường minh, Spark session bắt buộc UTC |
 | [0005](adr/0005-fail-loud-before-overwrite.md) | Fail loud trước khi ghi đè partition |
+| [0006](adr/0006-metadata-driven-jobs.md) | Job metadata-driven bằng YAML cho cả ba tầng |
+| [0007](adr/0007-overwrite-partitions-by-cob-dt.md) | `overwritePartitions` theo `cob_dt`, không dùng MERGE |
+| [0008](adr/0008-evidence-manifest-as-verifier.md) | Evidence manifest là verifier, không phải nơi dump số |
+| [0010](adr/0010-cdc-event-ordering.md) | Thứ tự sự kiện CDC dùng `(timestamp_ms, batch_id)` |
+| [0012](adr/0012-parameterised-seed-not-second-seeder.md) | Tham số hoá generator `--scale`, không viết seeder thứ hai |
+| [0013](adr/0013-declared-sources-match-sql.md) | Khai báo nguồn phải khớp với SQL |
+| [0014](adr/0014-kimball-over-data-vault.md) | Kimball star schema, Data Vault chỉ ở mức ánh xạ |
 
-> **Chưa có**: `DATA_FLOW.md`, và 10 ADR còn lại — xem [`adr/README.md`](adr/README.md) để biết cái nào chỉ cần chuyển thể từ comment, cái nào cần tác giả xác nhận lý do.
+> **Chưa có**: `DATA_FLOW.md`, và **ADR-0001** (Iceberg vs Delta) — lý do chọn chưa được ghi ở đâu, cần tác giả xác nhận. Xem [`adr/README.md`](adr/README.md).
 
 ## 3. Dữ liệu
 
