@@ -73,9 +73,11 @@ Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và 
 | Tài liệu | Nội dung |
 |---|---|
 | [`RUNBOOK.md`](../RUNBOOK.md) | **Vận hành thường ngày**: start/stop service, chạy ETL, query, service không lên |
+| [`INCIDENT_RUNBOOK.md`](INCIDENT_RUNBOOK.md) | **Sự cố dữ liệu**: 8 kịch bản theo khuôn triệu chứng → chẩn đoán → xử lý → xác minh đã khỏi |
 
-> **Chưa có**: `INCIDENT_RUNBOOK.md` — kịch bản **sự cố dữ liệu** (partition thiếu · DQ fail · schema drift · CDC lag · backfill sai). Khác hẳn `RUNBOOK.md`; xem [`ROADMAP.md`](ROADMAP.md) §2.5.
-> Cũng chưa có: `SLA_AND_FRESHNESS.md`, `DISASTER_RECOVERY.md`.
+Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này thế nào?"* và *"nó hỏng rồi, làm gì?"*.
+
+> **Chưa có**: `SLA_AND_FRESHNESS.md` (chưa có ngưỡng "lag bao nhiêu thì báo động"), `DISASTER_RECOVERY.md`.
 
 ## 5. Chất lượng & nợ kỹ thuật
 
