@@ -1,7 +1,7 @@
 # Dataset Contract: dim_customer (Silver)
 # Conformed customer dimension with SCD2 history tracking
 
-dataset_id: banking.core_customer_silver
+dataset_id: banking.dim_customer_silver
 owner: Data Engineering Team
 business_purpose: >
   Cleansed and deduplicated customer dimension with slowly changing dimension

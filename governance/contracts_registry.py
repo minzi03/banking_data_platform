@@ -25,7 +25,7 @@ class ContractRegistry:
 
     Usage:
         registry = ContractRegistry()  # loads from default datasets/ dir
-        contract = registry.get_contract("banking.core_customer_silver")
+        contract = registry.get_contract("banking.dim_customer_silver")
         all_contracts = registry.get_all_contracts()
     """
 
@@ -97,7 +97,7 @@ class ContractRegistry:
         Get contract by dataset_id.
 
         Args:
-            dataset_id: Unique identifier (e.g., 'banking.core_customer_silver')
+            dataset_id: Unique identifier (e.g., 'banking.dim_customer_silver')
 
         Returns:
             DatasetContract or None if not found

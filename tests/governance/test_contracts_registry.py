@@ -71,7 +71,7 @@ def multiple_contracts_yaml(tmp_path):
         {
             "filename": "customer_silver.yaml",
             "content": """
-dataset_id: banking.core_customer_silver
+dataset_id: banking.dim_customer_silver
 owner: Data Engineering Team
 business_purpose: Customer dimension
 layer: silver
