@@ -1,15 +1,29 @@
 job:
   type: risk
 source:
-  tables: [silver.fact_txn_account, silver.dim_customer, silver.dim_account]
+  tables:
+    - silver.fact_txn_account
+    - silver.dim_customer
+    - silver.dim_account
+    - silver.fact_online_transaction
+    - silver.dim_location
 target:
   catalog: lakehouse
   schema: gold
   table: aml_monitoring
-upstream_flags: [silver.fact_txn_account, silver.dim_customer, silver.dim_account]
+upstream_flags:
+  - silver.fact_txn_account
+  - silver.dim_customer
+  - silver.dim_account
+  - silver.fact_online_transaction
 validation:
   require_non_empty: true
-  require_snapshots: [silver.fact_txn_account]
+  # fact_online_transaction là ràng buộc CHẶN, không phải tuỳ chọn.
+  # geo_velocity_flag suy ra từ nó bằng LEFT JOIN: partition thiếu thì flag
+  # ra 0 cho MỌI khách hàng, alert_score tụt, và bảng trông hoàn toàn bình
+  # thường — không dòng nào rỗng, không check nào đỏ. Đó đúng là silent
+  # corruption mà ADR-0005 mô tả, nên phải chặn trước khi ghi.
+  require_snapshots: [silver.fact_txn_account, silver.fact_online_transaction]
 sql: |
   WITH txn AS (
     SELECT t.txn_id, t.account_id, t.customer_id, t.txn_date,
@@ -38,27 +52,67 @@ sql: |
     FROM txn
     GROUP BY customer_id, CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
   ),
+  -- Geo-velocity: khách hàng giao dịch ở nhiều tỉnh/thành khác nhau trong
+  -- cùng một ngày nghiệp vụ. Typology AML chuẩn cho account/card takeover.
+  --
+  -- Chỉ kênh online mang location_id: fact_txn_account KHÔNG có cột địa lý
+  -- nào, nên tín hiệu này bắt buộc phải lấy từ fact_online_transaction.
+  -- Grain customer-day, giống velocity_flag, rồi join ngược về transaction.
+  geo_agg AS (
+    SELECT ot.customer_id,
+      CAST(from_utc_timestamp(ot.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
+      COUNT(DISTINCT l.state) AS distinct_states,
+      COUNT(DISTINCT CASE WHEN l.is_high_risk_area = 1 THEN l.location_id END) AS high_risk_locations
+    FROM lakehouse.silver.fact_online_transaction ot
+    JOIN lakehouse.silver.dim_location l ON ot.location_id = l.location_id
+    WHERE ot.cob_dt = DATE '{{ cob_dt }}'
+      AND ot.status = 'SUCCESS'
+    GROUP BY ot.customer_id,
+      CAST(from_utc_timestamp(ot.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
+  ),
   flagged AS (
     SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count, cs.channel_count,
       da.daily_txn_count, da.daily_total_amount, da.structured_count,
+      COALESCE(ga.distinct_states, 0) AS distinct_states,
+      COALESCE(ga.high_risk_locations, 0) AS high_risk_locations,
       CASE WHEN t.txn_amount >= 200000000 THEN 1 ELSE 0 END AS high_value_flag,
       CASE WHEN da.structured_count >= 3 THEN 1 ELSE 0 END AS structuring_flag,
       CASE WHEN da.daily_txn_count >= 10 THEN 1 ELSE 0 END AS velocity_flag,
-      CASE WHEN cs.channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag
+      CASE WHEN cs.channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag,
+      -- Ngưỡng >= 3 ĐO ĐƯỢC, không phải chọn cảm tính. Phân phối số tỉnh/thành
+      -- riêng biệt mỗi customer-day trên snapshot 2026-09-20:
+      --     1 state  412.786  95,0%
+      --     2 states  21.205   4,9%
+      --     3 states     673   0,2%   ← ngưỡng ở đây
+      --     4 states      15   0,0%
+      -- >=2 gắn cờ 5,1% (quá ồn), >=4 chỉ 15 ca (quá hiếm để hữu dụng).
+      -- Kiểm chứng trên nhãn is_fraud của cùng snapshot: nhóm gắn cờ có tỷ lệ
+      -- fraud 2,0% so với 0,8% ở nhóm không gắn cờ — lift 2,5×.
+      CASE WHEN COALESCE(ga.distinct_states, 0) >= 3 THEN 1 ELSE 0 END AS geo_velocity_flag
     FROM txn t
     LEFT JOIN customer_stats cs ON t.customer_id=cs.customer_id
     LEFT JOIN daily_agg da
       ON t.customer_id = da.customer_id
       AND CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = da.txn_day
+    LEFT JOIN geo_agg ga
+      ON t.customer_id = ga.customer_id
+      AND CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = ga.txn_day
   )
   SELECT txn_id, account_id, customer_id, customer_segment, branch_code,
     txn_amount, txn_type, debit_credit, channel, description, counter_account, txn_date,
-    high_value_flag, structuring_flag, velocity_flag, multi_channel_flag,
-    (high_value_flag*3+structuring_flag*4+velocity_flag*2+multi_channel_flag*1) AS alert_score,
-    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=3 THEN 3
-      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=2 THEN 2
-      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=1 THEN 1
+    distinct_states, high_risk_locations,
+    high_value_flag, structuring_flag, velocity_flag, multi_channel_flag, geo_velocity_flag,
+    -- Trọng số geo_velocity = 3, ngang high_value.
+    -- structuring giữ 4 vì nó là hành vi CỐ Ý né ngưỡng báo cáo, không phải
+    -- bất thường ngẫu nhiên. geo_velocity xếp dưới nó nhưng trên velocity(2)
+    -- và multi_channel(1) vì di chuyển địa lý bất khả thi là chỉ báo mạnh của
+    -- account takeover, và đo được lift 2,5× trên nhãn fraud.
+    (high_value_flag*3 + structuring_flag*4 + velocity_flag*2
+     + multi_channel_flag*1 + geo_velocity_flag*3) AS alert_score,
+    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=3 THEN 3
+      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=2 THEN 2
+      WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=1 THEN 1
       ELSE 0 END AS risk_level,
-    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag)>=2 THEN 1 ELSE 0 END AS alert_generated,
+    CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=2 THEN 1 ELSE 0 END AS alert_generated,
     DATE '{{ cob_dt }}' AS cob_dt
   FROM flagged

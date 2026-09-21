@@ -9,13 +9,13 @@ Data contract khai báo ràng buộc của một dataset: grain, cột bắt bu�
 số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng được
 `governance/enforcement.py` dùng để chặn dữ liệu không đạt.
 
-**33 contract · 15 quality_class `critical` · 4 AI `high_risk`**
+**34 contract · 16 quality_class `critical` · 5 AI `high_risk`**
 
 | Tầng | Số contract |
 |---|---:|
 | bronze | 1 |
 | silver | 13 |
-| gold | 19 |
+| gold | 20 |
 
 ---
 
@@ -47,6 +47,7 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 
 | Dataset | Bảng vật lý | Grain | Quality | AI risk | DAG |
 |---|---|---|---|---|---|
+| `banking.aml_monitoring_gold` | `gold.aml_monitoring` | (txn_id, cob_dt) | critical | `high_risk` | `gold_all_dag` |
 | `banking.branch_monthly_summary_gold` | `gold.branch_monthly_summary` | — | important | `minimal_risk` | `gold_mart360_dag` |
 | `banking.campaign_target_current_gold` | `gold.campaign_target_current` | — | important | `limited_risk` | `gold_all_dag` |
 | `banking.campaign_target_gold` | `gold.campaign_target` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
@@ -74,6 +75,7 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 | Dataset | Cột bắt buộc | Không null | Tối thiểu | Freshness |
 |---|---:|---:|---:|---:|
 | `banking.core_customer_bronze` | 16 | 3 | 5,000 | 48h |
+| `banking.aml_monitoring_gold` | 17 | 5 | 1,000 | 24h |
 | `banking.branch_monthly_summary_gold` | 7 | 2 | 100 | 24h |
 | `banking.campaign_target_current_gold` | 18 | 4 | 500 | 24h |
 | `banking.campaign_target_gold` | 18 | 4 | 500 | 24h |

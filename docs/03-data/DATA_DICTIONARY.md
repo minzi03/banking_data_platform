@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**85 bảng · 961 cột · 23 bảng có data contract · 31 cột nghi chứa PII**
+**85 bảng · 964 cột · 24 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -16,7 +16,7 @@
 |---|---:|---:|
 | [bronze](#bronze) | 22 | 303 |
 | [silver](#silver) | 17 | 217 |
-| [gold](#gold) | 14 | 216 |
+| [gold](#gold) | 14 | 219 |
 | [meta](#meta) | 1 | 4 |
 | [card_crm](#card_crm) | 3 | 20 |
 | [core_banking](#core_banking) | 14 | 110 |
@@ -1018,7 +1018,15 @@ Cleansed fact table capturing all account-level financial transactions including
 
 ### `lakehouse.gold.aml_monitoring`
 
-_Chưa có data contract trong `governance/datasets/`._
+Daily snapshot of AML typology flags scored at transaction grain. Five typologies: high value, structuring, velocity, multi-channel and geo-velocity. Grain is one row per account transaction per cob_dt. Used for suspicious activity review and regulatory reporting.
+
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `gold_all_dag`
+
+**Grain**: (txn_id, cob_dt) · **Tối thiểu**: 1,000 dòng · **Freshness**: 24h
+
+**AI risk tier**: `high_risk` · **Cấm dùng cho**: `automated_account_freeze`, `automated_transaction_blocking`, `external_sharing`
+
+**Upstream**: `banking.fact_txn_account_silver`, `banking.dim_customer_silver`, `banking.dim_account_silver`, `banking.fact_online_transaction_silver`, `banking.dim_location_silver`
 
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
@@ -1034,10 +1042,13 @@ _Chưa có data contract trong `governance/datasets/`._
 | `description` | `STRING` |  |  |
 | `counter_account` | `STRING` |  |  |
 | `txn_date` | `TIMESTAMP` |  |  |
+| `distinct_states` | `INT` |  |  |
+| `high_risk_locations` | `INT` |  |  |
 | `high_value_flag` | `INT` |  |  |
 | `structuring_flag` | `INT` |  |  |
 | `velocity_flag` | `INT` |  |  |
 | `multi_channel_flag` | `INT` |  |  |
+| `geo_velocity_flag` | `INT` |  |  |
 | `alert_score` | `INT` |  |  |
 | `risk_level` | `INT` |  |  |
 | `alert_generated` | `INT` |  |  |
