@@ -1,5 +1,18 @@
 # BÁO CÁO TỔNG HỢP: Phân Tích Nhu Cầu Thị Trường — Data Engineer Vietnam
 
+> ## ⛔ TÀI LIỆU ĐÃ BỊ THAY THẾ — 2026-09-21
+>
+> Dùng **[`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md)** thay cho tài liệu này.
+>
+> Giữ lại để tra cứu lịch sử. **Không dùng làm căn cứ ra quyết định**, vì:
+> - Chỉ phủ jd1–jd8; corpus hiện có 14 file (jd1–jd14 + `repo.md`).
+> - Các phần trăm dạng "~30% JD yêu cầu" là **ước lượng, không nêu phương pháp đo** và không tái lập được.
+> - Ba khuyến nghị đã được chứng minh sai bằng số đo: RTO/RPO (0 lần trong 2,77M ký tự),
+>   Great Expectations là "P1 gap" (19 lần, thấp hơn Data Vault 44 lần), và "BI ~70% banking JD".
+> - 9/9 action item trong Mục 7.3 nay đã đóng.
+>
+> Chi tiết đính chính: `JD_MARKET_ANALYSIS.md` Mục 7.
+
 > **Ngày**: 2026-09-07
 > **Nguồn**: 8 files JD (jd1-jd8), **~300 job postings**
 > **Nền tảng**: LinkedIn, ITviec, Vietnamese job boards (Aug-Sep 2026)

@@ -1,5 +1,13 @@
 # BÁO CÁO: Phân Tích Nhu Cầu Thị Trường — Data Engineer Vietnam
 
+> ## ⛔ TÀI LIỆU ĐÃ BỊ THAY THẾ — 2026-09-21
+>
+> Dùng **[`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md)** thay cho tài liệu này.
+>
+> Giữ lại để tra cứu lịch sử. **Không dùng làm căn cứ ra quyết định**: chỉ phủ jd1–jd8
+> (corpus hiện có 14 file), và các phần trăm dạng "~X% JD yêu cầu" là ước lượng
+> không nêu phương pháp đo, không tái lập được.
+
 > **Ngày**: 2026-09-07
 > **Nguồn**: 8 file JD (jd1-jd8), ~300 job postings (trong đó 39 banking-specific từ 13+ ngân hàng)
 > **Nền tảng**: LinkedIn, ITviec, Vietnamese job boards (Aug-Sep 2026)
