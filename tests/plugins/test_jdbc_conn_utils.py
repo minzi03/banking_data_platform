@@ -23,8 +23,7 @@ sys.modules["airflow.hooks.base"] = MagicMock()
 
 # Import via importlib
 _spec = importlib.util.spec_from_file_location(
-    "jdbc_conn_utils_mod",
-    str(PROJECT_ROOT / "airflow" / "plugins" / "jdbc_conn_utils.py")
+    "jdbc_conn_utils_mod", str(PROJECT_ROOT / "airflow" / "plugins" / "jdbc_conn_utils.py")
 )
 _jcmod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_jcmod)

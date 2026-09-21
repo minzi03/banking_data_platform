@@ -12,8 +12,10 @@ from governance.freshness_checks import FreshnessChecker, FreshnessResult
 
 class _Row:
     """Helper to simulate a Spark Row with __getitem__ support."""
+
     def __init__(self, data: dict):
         self._data = data
+
     def __getitem__(self, key):
         return self._data[key]
 
@@ -21,6 +23,7 @@ class _Row:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def checker():
@@ -74,6 +77,7 @@ def mock_df_empty():
 # Test FreshnessResult
 # ---------------------------------------------------------------------------
 
+
 class TestFreshnessResult:
     def test_creation(self):
         result = FreshnessResult(
@@ -93,6 +97,7 @@ class TestFreshnessResult:
 # ---------------------------------------------------------------------------
 # Test FreshnessChecker — check_freshness
 # ---------------------------------------------------------------------------
+
 
 class TestCheckFreshness:
     @patch("governance.freshness_checks.F")
@@ -172,6 +177,7 @@ class TestCheckFreshness:
 # Test FreshnessChecker — check_partition_freshness
 # ---------------------------------------------------------------------------
 
+
 class TestCheckPartitionFreshness:
     @patch("governance.freshness_checks.F")
     def test_fresh_partition(self, mock_F, checker, mock_spark):
@@ -180,6 +186,7 @@ class TestCheckPartitionFreshness:
         df.columns = ["customer_id", "cob_dt"]
 
         from datetime import date
+
         recent_row = _Row({"latest": date.today()})
         df.select.return_value.collect.return_value = [recent_row]
         mock_spark.table.return_value = df
@@ -200,6 +207,7 @@ class TestCheckPartitionFreshness:
         df.columns = ["customer_id", "cob_dt"]
 
         from datetime import date
+
         old_row = _Row({"latest": date(2020, 1, 1)})
         df.select.return_value.collect.return_value = [old_row]
         mock_spark.table.return_value = df

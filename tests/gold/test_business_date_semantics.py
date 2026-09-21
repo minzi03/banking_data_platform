@@ -53,8 +53,7 @@ def spark(tmp_path_factory):
     os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
     os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
     session = (
-        SparkSession.builder
-        .appName("business-date-semantics")
+        SparkSession.builder.appName("business-date-semantics")
         .master("local[2]")
         .config("spark.sql.shuffle.partitions", "2")
         .config("spark.sql.warehouse.dir", str(tmp_path_factory.mktemp("wh")))
@@ -105,8 +104,7 @@ class TestBusinessDateDerivation:
             WHERE CAST(event_ts AS DATE) <> expected_business_date
         """).collect()[0]["n"]
         assert mismatches == 3, (
-            "3/6 case biên phải lệch khi dùng CAST trần — nếu không, fixture "
-            "không còn phủ được ranh giới ngày"
+            "3/6 case biên phải lệch khi dùng CAST trần — nếu không, fixture không còn phủ được ranh giới ngày"
         )
 
     def test_canonical_expression_requires_utc_session(self, spark, events):
@@ -131,11 +129,9 @@ class TestBusinessDateDerivation:
         original = spark.conf.get("spark.sql.session.timeZone")
         try:
             spark.conf.set("spark.sql.session.timeZone", "UTC")
-            under_utc = [r["d"] for r in spark.sql(
-                f"SELECT {expr} AS d FROM events ORDER BY id").collect()]
+            under_utc = [r["d"] for r in spark.sql(f"SELECT {expr} AS d FROM events ORDER BY id").collect()]
             spark.conf.set("spark.sql.session.timeZone", BUSINESS_TZ)
-            under_ict = [r["d"] for r in spark.sql(
-                f"SELECT {expr} AS d FROM events ORDER BY id").collect()]
+            under_ict = [r["d"] for r in spark.sql(f"SELECT {expr} AS d FROM events ORDER BY id").collect()]
         finally:
             spark.conf.set("spark.sql.session.timeZone", original)
 
@@ -154,10 +150,7 @@ class TestBusinessDateDerivation:
         Oracle này KHÔNG dùng trong production (hard-code offset, sai nếu business
         tz có DST) nhưng là thước đo độc lập chứng minh biểu thức canonical đúng.
         """
-        oracle = (
-            "date_add(DATE '1970-01-01', "
-            "CAST(FLOOR((unix_timestamp(event_ts) + 25200) / 86400) AS INT))"
-        )
+        oracle = "date_add(DATE '1970-01-01', CAST(FLOOR((unix_timestamp(event_ts) + 25200) / 86400) AS INT))"
         canonical = f"CAST(from_utc_timestamp(event_ts, '{BUSINESS_TZ}') AS DATE)"
         original = spark.conf.get("spark.sql.session.timeZone")
         try:
@@ -183,18 +176,12 @@ class TestSessionTimezoneGuard:
     """
 
     def test_spark_defaults_pins_utc(self):
-        conf = (PROJECT_ROOT / "docker" / "spark" / "conf" / "spark-defaults.conf").read_text(
-            encoding="utf-8"
-        )
-        line = next(
-            ln for ln in conf.splitlines() if ln.strip().startswith("spark.sql.session.timeZone")
-        )
+        conf = (PROJECT_ROOT / "docker" / "spark" / "conf" / "spark-defaults.conf").read_text(encoding="utf-8")
+        line = next(ln for ln in conf.splitlines() if ln.strip().startswith("spark.sql.session.timeZone"))
         assert line.split()[-1] == "UTC", f"session tz phải là UTC, đang là: {line}"
 
     def test_spark_session_factory_enforces_utc(self):
-        src = (PROJECT_ROOT / "code_etl" / "shared" / "spark" / "spark_session.py").read_text(
-            encoding="utf-8"
-        )
+        src = (PROJECT_ROOT / "code_etl" / "shared" / "spark" / "spark_session.py").read_text(encoding="utf-8")
         # Business tz ĐƯỢC PHÉP xuất hiện như hằng số (BUSINESS_TIMEZONE) —
         # cái không được phép là dùng nó làm SESSION timezone.
         assert 'session.timeZone", "Asia/Ho_Chi_Minh"' not in src, (
@@ -220,9 +207,7 @@ class TestInstantRoundTrip:
             for tz in ("UTC", "Asia/Ho_Chi_Minh"):
                 spark.conf.set("spark.sql.session.timeZone", tz)
                 epochs[tz] = [
-                    r["e"] for r in spark.sql(
-                        "SELECT unix_timestamp(event_ts) AS e FROM events ORDER BY id"
-                    ).collect()
+                    r["e"] for r in spark.sql("SELECT unix_timestamp(event_ts) AS e FROM events ORDER BY id").collect()
                 ]
         finally:
             spark.conf.set("spark.sql.session.timeZone", original)
@@ -231,12 +216,9 @@ class TestInstantRoundTrip:
         )
 
     def test_expected_epoch_values(self, spark, events):
-        got = [r["e"] for r in spark.sql(
-            "SELECT unix_timestamp(event_ts) AS e FROM events ORDER BY id"
-        ).collect()]
+        got = [r["e"] for r in spark.sql("SELECT unix_timestamp(event_ts) AS e FROM events ORDER BY id").collect()]
         want = [
-            int(datetime.fromisoformat(c[0].replace("Z", "+00:00"))
-                .replace(tzinfo=timezone.utc).timestamp())
+            int(datetime.fromisoformat(c[0].replace("Z", "+00:00")).replace(tzinfo=timezone.utc).timestamp())
             for c in BOUNDARY_CASES
         ]
         assert got == want
@@ -255,6 +237,4 @@ class TestCobDtIndependence:
             FROM events
         """).collect()
         assert all(r["cob_dt"] == date(2026, 9, 6) for r in rows)
-        assert {r["event_utc_date"] for r in rows} != {date(2026, 9, 6)}, (
-            "cob_dt phải độc lập với event date"
-        )
+        assert {r["event_utc_date"] for r in rows} != {date(2026, 9, 6)}, "cob_dt phải độc lập với event date"

@@ -59,7 +59,7 @@ class TestSparkSubmitStaysOnTheWorker:
                 continue
             # `docker exec` có thể nằm ở dòng trước trong chuỗi nối nhiều dòng;
             # xét cả cửa sổ 3 dòng trước đó.
-            window = "\n".join(text.splitlines()[max(0, line_no - 4):line_no])
+            window = "\n".join(text.splitlines()[max(0, line_no - 4) : line_no])
             if SPARK_WORKER_EXEC not in window:
                 offenders.append(f"{_dag_id(dag_path)}:{line_no}: {stripped}")
 
@@ -77,9 +77,7 @@ class TestSparkSubmitStaysOnTheWorker:
         """
         text = dag_path.read_text(encoding="utf-8")
         leaked = re.findall(r"s3\.secret-access-key=\S+", text)
-        assert not leaked, (
-            f"{_dag_id(dag_path)}: khai báo lại secret catalog trong DAG: {leaked}"
-        )
+        assert not leaked, f"{_dag_id(dag_path)}: khai báo lại secret catalog trong DAG: {leaked}"
 
 
 class TestEveryConnIdIsProvisioned:
@@ -103,16 +101,9 @@ class TestEveryConnIdIsProvisioned:
             for src in core-banking card-crm; do
               airflow connections add "postgres-$${src}"
         """
-        provisioned = set(
-            re.findall(r"""airflow connections add ["']([a-z0-9-]+)["']""", compose_text)
-        )
-        loop_vars = dict(
-            (var, items.split())
-            for var, items in re.findall(r"for (\w+) in ([^;\n]+); do", compose_text)
-        )
-        for tmpl in re.findall(
-            r"""airflow connections add ["']([^"']*\$\$\{\w+\}[^"']*)["']""", compose_text
-        ):
+        provisioned = set(re.findall(r"""airflow connections add ["']([a-z0-9-]+)["']""", compose_text))
+        loop_vars = dict((var, items.split()) for var, items in re.findall(r"for (\w+) in ([^;\n]+); do", compose_text))
+        for tmpl in re.findall(r"""airflow connections add ["']([^"']*\$\$\{\w+\}[^"']*)["']""", compose_text):
             var = re.search(r"\$\$\{(\w+)\}", tmpl).group(1)
             for item in loop_vars.get(var, []):
                 provisioned.add(re.sub(r"\$\$\{\w+\}", item, tmpl))
@@ -157,38 +148,24 @@ def _benchmark_policy_violations() -> dict[str, str | None]:
     workflow = yaml.safe_load(raw)
     # Bỏ comment: phần giải thích ở đầu file có nhắc `git push` và
     # `contents: write` như mô tả lịch sử, không phải cấu hình.
-    code = "\n".join(
-        line for line in raw.splitlines() if not line.lstrip().startswith("#")
-    )
+    code = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("#"))
 
     permissions = workflow.get("permissions") or {}
     write_scopes = sorted(k for k, v in permissions.items() if v == "write")
 
-    pushes = [
-        line.strip()
-        for line in code.splitlines()
-        if re.search(r"\bgit\s+(push|commit)\b", line)
-    ]
+    pushes = [line.strip() for line in code.splitlines() if re.search(r"\bgit\s+(push|commit)\b", line)]
 
     steps = workflow["jobs"]["benchmark"]["steps"]
     uploads = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact")]
 
     return {
-        "no_write_permission": (
-            f"workflow xin quyền ghi: {write_scopes}" if write_scopes else None
-        ),
-        "no_repository_mutation": (
-            "workflow còn lệnh ghi vào repo:\n  " + "\n  ".join(pushes) if pushes else None
-        ),
-        "publishes_artifact": (
-            None if uploads else "workflow không upload artifact nào — đo mà không báo cáo"
-        ),
+        "no_write_permission": (f"workflow xin quyền ghi: {write_scopes}" if write_scopes else None),
+        "no_repository_mutation": ("workflow còn lệnh ghi vào repo:\n  " + "\n  ".join(pushes) if pushes else None),
+        "publishes_artifact": (None if uploads else "workflow không upload artifact nào — đo mà không báo cáo"),
     }
 
 
-@pytest.mark.parametrize(
-    "rule", ["no_write_permission", "no_repository_mutation", "publishes_artifact"]
-)
+@pytest.mark.parametrize("rule", ["no_write_permission", "no_repository_mutation", "publishes_artifact"])
 def test_scheduled_benchmark_measures_without_mutating_the_repository(rule):
     violation = _benchmark_policy_violations()[rule]
     assert violation is None, violation

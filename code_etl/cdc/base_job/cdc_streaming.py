@@ -21,8 +21,7 @@ from pyspark.sql.types import StructType
 def create_spark_session() -> SparkSession:
     """Create SparkSession with Iceberg REST catalog configuration."""
     return (
-        SparkSession.builder
-        .appName("CDC_Streaming")
+        SparkSession.builder.appName("CDC_Streaming")
         .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
         .config("spark.sql.catalog.lakehouse.type", "rest")
         .config("spark.sql.catalog.lakehouse.uri", "http://iceberg-rest:8181")
@@ -127,8 +126,7 @@ def main():
 
     # Read from Kafka
     stream_df = (
-        spark.readStream
-        .format("kafka")
+        spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", args.kafka_bootstrap)
         .option("subscribe", kafka_topic)
         .option("startingOffsets", starting_offsets)
@@ -139,8 +137,7 @@ def main():
 
     # Write stream with foreachBatch
     query = (
-        stream_df.writeStream
-        .foreachBatch(lambda df, id: process_cdc_batch(df, id, target_table, config, spark))
+        stream_df.writeStream.foreachBatch(lambda df, id: process_cdc_batch(df, id, target_table, config, spark))
         .option("checkpointLocation", checkpoint_location)
         .trigger(processingTime=trigger_interval)
         .queryName(f"cdc_{kafka_topic.replace('.', '_')}")

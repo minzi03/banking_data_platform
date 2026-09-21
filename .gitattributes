@@ -1,0 +1,31 @@
+# =============================================================================
+# Line-ending policy
+# =============================================================================
+# The project runs on Linux containers from a Windows working copy. With
+# core.autocrlf=true and no .gitattributes, the Windows checkout rewrites text
+# files to CRLF while the container mounts the same working tree. git inside
+# the container then reports every file as modified, which breaks
+# scripts/generate_metrics_manifest.py: it stamps git_dirty into the evidence
+# manifest and refuses to promote the canonical manifest while the worktree
+# looks dirty.
+#
+# Normalising to LF in the repository makes host and container agree.
+# =============================================================================
+
+* text=auto eol=lf
+
+# Explicit binary — never touched by the text filter.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.jar binary
+*.parquet binary
+
+# Windows-only helper scripts keep CRLF so they stay runnable in cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf

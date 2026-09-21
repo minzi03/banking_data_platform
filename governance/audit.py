@@ -38,22 +38,22 @@ log = getLogger("audit")
 # Audit Record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AuditRecord:
     """A single audit log entry."""
+
     action: str
     table_name: str
     dag_id: str
     dag_run_id: str
-    status: str          # "success", "failed", "warning"
+    status: str  # "success", "failed", "warning"
     details: str = ""
     row_count: int = 0
     duration_seconds: float | None = None
     error_message: str | None = None
     metadata: dict = field(default_factory=dict)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
         return {
@@ -75,8 +75,10 @@ class AuditRecord:
 # Action Types
 # ---------------------------------------------------------------------------
 
+
 class AuditAction:
     """Standard action types for audit logging."""
+
     INGEST = "ingest"
     TRANSFORM = "transform"
     VALIDATE = "validate"
@@ -92,6 +94,7 @@ class AuditAction:
 # ---------------------------------------------------------------------------
 # Audit Logger
 # ---------------------------------------------------------------------------
+
 
 class AuditLogger:
     """
@@ -158,10 +161,7 @@ class AuditLogger:
 
         # Log to console
         icon = "✅" if status == "success" else "❌" if status == "failed" else "⚠️"
-        log.info(
-            f"{icon} [{action}] {table_name} — {status} "
-            f"({row_count} rows, {duration_seconds or 0:.1f}s)"
-        )
+        log.info(f"{icon} [{action}] {table_name} — {status} ({row_count} rows, {duration_seconds or 0:.1f}s)")
 
         return record
 
@@ -310,15 +310,9 @@ class AuditLogger:
         records = [r for r in self._records if r.table_name == table_name]
 
         if start_date:
-            records = [
-                r for r in records
-                if r.timestamp[:len(start_date)] >= start_date
-            ]
+            records = [r for r in records if r.timestamp[: len(start_date)] >= start_date]
         if end_date:
-            records = [
-                r for r in records
-                if r.timestamp[:len(end_date)] <= end_date
-            ]
+            records = [r for r in records if r.timestamp[: len(end_date)] <= end_date]
 
         return records
 
@@ -347,33 +341,37 @@ class AuditLogger:
             TimestampType,
         )
 
-        schema = StructType([
-            StructField("action", StringType()),
-            StructField("table_name", StringType()),
-            StructField("dag_id", StringType()),
-            StructField("dag_run_id", StringType()),
-            StructField("status", StringType()),
-            StructField("details", StringType()),
-            StructField("row_count", IntegerType()),
-            StructField("duration_seconds", FloatType()),
-            StructField("error_message", StringType()),
-            StructField("created_at", TimestampType()),
-        ])
+        schema = StructType(
+            [
+                StructField("action", StringType()),
+                StructField("table_name", StringType()),
+                StructField("dag_id", StringType()),
+                StructField("dag_run_id", StringType()),
+                StructField("status", StringType()),
+                StructField("details", StringType()),
+                StructField("row_count", IntegerType()),
+                StructField("duration_seconds", FloatType()),
+                StructField("error_message", StringType()),
+                StructField("created_at", TimestampType()),
+            ]
+        )
 
         rows = []
         for r in self._records:
-            rows.append(Row(
-                action=r.action,
-                table_name=r.table_name,
-                dag_id=r.dag_id,
-                dag_run_id=r.dag_run_id,
-                status=r.status,
-                details=r.details,
-                row_count=r.row_count,
-                duration_seconds=r.duration_seconds,
-                error_message=r.error_message,
-                created_at=datetime.now(timezone.utc),
-            ))
+            rows.append(
+                Row(
+                    action=r.action,
+                    table_name=r.table_name,
+                    dag_id=r.dag_id,
+                    dag_run_id=r.dag_run_id,
+                    status=r.status,
+                    details=r.details,
+                    row_count=r.row_count,
+                    duration_seconds=r.duration_seconds,
+                    error_message=r.error_message,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
 
         df = spark.createDataFrame(rows, schema=schema)
 

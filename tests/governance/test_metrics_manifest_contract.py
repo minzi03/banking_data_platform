@@ -59,6 +59,7 @@ def iter_metric_nodes(root, path=""):
 # Cấu trúc cơ bản
 # ---------------------------------------------------------------------------
 
+
 class TestManifestStructure:
     def test_files_exist(self):
         assert MANIFEST_PATH.exists(), "thiếu metrics-manifest.yaml"
@@ -91,11 +92,10 @@ class TestManifestStructure:
 # Trạng thái skeleton — chống gõ tay số vào manifest
 # ---------------------------------------------------------------------------
 
+
 class TestManifestStateMachine:
     def test_status_is_valid(self, manifest):
-        assert manifest["manifest"]["verification"]["status"] in {
-            "pending", "verified", "warning", "failed"
-        }
+        assert manifest["manifest"]["verification"]["status"] in {"pending", "verified", "warning", "failed"}
 
     def test_pending_manifest_has_no_runtime_values(self, manifest):
         """
@@ -113,10 +113,7 @@ class TestManifestStateMachine:
             for path, node in iter_metric_nodes(manifest["metrics"])
             if node.get("metric_type") == "runtime" and node.get("value") is not None
         ]
-        assert not filled, (
-            "metric runtime có value trong khi status=pending "
-            f"(gõ tay?): {filled}"
-        )
+        assert not filled, f"metric runtime có value trong khi status=pending (gõ tay?): {filled}"
 
     def test_pending_manifest_has_no_generated_timestamp(self, manifest):
         if manifest["manifest"]["verification"]["status"] == "pending":
@@ -166,9 +163,7 @@ class TestManifestStateMachine:
             "phase_sampling",
         )
         missing = [k for k in required if not freshness.get(k)]
-        assert not missing, (
-            f"cdc_freshness hạ revalidate_required nhưng thiếu ngữ cảnh: {missing}"
-        )
+        assert not missing, f"cdc_freshness hạ revalidate_required nhưng thiếu ngữ cảnh: {missing}"
 
         stats = (freshness["min_seconds"], freshness["median_seconds"], freshness["max_seconds"])
         assert stats[0] <= stats[1] <= stats[2], f"min/median/max không nhất quán: {stats}"
@@ -183,14 +178,13 @@ class TestManifestStateMachine:
         if superseded is None:
             return
         assert superseded["median_seconds"] != freshness["median_seconds"]
-        assert superseded.get("why_not_comparable"), (
-            "giữ số cũ mà không nói vì sao không so được thì chỉ gây hiểu nhầm"
-        )
+        assert superseded.get("why_not_comparable"), "giữ số cũ mà không nói vì sao không so được thì chỉ gây hiểu nhầm"
 
 
 # ---------------------------------------------------------------------------
 # Chất lượng định nghĩa metric
 # ---------------------------------------------------------------------------
+
 
 class TestMetricNodeQuality:
     def test_metric_types_are_valid(self, manifest):
@@ -207,10 +201,7 @@ class TestMetricNodeQuality:
             for path, node in iter_metric_nodes(manifest["metrics"])
             if not node.get("provenance") and not node.get("definition")
         ]
-        assert not missing, (
-            "metric không nói rõ lấy từ đâu (provenance) hay đếm cái gì "
-            f"(definition): {missing}"
-        )
+        assert not missing, f"metric không nói rõ lấy từ đâu (provenance) hay đếm cái gì (definition): {missing}"
 
     def test_static_metrics_declare_expected_value(self, manifest):
         """
@@ -250,6 +241,7 @@ class TestMetricNodeQuality:
 # Liên kết manifest ↔ SQL ↔ README
 # ---------------------------------------------------------------------------
 
+
 class TestCrossReferences:
     def test_sql_has_id_markers(self, sql_ids):
         assert len(sql_ids) >= 15, f"quá ít --@id trong SQL bundle: {len(sql_ids)}"
@@ -265,25 +257,18 @@ class TestCrossReferences:
 
     def test_readme_bindings_resolve(self, manifest):
         unresolved = [
-            b["manifest_path"]
-            for b in manifest["readme_bindings"]
-            if resolve(manifest, b["manifest_path"]) is ...
+            b["manifest_path"] for b in manifest["readme_bindings"] if resolve(manifest, b["manifest_path"]) is ...
         ]
-        assert not unresolved, (
-            f"readme_binding trỏ tới node không tồn tại: {unresolved}"
-        )
+        assert not unresolved, f"readme_binding trỏ tới node không tồn tại: {unresolved}"
 
     def test_invariants_are_well_formed(self, manifest):
         valid_ops = {"eq", "ne", "lt", "le", "gt", "ge"}
         for inv_id, inv in manifest["invariants"].items():
             assert inv.get("severity") in {"error", "warn"}, (
-                f"{inv_id}: severity phải là error|warn — đây là thứ phân biệt "
-                "blocking invariant với observation"
+                f"{inv_id}: severity phải là error|warn — đây là thứ phân biệt blocking invariant với observation"
             )
             assert inv.get("operator") in valid_ops, f"{inv_id}: operator không hợp lệ"
-            assert "expected" in inv or "compare_to" in inv, (
-                f"{inv_id}: cần expected hoặc compare_to"
-            )
+            assert "expected" in inv or "compare_to" in inv, f"{inv_id}: cần expected hoặc compare_to"
 
     def test_blocking_and_warning_invariants_both_exist(self, manifest):
         """
@@ -306,8 +291,7 @@ class TestCrossReferences:
         assert "gold_grain_no_duplicates" in ids, "① fan-out chưa có invariant"
         assert "churn_reconciles_amount" in ids, "① reconciliation chưa có invariant"
         assert "silver_fact_snapshot_not_duplicated" in ids, "② chưa có invariant"
-        for inv_id in ("gold_grain_no_duplicates", "churn_reconciles_amount",
-                       "silver_fact_snapshot_not_duplicated"):
+        for inv_id in ("gold_grain_no_duplicates", "churn_reconciles_amount", "silver_fact_snapshot_not_duplicated"):
             assert manifest["invariants"][inv_id]["severity"] == "error", (
                 f"{inv_id} phải là blocking — nó bảo vệ bug P0 đã từng xảy ra"
             )
@@ -324,6 +308,7 @@ class TestCrossReferences:
 # ---------------------------------------------------------------------------
 # Không encode claim chưa implement
 # ---------------------------------------------------------------------------
+
 
 class TestNoUnimplementedClaims:
     def test_cdc_watermark_state_is_honest(self, manifest):
@@ -359,6 +344,7 @@ class TestNoUnimplementedClaims:
 # Catalog naming — phát hiện khi runtime-validate lần đầu
 # ---------------------------------------------------------------------------
 
+
 class TestCatalogNaming:
     """
     CÙNG một Iceberg warehouse, HAI tên catalog tuỳ engine:
@@ -376,13 +362,10 @@ class TestCatalogNaming:
 
     def test_sql_bundle_uses_catalog_placeholder(self):
         sql = SQL_PATH.read_text(encoding="utf-8")
-        code = "\n".join(
-            line for line in sql.splitlines() if not line.lstrip().startswith("--")
-        )
+        code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
         assert ":catalog." in code, "bundle phải dùng placeholder :catalog."
         assert "lakehouse." not in code, (
-            "hard-code `lakehouse.` trong SQL sẽ fail trên Trino "
-            "(\"Catalog 'lakehouse' not found\") — dùng :catalog."
+            "hard-code `lakehouse.` trong SQL sẽ fail trên Trino (\"Catalog 'lakehouse' not found\") — dùng :catalog."
         )
 
     def test_trino_catalog_matches_properties_filename(self):

@@ -52,7 +52,7 @@ SELECT
     table_name,
     row_count,
     served_cob_dt,
-    'Expected cob_dt=' || '{{ cob_dt }}' || ' but got ' || served_cob_dt AS failure_reason
+    'Expected cob_dt=' || '{{ cob_dt }}' || ' but got ' || CAST(served_cob_dt AS varchar) AS failure_reason
 FROM serving_counts
 WHERE row_count = 0
    OR served_cob_dt IS NULL

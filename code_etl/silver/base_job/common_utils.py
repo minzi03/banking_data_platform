@@ -18,9 +18,10 @@ def parse_arguments(description: str = "Silver Layer Job") -> argparse.Namespace
         --cob_dt : Ngày xử lý (YYYY-MM-DD). Bắt buộc với fact job, không bắt buộc với SCD.
     """
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--config", required=True,  help="Đường dẫn đến file cấu hình YAML")
-    parser.add_argument("--cob_dt", required=False, default=None,
-                        help="Ngày xử lý dữ liệu (YYYY-MM-DD), bắt buộc cho fact jobs")
+    parser.add_argument("--config", required=True, help="Đường dẫn đến file cấu hình YAML")
+    parser.add_argument(
+        "--cob_dt", required=False, default=None, help="Ngày xử lý dữ liệu (YYYY-MM-DD), bắt buộc cho fact jobs"
+    )
     return parser.parse_args()
 
 

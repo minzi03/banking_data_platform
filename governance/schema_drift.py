@@ -21,8 +21,9 @@ log = getLogger("schema_drift")
 @dataclass
 class SchemaDriftResult:
     """Result of schema drift detection."""
+
     check_name: str
-    status: str          # "PASS", "WARN", "FAIL"
+    status: str  # "PASS", "WARN", "FAIL"
     details: str
     added_columns: list[str] = field(default_factory=list)
     removed_columns: list[str] = field(default_factory=list)
@@ -108,11 +109,13 @@ class SchemaDriftDetector:
                 if expected_type:
                     actual_type = current_types.get(current_col, "unknown")
                     if expected_type.lower() not in actual_type.lower():
-                        type_changes.append({
-                            "column": current_col,
-                            "expected_type": expected_type,
-                            "actual_type": actual_type,
-                        })
+                        type_changes.append(
+                            {
+                                "column": current_col,
+                                "expected_type": expected_type,
+                                "actual_type": actual_type,
+                            }
+                        )
 
         # Determine status
         if removed or type_changes:
@@ -131,10 +134,7 @@ class SchemaDriftDetector:
             issues.append(f"Removed columns: {removed}")
         if type_changes:
             for tc in type_changes:
-                issues.append(
-                    f"Type change: {tc['column']} "
-                    f"({tc['expected_type']} → {tc['actual_type']})"
-                )
+                issues.append(f"Type change: {tc['column']} ({tc['expected_type']} → {tc['actual_type']})")
 
         details = "; ".join(issues) if issues else "Schema matches expected"
 

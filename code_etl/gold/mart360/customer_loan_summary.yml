@@ -43,7 +43,6 @@ sql: |
           COALESCE(AVG(interest_rate), 0) AS avg_loan_interest_rate,
           COALESCE(MAX(term_months), 0) AS max_loan_term_months
       FROM lakehouse.silver.dim_loan
-      WHERE is_current = 1
       GROUP BY customer_id
   ),
   payments AS (

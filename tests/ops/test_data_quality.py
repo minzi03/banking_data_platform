@@ -23,8 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Import via importlib to avoid package conflicts
 _spec = importlib.util.spec_from_file_location(
-    "data_quality_mod",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "data_quality.py")
+    "data_quality_mod", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "data_quality.py")
 )
 _dq_mod = importlib.util.module_from_spec(_spec)
 
@@ -219,9 +218,7 @@ class TestCheckRange:
         df.filter.return_value = filtered_df
         spark.table.return_value = df
 
-        status, expected, details = check_range(spark, "t", {
-            "column": "balance", "min_value": 0, "max_value": 1000000
-        })
+        status, expected, details = check_range(spark, "t", {"column": "balance", "min_value": 0, "max_value": 1000000})
         assert status == "PASS"
 
     def test_fail_when_out_of_range(self):
@@ -240,9 +237,7 @@ class TestCheckRange:
         df.filter.return_value = filtered_df
         spark.table.return_value = df
 
-        status, expected, details = check_range(spark, "t", {
-            "column": "balance", "min_value": 0, "max_value": 1000000
-        })
+        status, expected, details = check_range(spark, "t", {"column": "balance", "min_value": 0, "max_value": 1000000})
         assert status == "FAIL"
         assert "10 values out of range" in details
 
@@ -254,9 +249,7 @@ class TestCheckRange:
         df.filter.return_value.count.return_value = 3
         spark.table.return_value = df
 
-        status, expected, details = check_range(spark, "t", {
-            "column": "balance", "min_value": 0
-        })
+        status, expected, details = check_range(spark, "t", {"column": "balance", "min_value": 0})
         assert status == "FAIL"
 
     def test_column_not_found(self):
@@ -266,9 +259,7 @@ class TestCheckRange:
         df.columns = ["balance"]
         spark.table.return_value = df
 
-        status, expected, details = check_range(spark, "t", {
-            "column": "nonexistent", "min_value": 0, "max_value": 100
-        })
+        status, expected, details = check_range(spark, "t", {"column": "nonexistent", "min_value": 0, "max_value": 100})
         assert status == "FAIL"
         assert "not found" in details
 
@@ -292,11 +283,15 @@ class TestCheckReferentialIntegrity:
 
         spark.table.side_effect = [source_df, ref_df]
 
-        status, expected, details = check_referential_integrity(spark, "t", {
-            "column": "branch_code",
-            "ref_table": "lakehouse.silver.dim_branch",
-            "ref_column": "branch_code",
-        })
+        status, expected, details = check_referential_integrity(
+            spark,
+            "t",
+            {
+                "column": "branch_code",
+                "ref_table": "lakehouse.silver.dim_branch",
+                "ref_column": "branch_code",
+            },
+        )
         assert status == "PASS"
 
     def test_fail_when_orphans_exist(self):
@@ -315,11 +310,15 @@ class TestCheckReferentialIntegrity:
 
         spark.table.side_effect = [source_df, ref_df]
 
-        status, expected, details = check_referential_integrity(spark, "t", {
-            "column": "branch_code",
-            "ref_table": "lakehouse.silver.dim_branch",
-            "ref_column": "branch_code",
-        })
+        status, expected, details = check_referential_integrity(
+            spark,
+            "t",
+            {
+                "column": "branch_code",
+                "ref_table": "lakehouse.silver.dim_branch",
+                "ref_column": "branch_code",
+            },
+        )
         assert status == "FAIL"
         assert "5 orphan" in details
 
@@ -327,10 +326,14 @@ class TestCheckReferentialIntegrity:
         """Should FAIL when required fields are missing."""
         spark = MagicMock()
 
-        status, expected, details = check_referential_integrity(spark, "t", {
-            "column": "branch_code"
-            # Missing ref_table and ref_column
-        })
+        status, expected, details = check_referential_integrity(
+            spark,
+            "t",
+            {
+                "column": "branch_code"
+                # Missing ref_table and ref_column
+            },
+        )
         assert status == "FAIL"
         assert "Missing" in details
 
@@ -415,8 +418,20 @@ class TestCheckDispatch:
 
     def test_all_check_types_registered(self):
         """Should have dispatch entries for all supported check types."""
-        expected = {"row_count", "null_check", "unique_check", "range_check", "referential_integrity",
-                    "anomaly_detection", "freshness_check", "schema_drift"}
+        expected = {
+            "row_count",
+            "null_check",
+            "unique_check",
+            "range_check",
+            "referential_integrity",
+            "anomaly_detection",
+            "freshness_check",
+            "schema_drift",
+            # Phase 1 reconciliation checks were registered in CHECK_DISPATCH
+            # but never added here, so this test could not catch a regression
+            # in them. Reconciled with the manifest's dq_check_types metric.
+            "reconciliation",
+        }
         assert set(CHECK_DISPATCH.keys()) == expected
 
     def test_dispatch_returns_callable(self):

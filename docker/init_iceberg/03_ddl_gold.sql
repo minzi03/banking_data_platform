@@ -1,7 +1,7 @@
 -- =============================================================================
--- DDL: Gold Layer — Iceberg Tables (10 tables)
+-- DDL: Gold Layer — Iceberg Tables (14 tables)
 -- Catalog: lakehouse  |  Schema: gold
--- Types: mart360 (5), segment (4), time_analytics (1)
+-- Types: mart360 (6), segment (4), time_analytics (1), risk (3)
 -- =============================================================================
 
 -- =============================================================================
@@ -218,6 +218,112 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_branch_monthly_summary (
     total_credit_amount DECIMAL(18,2),
     total_debit_amount  DECIMAL(18,2),
     top_channel         STRING,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- RISK — portfolio / fraud / AML marts
+-- =============================================================================
+
+-- 11. CUSTOMER_LOAN_SUMMARY (grain: customer_id)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.customer_loan_summary (
+    customer_id             BIGINT,
+    customer_sk             STRING,
+    total_loans             BIGINT,
+    active_loans            BIGINT,
+    overdue_loans           BIGINT,
+    written_off_loans       BIGINT,
+    total_loan_amount       DECIMAL(29,2),
+    total_loan_outstanding  DECIMAL(29,2),
+    avg_loan_interest_rate  DECIMAL(15,4),
+    max_loan_term_months    INT,
+    payment_count           BIGINT,
+    late_payment_count      BIGINT,
+    missed_payment_count    BIGINT,
+    total_amount_paid       DECIMAL(29,2),
+    total_penalty           DECIMAL(29,2),
+    late_payment_rate       DOUBLE,
+    missed_payment_rate     DOUBLE,
+    loan_to_deposit_ratio   DECIMAL(35,6),
+    cob_dt                  DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+
+-- 12. LOAN_PORTFOLIO_RISK (grain: branch_code + product_code)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.loan_portfolio_risk (
+    branch_code         STRING,
+    branch_name         STRING,
+    product_code        STRING,
+    total_loans         BIGINT,
+    active_loans        BIGINT,
+    overdue_loans       BIGINT,
+    total_amount        DECIMAL(18,2),
+    total_outstanding   DECIMAL(18,2),
+    overdue_rate        DOUBLE,
+    npl_proxy           DECIMAL(18,2),
+    payment_count       BIGINT,
+    late_payment_count  BIGINT,
+    late_payment_rate   DOUBLE,
+    total_penalty       DECIMAL(18,2),
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- 13. FRAUD_RISK_TXN (grain: txn_id)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.fraud_risk_txn (
+    txn_id              BIGINT,
+    account_id          BIGINT,
+    customer_id         BIGINT,
+    customer_segment    STRING,
+    txn_amount          DECIMAL(18,2),
+    txn_type            STRING,
+    debit_credit        STRING,
+    balance_after       DECIMAL(18,2),
+    channel             STRING,
+    description         STRING,
+    counter_account     STRING,
+    txn_date            TIMESTAMP,
+    night_flag          INT,
+    high_amount_flag    INT,
+    neg_balance_flag    INT,
+    anomaly_flag        INT,
+    risk_score          INT,
+    risk_level          INT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- 14. AML_MONITORING (grain: txn_id)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.aml_monitoring (
+    txn_id              BIGINT,
+    account_id          BIGINT,
+    customer_id         BIGINT,
+    customer_segment    STRING,
+    branch_code         STRING,
+    txn_amount          DECIMAL(18,2),
+    txn_type            STRING,
+    debit_credit        STRING,
+    channel             STRING,
+    description         STRING,
+    counter_account     STRING,
+    txn_date            TIMESTAMP,
+    high_value_flag     INT,
+    structuring_flag    INT,
+    velocity_flag       INT,
+    multi_channel_flag  INT,
+    alert_score         INT,
+    risk_level          INT,
+    alert_generated     INT,
     cob_dt              DATE
 )
 USING iceberg

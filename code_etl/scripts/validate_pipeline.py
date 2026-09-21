@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
 
 from spark.spark_session import get_spark_session
 
-
 EXPECTED = {
     "lakehouse.bronze.core_customer": 10000,
     "lakehouse.bronze.core_account": 30000,
@@ -33,9 +32,7 @@ EXPECTED = {
     "lakehouse.gold.churn_prediction": 10000,
 }
 
-PARTITIONED = {
-    table for table in EXPECTED if ".bronze." in table or ".fact_" in table or ".gold." in table
-}
+PARTITIONED = {table for table in EXPECTED if ".bronze." in table or ".fact_" in table or ".gold." in table}
 
 
 def main():
@@ -76,8 +73,7 @@ def main():
         for table, predicate in grain_checks:
             key = "account_id" if table.endswith("dim_account") else "customer_id"
             duplicate = spark.sql(
-                f"SELECT {key} FROM {table} WHERE {predicate} "
-                f"GROUP BY {key} HAVING COUNT(*) > 1 LIMIT 1"
+                f"SELECT {key} FROM {table} WHERE {predicate} GROUP BY {key} HAVING COUNT(*) > 1 LIMIT 1"
             ).take(1)
             if duplicate:
                 failures.append(f"{table}: duplicate current {key}")

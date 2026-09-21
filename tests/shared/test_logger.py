@@ -13,8 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Direct import via importlib to avoid package name conflicts
 _spec = importlib.util.spec_from_file_location(
-    "logger_mod",
-    str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "logger.py")
+    "logger_mod", str(PROJECT_ROOT / "code_etl" / "shared" / "utils" / "logger.py")
 )
 _logger_mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_logger_mod)

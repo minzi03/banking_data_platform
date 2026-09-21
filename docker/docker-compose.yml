@@ -134,7 +134,7 @@ services:
   # ===========================================================================
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: banking-minio
     hostname: minio
     env_file: .env
@@ -158,7 +158,7 @@ services:
 
   # MinIO Client — create bucket on startup
   mc:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: banking-mc
     depends_on:
       minio:

@@ -16,6 +16,7 @@ from governance.lineage import LineageTracker, TransformType
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def governance_contracts_dir(tmp_path):
     """Create a directory with multiple contract YAML files."""
@@ -55,7 +56,7 @@ ai_governance:
     - fraud_detection
   prohibited_uses:
     - automated_decision_making
-"""
+""",
         },
         {
             "filename": "mart360_gold.yaml",
@@ -88,7 +89,7 @@ ai_governance:
   ai_use_allowed: true
   risk_tier: high_risk
   human_oversight_required: true
-"""
+""",
         },
     ]
     for contract in contracts:
@@ -120,6 +121,7 @@ def mock_df_valid():
 # ---------------------------------------------------------------------------
 # Test Full Governance Flow
 # ---------------------------------------------------------------------------
+
 
 class TestGovernanceFlow:
     def test_load_contracts_validate_enforce(self, governance_contracts_dir, mock_spark, mock_df_valid):

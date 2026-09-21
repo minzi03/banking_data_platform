@@ -80,8 +80,8 @@ GOLD_JOB_ORDER = [
 
 # Map job type → Python module path
 JOB_TYPE_MAP = {
-    "mart360":        "code_etl.gold.base_job.gold_job",
-    "segment":        "code_etl.gold.base_job.gold_job",
+    "mart360": "code_etl.gold.base_job.gold_job",
+    "segment": "code_etl.gold.base_job.gold_job",
     "time_analytics": "code_etl.gold.base_job.gold_job",
 }
 
@@ -94,8 +94,7 @@ def parse_arguments():
     # có trong PATH khi vào container qua `docker exec` — CI đo được:
     # `[Errno 2] No such file or directory: 'spark-submit'`, 0/10 Gold job chạy,
     # trong khi Silver (vốn đã dùng đường dẫn tuyệt đối) chạy 13/13.
-    parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit",
-                        help="Path to spark-submit command")
+    parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit", help="Path to spark-submit command")
     return parser.parse_args()
 
 
@@ -107,20 +106,26 @@ def run_gold_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
 
     cmd = [
         spark_submit,
-        "--master", "spark://spark-master:7077",
-        "--deploy-mode", "client",
-        "--conf", "spark.driver.memory=512m",
-        "--conf", "spark.executor.memory=768m",
+        "--master",
+        "spark://spark-master:7077",
+        "--deploy-mode",
+        "client",
+        "--conf",
+        "spark.driver.memory=512m",
+        "--conf",
+        "spark.executor.memory=768m",
         "code_etl/gold/base_job/gold_job.py",
-        "--config", config_path,
-        "--cob_dt", cob_dt,
+        "--config",
+        config_path,
+        "--cob_dt",
+        cob_dt,
     ]
 
     logger.info(f"Running: {name} ({job_def['type']})")
     logger.info(f"  Config: {config_path}")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
         if result.returncode == 0:
             logger.info(f"  ✓ {name} completed successfully")
             return True

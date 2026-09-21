@@ -30,12 +30,14 @@ sql: |
     FROM txn GROUP BY customer_id
   ),
   daily_agg AS (
-    SELECT customer_id, CAST(txn_date AS DATE) AS txn_day,
+    SELECT customer_id,
+      CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
       COUNT(txn_id) AS daily_txn_count,
       SUM(txn_amount) AS daily_total_amount,
       COUNT(CASE WHEN txn_amount BETWEEN 50000000 AND 99999999 THEN 1 END) AS structured_count
-    FROM txn GROUP BY customer_id, CAST(txn_date AS DATE)
-  )
+    FROM txn
+    GROUP BY customer_id, CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE)
+  ),
   flagged AS (
     SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count, cs.channel_count,
       da.daily_txn_count, da.daily_total_amount, da.structured_count,
@@ -45,7 +47,9 @@ sql: |
       CASE WHEN cs.channel_count >= 4 THEN 1 ELSE 0 END AS multi_channel_flag
     FROM txn t
     LEFT JOIN customer_stats cs ON t.customer_id=cs.customer_id
-    LEFT JOIN daily_agg da ON t.customer_id=da.customer_id AND CAST(t.txn_date AS DATE)=da.txn_day
+    LEFT JOIN daily_agg da
+      ON t.customer_id = da.customer_id
+      AND CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = da.txn_day
   )
   SELECT txn_id, account_id, customer_id, customer_segment, branch_code,
     txn_amount, txn_type, debit_credit, channel, description, counter_account, txn_date,

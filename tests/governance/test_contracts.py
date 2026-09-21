@@ -3,6 +3,7 @@ Tests for governance.contracts — Pydantic models for dataset contracts.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from governance.contracts import (
     AIGovernance,
@@ -17,6 +18,7 @@ from governance.contracts import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def valid_contract_data():
@@ -62,6 +64,7 @@ def valid_ai_governance():
 # Test PhysicalLocation
 # ---------------------------------------------------------------------------
 
+
 class TestPhysicalLocation:
     def test_creation(self):
         loc = PhysicalLocation(catalog="lakehouse", namespace="silver", table="dim_customer")
@@ -74,13 +77,14 @@ class TestPhysicalLocation:
         assert loc.full_table_name == "lakehouse.silver.dim_customer"
 
     def test_missing_catalog(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             PhysicalLocation(namespace="silver", table="dim_customer")
 
 
 # ---------------------------------------------------------------------------
 # Test Enums
 # ---------------------------------------------------------------------------
+
 
 class TestEnums:
     def test_quality_class_values(self):
@@ -103,6 +107,7 @@ class TestEnums:
 # Test QualityRules
 # ---------------------------------------------------------------------------
 
+
 class TestQualityRules:
     def test_creation_with_defaults(self):
         rules = QualityRules()
@@ -123,9 +128,7 @@ class TestQualityRules:
         assert rules.unique_column_sets == [["customer_id", "cob_dt"]]
 
     def test_range_checks(self):
-        rules = QualityRules(
-            range_checks=[{"column": "balance", "min_value": 0, "max_value": 1000000}]
-        )
+        rules = QualityRules(range_checks=[{"column": "balance", "min_value": 0, "max_value": 1000000}])
         assert len(rules.range_checks) == 1
         assert rules.range_checks[0].column == "balance"
 
@@ -133,6 +136,7 @@ class TestQualityRules:
 # ---------------------------------------------------------------------------
 # Test AIGovernance
 # ---------------------------------------------------------------------------
+
 
 class TestAIGovernance:
     def test_creation_with_defaults(self):
@@ -158,6 +162,7 @@ class TestAIGovernance:
 # Test DatasetContract
 # ---------------------------------------------------------------------------
 
+
 class TestDatasetContract:
     def test_creation(self, valid_contract_data):
         contract = DatasetContract(**valid_contract_data)
@@ -174,13 +179,17 @@ class TestDatasetContract:
         assert contract.ai_governance.ai_use_allowed is True
 
     def test_missing_required_fields(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             DatasetContract()
 
     def test_missing_dataset_id(self):
-        with pytest.raises(Exception):
-            DatasetContract(owner="test", business_purpose="test", layer="silver",
-                          physical_location={"catalog": "l", "namespace": "s", "table": "t"})
+        with pytest.raises(ValidationError):
+            DatasetContract(
+                owner="test",
+                business_purpose="test",
+                layer="silver",
+                physical_location={"catalog": "l", "namespace": "s", "table": "t"},
+            )
 
     def test_to_dict(self, valid_contract_data):
         contract = DatasetContract(**valid_contract_data)

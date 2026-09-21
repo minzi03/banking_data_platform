@@ -32,11 +32,13 @@ log = getLogger("enforcement")
 # Validation Result
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CheckResult:
     """Result of a single check."""
+
     check_name: str
-    status: str          # "PASS", "WARN", "FAIL"
+    status: str  # "PASS", "WARN", "FAIL"
     expected: str
     actual: str
     details: str = ""
@@ -45,12 +47,11 @@ class CheckResult:
 @dataclass
 class ValidationResult:
     """Aggregated result of all contract checks."""
+
     dataset_id: str
     passed: bool = True
     checks: list[CheckResult] = field(default_factory=list)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def add_check(self, check: CheckResult) -> None:
         self.checks.append(check)
@@ -101,6 +102,7 @@ class ValidationResult:
 # ---------------------------------------------------------------------------
 # Contract Enforcer
 # ---------------------------------------------------------------------------
+
 
 class ContractEnforcer:
     """
@@ -166,15 +168,16 @@ class ContractEnforcer:
 
         # 8. Referential integrity
         for ref in rules.referential_integrity:
-            self._check_referential_integrity(
-                spark, df, ref.column, ref.ref_table, ref.ref_column, result
-            )
+            self._check_referential_integrity(spark, df, ref.column, ref.ref_table, ref.ref_column, result)
 
         # 9. Freshness check (via SLA from contract)
         if rules.freshness_sla_hours and rules.date_column:
             self._check_freshness(
-                spark, contract.physical_location.full_table_name,
-                rules.freshness_sla_hours, rules.date_column, result,
+                spark,
+                contract.physical_location.full_table_name,
+                rules.freshness_sla_hours,
+                rules.date_column,
+                result,
             )
 
         return result
@@ -183,33 +186,33 @@ class ContractEnforcer:
     # Individual Check Methods
     # -----------------------------------------------------------------------
 
-    def _check_required_columns(
-        self, df, required_columns: list[str], result: ValidationResult
-    ) -> None:
+    def _check_required_columns(self, df, required_columns: list[str], result: ValidationResult) -> None:
         """Check that required columns exist in the DataFrame."""
         actual_columns = set(df.columns)
         missing = [col for col in required_columns if col not in actual_columns]
 
         if missing:
-            result.add_check(CheckResult(
-                check_name="required_columns",
-                status="FAIL",
-                expected=str(required_columns),
-                actual=str(list(actual_columns)),
-                details=f"Missing columns: {missing}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="required_columns",
+                    status="FAIL",
+                    expected=str(required_columns),
+                    actual=str(list(actual_columns)),
+                    details=f"Missing columns: {missing}",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name="required_columns",
-                status="PASS",
-                expected=str(required_columns),
-                actual=str(required_columns),
-                details=f"All {len(required_columns)} required columns present",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="required_columns",
+                    status="PASS",
+                    expected=str(required_columns),
+                    actual=str(required_columns),
+                    details=f"All {len(required_columns)} required columns present",
+                )
+            )
 
-    def _check_non_null(
-        self, df, non_null_columns: list[str], result: ValidationResult
-    ) -> None:
+    def _check_non_null(self, df, non_null_columns: list[str], result: ValidationResult) -> None:
         """Check that specified columns have no NULL values."""
         issues = []
         for col in non_null_columns:
@@ -221,21 +224,25 @@ class ContractEnforcer:
                 issues.append(f"{col}: {null_count} nulls")
 
         if issues:
-            result.add_check(CheckResult(
-                check_name="non_null_columns",
-                status="FAIL",
-                expected="0 nulls",
-                actual="; ".join(issues),
-                details=f"Null violations: {len(issues)} columns",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="non_null_columns",
+                    status="FAIL",
+                    expected="0 nulls",
+                    actual="; ".join(issues),
+                    details=f"Null violations: {len(issues)} columns",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name="non_null_columns",
-                status="PASS",
-                expected="0 nulls",
-                actual="0 nulls",
-                details=f"All {len(non_null_columns)} columns non-null",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="non_null_columns",
+                    status="PASS",
+                    expected="0 nulls",
+                    actual="0 nulls",
+                    details=f"All {len(non_null_columns)} columns non-null",
+                )
+            )
 
     def _check_row_count(
         self,
@@ -256,25 +263,27 @@ class ContractEnforcer:
         expected = f"[{min_rows or '∞'}, {max_rows or '∞'}]"
 
         if issues:
-            result.add_check(CheckResult(
-                check_name="row_count",
-                status="FAIL",
-                expected=expected,
-                actual=str(count),
-                details="; ".join(issues),
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="row_count",
+                    status="FAIL",
+                    expected=expected,
+                    actual=str(count),
+                    details="; ".join(issues),
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name="row_count",
-                status="PASS",
-                expected=expected,
-                actual=str(count),
-                details=f"Row count OK: {count}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="row_count",
+                    status="PASS",
+                    expected=expected,
+                    actual=str(count),
+                    details=f"Row count OK: {count}",
+                )
+            )
 
-    def _check_unique(
-        self, df, unique_columns: list[str], result: ValidationResult
-    ) -> None:
+    def _check_unique(self, df, unique_columns: list[str], result: ValidationResult) -> None:
         """Check that specified columns have unique values."""
         total = df.count()
         issues = []
@@ -289,37 +298,41 @@ class ContractEnforcer:
                 issues.append(f"{col}: {dup_count} duplicates")
 
         if issues:
-            result.add_check(CheckResult(
-                check_name="unique_check",
-                status="FAIL",
-                expected="0 duplicates",
-                actual="; ".join(issues),
-                details=f"Uniqueness violations: {len(issues)} columns",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="unique_check",
+                    status="FAIL",
+                    expected="0 duplicates",
+                    actual="; ".join(issues),
+                    details=f"Uniqueness violations: {len(issues)} columns",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name="unique_check",
-                status="PASS",
-                expected="0 duplicates",
-                actual="0 duplicates",
-                details=f"All {len(unique_columns)} columns unique",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="unique_check",
+                    status="PASS",
+                    expected="0 duplicates",
+                    actual="0 duplicates",
+                    details=f"All {len(unique_columns)} columns unique",
+                )
+            )
 
-    def _check_unique_column_set(
-        self, df, columns: list[str], result: ValidationResult
-    ) -> None:
+    def _check_unique_column_set(self, df, columns: list[str], result: ValidationResult) -> None:
         """Check that the combination of columns is unique."""
         missing = [col for col in columns if col not in df.columns]
         check_name = f"unique_set_{'_'.join(columns)}"
 
         if missing:
-            result.add_check(CheckResult(
-                check_name=check_name,
-                status="FAIL",
-                expected=f"Unique combination: {columns}",
-                actual=f"Missing columns: {missing}",
-                details=f"Columns not found in DataFrame: {missing}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=check_name,
+                    status="FAIL",
+                    expected=f"Unique combination: {columns}",
+                    actual=f"Missing columns: {missing}",
+                    details=f"Columns not found in DataFrame: {missing}",
+                )
+            )
             return
 
         total = df.count()
@@ -327,34 +340,38 @@ class ContractEnforcer:
 
         if total != distinct:
             dup_count = total - distinct
-            result.add_check(CheckResult(
-                check_name=check_name,
-                status="FAIL",
-                expected="0 duplicate key combinations",
-                actual=f"{dup_count} duplicates",
-                details=f"Duplicate combinations found for columns {columns}: {dup_count}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=check_name,
+                    status="FAIL",
+                    expected="0 duplicate key combinations",
+                    actual=f"{dup_count} duplicates",
+                    details=f"Duplicate combinations found for columns {columns}: {dup_count}",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name=check_name,
-                status="PASS",
-                expected="0 duplicate key combinations",
-                actual="0 duplicate key combinations",
-                details=f"All combinations unique for columns {columns}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=check_name,
+                    status="PASS",
+                    expected="0 duplicate key combinations",
+                    actual="0 duplicate key combinations",
+                    details=f"All combinations unique for columns {columns}",
+                )
+            )
 
-    def _check_future_dates(
-        self, df, date_column: str, result: ValidationResult
-    ) -> None:
+    def _check_future_dates(self, df, date_column: str, result: ValidationResult) -> None:
         """Check that date column has no future dates."""
         if date_column not in df.columns:
-            result.add_check(CheckResult(
-                check_name="future_dates",
-                status="FAIL",
-                expected="no future dates",
-                actual=f"column '{date_column}' not found",
-                details=f"Column '{date_column}' not found in DataFrame",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="future_dates",
+                    status="FAIL",
+                    expected="no future dates",
+                    actual=f"column '{date_column}' not found",
+                    details=f"Column '{date_column}' not found in DataFrame",
+                )
+            )
             return
 
         from pyspark.sql import functions as F
@@ -363,21 +380,25 @@ class ContractEnforcer:
         future_count = df.filter(F.col(date_column) > today).count()
 
         if future_count > 0:
-            result.add_check(CheckResult(
-                check_name="future_dates",
-                status="FAIL",
-                expected="0 future dates",
-                actual=f"{future_count} future dates",
-                details=f"Found {future_count} rows with dates after today",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="future_dates",
+                    status="FAIL",
+                    expected="0 future dates",
+                    actual=f"{future_count} future dates",
+                    details=f"Found {future_count} rows with dates after today",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name="future_dates",
-                status="PASS",
-                expected="0 future dates",
-                actual="0 future dates",
-                details="No future dates found",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name="future_dates",
+                    status="PASS",
+                    expected="0 future dates",
+                    actual="0 future dates",
+                    details="No future dates found",
+                )
+            )
 
     def _check_range(
         self,
@@ -389,13 +410,15 @@ class ContractEnforcer:
     ) -> None:
         """Check that column values are within min/max bounds."""
         if column not in df.columns:
-            result.add_check(CheckResult(
-                check_name=f"range_{column}",
-                status="FAIL",
-                expected=f"[{min_value}, {max_value}]",
-                actual=f"column '{column}' not found",
-                details=f"Column '{column}' not found in DataFrame",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=f"range_{column}",
+                    status="FAIL",
+                    expected=f"[{min_value}, {max_value}]",
+                    actual=f"column '{column}' not found",
+                    details=f"Column '{column}' not found in DataFrame",
+                )
+            )
             return
 
         from pyspark.sql import functions as F
@@ -406,29 +429,30 @@ class ContractEnforcer:
         if max_value is not None:
             conditions.append(F.col(column) > max_value)
 
-        if conditions:
-            out_of_range = df.filter(F.or_(*conditions)).count()
-        else:
-            out_of_range = 0
+        out_of_range = df.filter(F.or_(*conditions)).count() if conditions else 0
 
         expected = f"[{min_value or '∞'}, {max_value or '∞'}]"
 
         if out_of_range > 0:
-            result.add_check(CheckResult(
-                check_name=f"range_{column}",
-                status="FAIL",
-                expected=expected,
-                actual=f"{out_of_range} out of range",
-                details=f"{out_of_range} values outside range {expected}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=f"range_{column}",
+                    status="FAIL",
+                    expected=expected,
+                    actual=f"{out_of_range} out of range",
+                    details=f"{out_of_range} values outside range {expected}",
+                )
+            )
         else:
-            result.add_check(CheckResult(
-                check_name=f"range_{column}",
-                status="PASS",
-                expected=expected,
-                actual="all in range",
-                details=f"All values within range {expected}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=f"range_{column}",
+                    status="PASS",
+                    expected=expected,
+                    actual="all in range",
+                    details=f"All values within range {expected}",
+                )
+            )
 
     def _check_referential_integrity(
         self,
@@ -441,58 +465,66 @@ class ContractEnforcer:
     ) -> None:
         """Check that FK column values exist in referenced table."""
         if column not in df.columns:
-            result.add_check(CheckResult(
-                check_name=f"fk_{column}",
-                status="FAIL",
-                expected=f"FK to {ref_table}.{ref_column}",
-                actual=f"column '{column}' not found",
-                details=f"Column '{column}' not found in DataFrame",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=f"fk_{column}",
+                    status="FAIL",
+                    expected=f"FK to {ref_table}.{ref_column}",
+                    actual=f"column '{column}' not found",
+                    details=f"Column '{column}' not found in DataFrame",
+                )
+            )
             return
 
         try:
             ref_df = spark.table(ref_table)
 
             if ref_column not in ref_df.columns:
-                result.add_check(CheckResult(
-                    check_name=f"fk_{column}",
-                    status="FAIL",
-                    expected=f"FK to {ref_table}.{ref_column}",
-                    actual=f"ref column '{ref_column}' not found in {ref_table}",
-                    details=f"Reference column '{ref_column}' not found in {ref_table}",
-                ))
+                result.add_check(
+                    CheckResult(
+                        check_name=f"fk_{column}",
+                        status="FAIL",
+                        expected=f"FK to {ref_table}.{ref_column}",
+                        actual=f"ref column '{ref_column}' not found in {ref_table}",
+                        details=f"Reference column '{ref_column}' not found in {ref_table}",
+                    )
+                )
                 return
 
             source_vals = df.select(column).distinct()
             ref_vals = ref_df.select(ref_column).distinct()
-            orphans = source_vals.join(
-                ref_vals, source_vals[column] == ref_vals[ref_column], "left_anti"
-            ).count()
+            orphans = source_vals.join(ref_vals, source_vals[column] == ref_vals[ref_column], "left_anti").count()
 
             if orphans > 0:
-                result.add_check(CheckResult(
-                    check_name=f"fk_{column}",
-                    status="FAIL",
-                    expected="0 orphans",
-                    actual=f"{orphans} orphans",
-                    details=f"{orphans} records: {column} not in {ref_table}.{ref_column}",
-                ))
+                result.add_check(
+                    CheckResult(
+                        check_name=f"fk_{column}",
+                        status="FAIL",
+                        expected="0 orphans",
+                        actual=f"{orphans} orphans",
+                        details=f"{orphans} records: {column} not in {ref_table}.{ref_column}",
+                    )
+                )
             else:
-                result.add_check(CheckResult(
-                    check_name=f"fk_{column}",
-                    status="PASS",
-                    expected="0 orphans",
-                    actual="0 orphans",
-                    details=f"All FK values exist in {ref_table}.{ref_column}",
-                ))
+                result.add_check(
+                    CheckResult(
+                        check_name=f"fk_{column}",
+                        status="PASS",
+                        expected="0 orphans",
+                        actual="0 orphans",
+                        details=f"All FK values exist in {ref_table}.{ref_column}",
+                    )
+                )
         except Exception as e:
-            result.add_check(CheckResult(
-                check_name=f"fk_{column}",
-                status="WARN",
-                expected=f"FK to {ref_table}.{ref_column}",
-                actual="error",
-                details=f"Could not validate FK: {e}",
-            ))
+            result.add_check(
+                CheckResult(
+                    check_name=f"fk_{column}",
+                    status="WARN",
+                    expected=f"FK to {ref_table}.{ref_column}",
+                    actual="error",
+                    details=f"Could not validate FK: {e}",
+                )
+            )
 
     def _check_freshness(
         self,
@@ -505,38 +537,47 @@ class ContractEnforcer:
         """Check data freshness using FreshnessChecker."""
         try:
             from governance.freshness_checks import FreshnessChecker
+
             checker = FreshnessChecker()
             fres = checker.check_freshness(spark, table_name, sla_hours, date_column)
 
             if fres.status == "FAIL":
-                result.add_check(CheckResult(
-                    check_name="freshness",
-                    status="FAIL",
-                    expected=f"Data within {sla_hours}h",
-                    actual=fres.details,
-                    details=fres.details,
-                ))
+                result.add_check(
+                    CheckResult(
+                        check_name="freshness",
+                        status="FAIL",
+                        expected=f"Data within {sla_hours}h",
+                        actual=fres.details,
+                        details=fres.details,
+                    )
+                )
             elif fres.status == "WARN":
-                result.add_check(CheckResult(
+                result.add_check(
+                    CheckResult(
+                        check_name="freshness",
+                        status="WARN",
+                        expected=f"Data within {sla_hours}h",
+                        actual=fres.details,
+                        details=fres.details,
+                    )
+                )
+            else:
+                result.add_check(
+                    CheckResult(
+                        check_name="freshness",
+                        status="PASS",
+                        expected=f"Data within {sla_hours}h",
+                        actual=fres.details,
+                        details=fres.details,
+                    )
+                )
+        except Exception as e:
+            result.add_check(
+                CheckResult(
                     check_name="freshness",
                     status="WARN",
-                    expected=f"Data within {sla_hours}h",
-                    actual=fres.details,
-                    details=fres.details,
-                ))
-            else:
-                result.add_check(CheckResult(
-                    check_name="freshness",
-                    status="PASS",
-                    expected=f"Data within {sla_hours}h",
-                    actual=fres.details,
-                    details=fres.details,
-                ))
-        except Exception as e:
-            result.add_check(CheckResult(
-                check_name="freshness",
-                status="WARN",
-                expected=f"Freshness within {sla_hours}h",
-                actual="error",
-                details=f"Could not check freshness: {e}",
-            ))
+                    expected=f"Freshness within {sla_hours}h",
+                    actual="error",
+                    details=f"Could not check freshness: {e}",
+                )
+            )

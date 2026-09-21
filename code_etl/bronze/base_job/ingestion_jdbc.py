@@ -25,12 +25,12 @@ from utils.yaml_loader import load_config
 def parse_arguments():
     """Đọc các tham số dòng lệnh khi chạy job."""
     parser = argparse.ArgumentParser(description="Bronze JDBC Ingestion Job")
-    parser.add_argument("--config",      required=True,            help="Đường dẫn đến file cấu hình YAML")
-    parser.add_argument("--cob_dt",      required=True,            help="Ngày xử lý dữ liệu (định dạng YYYY-MM-DD)")
-    parser.add_argument("--jdbc_url",    required=True,            help="Chuỗi kết nối JDBC đến database nguồn")
-    parser.add_argument("--db_user",     required=True,            help="Tên đăng nhập database")
-    parser.add_argument("--db_password", required=True,            help="Mật khẩu database")
-    parser.add_argument("--fetchsize",   type=int, default=10000,  help="Số dòng mỗi lần JDBC kéo về (mặc định: 10000)")
+    parser.add_argument("--config", required=True, help="Đường dẫn đến file cấu hình YAML")
+    parser.add_argument("--cob_dt", required=True, help="Ngày xử lý dữ liệu (định dạng YYYY-MM-DD)")
+    parser.add_argument("--jdbc_url", required=True, help="Chuỗi kết nối JDBC đến database nguồn")
+    parser.add_argument("--db_user", required=True, help="Tên đăng nhập database")
+    parser.add_argument("--db_password", required=True, help="Mật khẩu database")
+    parser.add_argument("--fetchsize", type=int, default=10000, help="Số dòng mỗi lần JDBC kéo về (mặc định: 10000)")
     return parser.parse_args()
 
 
@@ -82,9 +82,9 @@ def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, f
     # Bản đồ prefix URL → tên class driver JDBC tương ứng
     _DRIVER_MAP = {
         "jdbc:postgresql:": "org.postgresql.Driver",
-        "jdbc:oracle:":     "oracle.jdbc.OracleDriver",
-        "jdbc:mysql:":      "com.mysql.cj.jdbc.Driver",
-        "jdbc:sqlserver:":  "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+        "jdbc:oracle:": "oracle.jdbc.OracleDriver",
+        "jdbc:mysql:": "com.mysql.cj.jdbc.Driver",
+        "jdbc:sqlserver:": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
     }
     driver_class = next(
         (cls for prefix, cls in _DRIVER_MAP.items() if jdbc_url.startswith(prefix)),
@@ -92,8 +92,7 @@ def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, f
     )
 
     reader = (
-        spark.read
-        .format("jdbc")
+        spark.read.format("jdbc")
         .option("url", jdbc_url)
         .option("dbtable", f"({logic_sql}) t")
         .option("user", db_user)
@@ -112,11 +111,10 @@ def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, f
             f"số partition={partition_cfg['num_partitions']}"
         )
         reader = (
-            reader
-            .option("partitionColumn", partition_cfg["partition_column"])
-            .option("lowerBound",      str(partition_cfg["lower_bound"]))
-            .option("upperBound",      str(partition_cfg["upper_bound"]))
-            .option("numPartitions",   str(partition_cfg["num_partitions"]))
+            reader.option("partitionColumn", partition_cfg["partition_column"])
+            .option("lowerBound", str(partition_cfg["lower_bound"]))
+            .option("upperBound", str(partition_cfg["upper_bound"]))
+            .option("numPartitions", str(partition_cfg["num_partitions"]))
         )
 
     df = reader.load()
@@ -137,11 +135,7 @@ def run_ingestion(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsi
     df = extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger)
 
     target = config["target"]
-    table_name = get_iceberg_table_name(
-        catalog=target["catalog"],
-        schema=target["schema"],
-        table=target["table"]
-    )
+    table_name = get_iceberg_table_name(catalog=target["catalog"], schema=target["schema"], table=target["table"])
 
     logger.info(f"Đang ghi vào bảng Iceberg: {table_name}")
     write_to_iceberg(df, table_name, logger)
@@ -168,7 +162,7 @@ def main():
             db_user=args.db_user,
             db_password=args.db_password,
             fetchsize=args.fetchsize,
-            logger=logger
+            logger=logger,
         )
 
     except Exception:
@@ -177,6 +171,7 @@ def main():
     finally:
         if spark:
             spark.stop()
+
 
 if __name__ == "__main__":
     main()

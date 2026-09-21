@@ -30,7 +30,7 @@ import yaml
 
 pyspark = pytest.importorskip("pyspark", reason="pyspark không có trong CI env")
 
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession  # noqa: E402
 
 pytestmark = pytest.mark.integration
 
@@ -38,8 +38,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GOLD_DIR = PROJECT_ROOT / "code_etl" / "gold"
 sys.path.insert(0, str(PROJECT_ROOT / "code_etl" / "shared"))
 
-from utils.logger import get_logger
-from utils.sql_renderer import render_sql
+from utils.logger import get_logger  # noqa: E402
+from utils.sql_renderer import render_sql  # noqa: E402
 
 COB_DT = "2025-12-31"
 PREV_COB_DT = "2025-12-30"
@@ -48,6 +48,7 @@ PREV_COB_DT = "2025-12-30"
 # ---------------------------------------------------------------------------
 # Spark + SQL harness
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def spark(tmp_path_factory):
@@ -59,8 +60,7 @@ def spark(tmp_path_factory):
 
     warehouse = tmp_path_factory.mktemp("warehouse")
     session = (
-        SparkSession.builder
-        .appName("gold-fanout-regression")
+        SparkSession.builder.appName("gold-fanout-regression")
         .master("local[2]")
         .config("spark.sql.shuffle.partitions", "2")
         .config("spark.sql.warehouse.dir", str(warehouse))
@@ -100,6 +100,7 @@ def one(df, customer_id: int):
 # hiện tại của platform. Đó chính là điều kiện làm lộ lỗi ②.
 # ---------------------------------------------------------------------------
 
+
 def ts(day: int, hour: int = 10) -> datetime:
     """Naive timestamp — khớp với TIMESTAMP không timezone của Silver fact."""
     return datetime.fromisoformat(f"2025-12-{day:02d}T{hour:02d}:00:00")
@@ -109,15 +110,15 @@ def ts(day: int, hour: int = 10) -> datetime:
 def silver_tables(spark):
     # --- dim_customer (SCD2) ------------------------------------------------
     customers = [
-        (1, "sk-1", 1),   # cả account lẫn card  → Case 1
-        (2, "sk-2", 1),   # chỉ account          → Case 3
-        (3, "sk-3", 1),   # chỉ card             → Case 3
-        (4, "sk-4", 1),   # không giao dịch      → Case 3
-        (9, "sk-9", 0),   # không current → phải bị loại
+        (1, "sk-1", 1),  # cả account lẫn card  → Case 1
+        (2, "sk-2", 1),  # chỉ account          → Case 3
+        (3, "sk-3", 1),  # chỉ card             → Case 3
+        (4, "sk-4", 1),  # không giao dịch      → Case 3
+        (9, "sk-9", 0),  # không current → phải bị loại
     ]
-    spark.createDataFrame(
-        customers, "customer_id long, customer_sk string, is_current int"
-    ).createOrReplaceTempView("dim_customer")
+    spark.createDataFrame(customers, "customer_id long, customer_sk string, is_current int").createOrReplaceTempView(
+        "dim_customer"
+    )
 
     # --- fact_txn_account ---------------------------------------------------
     # customer 1: 10 txn × 100.00 = 1000.00
@@ -148,18 +149,28 @@ def silver_tables(spark):
         cob_date = date.fromisoformat(cob)
         for i in range(5):
             ctxn_id += 1
-            card_rows.append((ctxn_id, 101 + (i % 2), 1, ts(22 + i % 8), Decimal("100.00"),
-                              "PURCHASE", "SUCCESS", "GROCERY", cob_date))
+            card_rows.append(
+                (
+                    ctxn_id,
+                    101 + (i % 2),
+                    1,
+                    ts(22 + i % 8),
+                    Decimal("100.00"),
+                    "PURCHASE",
+                    "SUCCESS",
+                    "GROCERY",
+                    cob_date,
+                )
+            )
         for i in range(2):
             ctxn_id += 1
-            card_rows.append((ctxn_id, 301, 3, ts(25 + i), Decimal("300.00"),
-                              "PURCHASE", "SUCCESS", "TRAVEL", cob_date))
+            card_rows.append(
+                (ctxn_id, 301, 3, ts(25 + i), Decimal("300.00"), "PURCHASE", "SUCCESS", "TRAVEL", cob_date)
+            )
         ctxn_id += 1
-        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("999.00"),
-                          "PURCHASE", "FAILED", "GROCERY", cob_date))
+        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("999.00"), "PURCHASE", "FAILED", "GROCERY", cob_date))
         ctxn_id += 1
-        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("777.00"),
-                          "REFUND", "SUCCESS", "GROCERY", cob_date))
+        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("777.00"), "REFUND", "SUCCESS", "GROCERY", cob_date))
     spark.createDataFrame(
         card_rows,
         "txn_id long, card_id long, customer_id long, txn_date timestamp, "
@@ -174,8 +185,7 @@ def silver_tables(spark):
             (102, 1, "DEBIT", "ACTIVE", Decimal("0.00")),
             (301, 3, "CREDIT", "ACTIVE", Decimal("20000.00")),
         ],
-        "card_id long, customer_id long, card_type string, status string, "
-        "credit_limit decimal(18,2)",
+        "card_id long, customer_id long, card_type string, status string, credit_limit decimal(18,2)",
     ).createOrReplaceTempView("dim_card")
 
     return spark
@@ -184,6 +194,7 @@ def silver_tables(spark):
 # ---------------------------------------------------------------------------
 # Case 1 — fan-out account × card
 # ---------------------------------------------------------------------------
+
 
 class TestCase1FanOutAccountCard:
     def test_rfm_frequency_and_monetary_not_amplified(self, silver_tables, spark):
@@ -218,19 +229,18 @@ class TestCase1FanOutAccountCard:
 # Case 2 — snapshot duplication qua nhiều cob_dt
 # ---------------------------------------------------------------------------
 
+
 class TestCase2SnapshotDuplication:
     def test_two_cob_dt_partitions_exist_in_source(self, silver_tables, spark):
         """Sanity: dữ liệu test thật sự có 2 snapshot, nếu không Case 2 vô nghĩa."""
-        cobs = [r[0] for r in spark.sql(
-            "SELECT DISTINCT cob_dt FROM fact_txn_account ORDER BY cob_dt"
-        ).collect()]
+        cobs = [r[0] for r in spark.sql("SELECT DISTINCT cob_dt FROM fact_txn_account ORDER BY cob_dt").collect()]
         assert cobs == [date.fromisoformat(PREV_COB_DT), date.fromisoformat(COB_DT)]
 
     def test_gold_reads_single_snapshot_only(self, silver_tables, spark):
         row = one(run_gold(spark, "customer_transaction_summary.yml"), 1)
-        assert row["acct_txn_count_30d"] == 10        # không phải 20
+        assert row["acct_txn_count_30d"] == 10  # không phải 20
         assert row["acct_txn_amount_30d"] == Decimal("1000.00")
-        assert row["card_txn_count_30d"] == 6         # 5 SUCCESS + 1 REFUND SUCCESS
+        assert row["card_txn_count_30d"] == 6  # 5 SUCCESS + 1 REFUND SUCCESS
         assert row["total_txn_amount_30d"] == Decimal("1500.00")
 
     def test_same_result_for_each_cob_dt(self, silver_tables, spark):
@@ -250,6 +260,7 @@ class TestCase2SnapshotDuplication:
 # ---------------------------------------------------------------------------
 # Case 3 — khách chỉ có một kênh giao dịch
 # ---------------------------------------------------------------------------
+
 
 class TestCase3SingleChannelCustomer:
     def test_account_only_customer(self, silver_tables, spark):
@@ -289,6 +300,7 @@ class TestCase3SingleChannelCustomer:
 # Case 4 — fan-out dim_card × fact_card_txn
 # ---------------------------------------------------------------------------
 
+
 class TestCase4FanOutCardHolding:
     def test_card_summary_amount_not_multiplied_by_card_count(self, silver_tables, spark):
         row = one(run_gold(spark, "customer_card_summary.yml"), 1)
@@ -315,6 +327,7 @@ class TestCase4FanOutCardHolding:
 # Case 5 — cross-model reconciliation
 # ---------------------------------------------------------------------------
 
+
 class TestCase5CrossModelReconciliation:
     """
     churn.txn_amt_30d và customer_transaction_summary.total_txn_amount_30d dùng
@@ -338,30 +351,23 @@ class TestCase5CrossModelReconciliation:
 
     def test_churn_amount_reconciles_with_transaction_summary(self, silver_tables, spark):
         churn = self._metric(spark, "churn_prediction.yml", "txn_amt_30d")
-        summary = self._metric(
-            spark, "customer_transaction_summary.yml", "total_txn_amount_30d"
-        )
+        summary = self._metric(spark, "customer_transaction_summary.yml", "total_txn_amount_30d")
         assert set(churn) == set(summary)
         for cid in churn:
-            assert churn[cid] == summary[cid], (
-                f"customer {cid}: churn={churn[cid]} vs summary={summary[cid]}"
-            )
+            assert churn[cid] == summary[cid], f"customer {cid}: churn={churn[cid]} vs summary={summary[cid]}"
 
     def test_churn_count_reconciles_with_transaction_summary(self, silver_tables, spark):
         churn = self._metric(spark, "churn_prediction.yml", "txn_cnt_30d")
-        summary = self._metric(
-            spark, "customer_transaction_summary.yml", "total_txn_count_30d"
-        )
+        summary = self._metric(spark, "customer_transaction_summary.yml", "total_txn_count_30d")
         assert set(churn) == set(summary)
         for cid in churn:
-            assert churn[cid] == summary[cid], (
-                f"customer {cid}: churn={churn[cid]} vs summary={summary[cid]}"
-            )
+            assert churn[cid] == summary[cid], f"customer {cid}: churn={churn[cid]} vs summary={summary[cid]}"
 
 
 # ---------------------------------------------------------------------------
 # Case 6 — missing physical snapshot phải FAIL LOUD
 # ---------------------------------------------------------------------------
+
 
 def _load_gold_job_module():
     """Import gold_job.py theo đường dẫn (nó tự set sys.path khi import)."""
@@ -402,9 +408,7 @@ class TestCase6MissingSnapshotFailsLoud:
         gold_job = _load_gold_job_module()
         logger = get_logger("case6")
         with pytest.raises(RuntimeError, match="Thiếu snapshot nguồn"):
-            gold_job.assert_source_snapshots(
-                spark, self._config(), self.MISSING_COB_DT, logger
-            )
+            gold_job.assert_source_snapshots(spark, self._config(), self.MISSING_COB_DT, logger)
 
     def test_present_snapshot_passes(self, silver_tables, spark):
         gold_job = _load_gold_job_module()
@@ -415,17 +419,13 @@ class TestCase6MissingSnapshotFailsLoud:
         gold_job = _load_gold_job_module()
         logger = get_logger("case6")
         with pytest.raises(RuntimeError) as exc:
-            gold_job.assert_source_snapshots(
-                spark, self._config(), self.MISSING_COB_DT, logger
-            )
+            gold_job.assert_source_snapshots(spark, self._config(), self.MISSING_COB_DT, logger)
         message = str(exc.value)
         assert "fact_txn_account" in message
         assert "fact_card_txn" in message
         assert self.MISSING_COB_DT in message
 
-    def test_missing_snapshot_would_NOT_be_caught_by_non_empty_alone(
-        self, silver_tables, spark
-    ):
+    def test_missing_snapshot_would_NOT_be_caught_by_non_empty_alone(self, silver_tables, spark):
         """
         Đây là lý do tồn tại của require_snapshots.
 
@@ -447,9 +447,7 @@ class TestCase6MissingSnapshotFailsLoud:
 
         # require_snapshots: FAIL đúng như mong đợi
         with pytest.raises(RuntimeError, match="Thiếu snapshot nguồn"):
-            gold_job.assert_source_snapshots(
-                spark, self._config(), self.MISSING_COB_DT, logger
-            )
+            gold_job.assert_source_snapshots(spark, self._config(), self.MISSING_COB_DT, logger)
 
     def test_non_empty_guard_catches_fact_anchored_model(self, silver_tables, spark):
         """
@@ -462,9 +460,7 @@ class TestCase6MissingSnapshotFailsLoud:
 
         empty_df = spark.sql("SELECT * FROM fact_txn_account WHERE 1 = 0")
         with pytest.raises(RuntimeError, match="không sinh dòng nào"):
-            gold_job.assert_non_empty(
-                empty_df, self._config(), self.MISSING_COB_DT, logger
-            )
+            gold_job.assert_non_empty(empty_df, self._config(), self.MISSING_COB_DT, logger)
 
     def test_guards_are_opt_in_via_config(self, silver_tables, spark):
         """Không khai báo validation → guard im lặng, không phá model khác."""
