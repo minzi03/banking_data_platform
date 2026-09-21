@@ -9,7 +9,7 @@ Bản đồ tài liệu: [`docs/INDEX.md`](docs/INDEX.md)
 Dự án này ưu tiên **tính đúng đắn kiểm chứng được** hơn tốc độ giao hàng. Hai quy tắc chi phối mọi thay đổi:
 
 > **1. Một test xanh chỉ có giá trị khi bản thân invariant là đúng.**
-> Không bao giờ làm một gate xanh bằng cách nới lỏng điều kiện nó kiểm tra. Gate đỏ thì sửa nguyên nhân, hoặc ghi nhận thành nợ có tên trong [`docs/technical-debt.md`](docs/technical-debt.md).
+> Không bao giờ làm một gate xanh bằng cách nới lỏng điều kiện nó kiểm tra. Gate đỏ thì sửa nguyên nhân, hoặc ghi nhận thành nợ có tên trong [`docs/technical-debt.md`](docs/05-quality/technical-debt.md).
 
 > **2. Một fallback trông có vẻ phòng thủ có thể là một phép đo bịa.**
 > `|| true`, `|| echo 0`, đọc `$?` sau pipe — tất cả đều biến thất bại thành thành công giả. Xem TD-5 để biết pattern này đã xuất hiện 7 lần.
@@ -106,7 +106,7 @@ Không dùng `--allow-dirty`. Manifest sinh từ worktree bẩn sẽ ghi `git_di
 
 `scripts/verify_readme_metrics.py` so README với manifest (18 binding). Lưu ý giới hạn: nó **không** so manifest với thực tế — vòng lặp chỉ khép khi regenerate.
 
-Khi thêm tài liệu mới, thêm dòng tương ứng vào [`docs/INDEX.md`](docs/INDEX.md). Cấu trúc đích và lý do: [`docs/DOCUMENTATION_PLAN.md`](docs/DOCUMENTATION_PLAN.md).
+Khi thêm tài liệu mới, thêm dòng tương ứng vào [`docs/INDEX.md`](docs/INDEX.md). Cấu trúc đích và lý do: [`docs/DOCUMENTATION_PLAN.md`](docs/09-analysis/DOCUMENTATION_PLAN.md).
 
 ---
 

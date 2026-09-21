@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Ngày**: 2026-09-14 (chuyển thể thành ADR 2026-09-22)
-**Liên quan**: [`../technical-debt.md`](../technical-debt.md) TD-7
+**Liên quan**: [`../technical-debt.md`](../../05-quality/technical-debt.md) TD-7
 
 ---
 

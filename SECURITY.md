@@ -28,7 +28,7 @@ Với dự án này, phần lớn báo cáo sẽ thuộc một trong hai nhóm: 
 
 **Secrets vẫn còn trong lịch sử Git.** Ai clone repo cũng nhận được mọi phiên bản đã commit. Gỡ file khỏi HEAD **không** khắc phục một secret đã publish.
 
-Quyết định không rewrite lịch sử là có chủ ý, với lý do đầy đủ trong [`docs/technical-debt.md`](docs/technical-debt.md) TD-3:
+Quyết định không rewrite lịch sử là có chủ ý, với lý do đầy đủ trong [`docs/technical-debt.md`](docs/05-quality/technical-debt.md) TD-3:
 
 ```text
 - Toàn bộ credential chỉ thuộc docker stack local
@@ -60,7 +60,7 @@ Cơ chế đang có:
 | Audit trail | module `governance/audit.py` |
 | Masking ở tầng serving | `full_name_masked` trong `mart_customer_360` |
 
-**Chưa có tài liệu**: `PII_INVENTORY.md` (cột nào là PII, masking ở tầng nào, ai xem được bản gốc) và `RBAC_MATRIX.md`. Xem [`docs/DOCUMENTATION_PLAN.md`](docs/DOCUMENTATION_PLAN.md) §3 nhóm F.
+**Chưa có tài liệu**: `PII_INVENTORY.md` (cột nào là PII, masking ở tầng nào, ai xem được bản gốc) và `RBAC_MATRIX.md`. Xem [`docs/DOCUMENTATION_PLAN.md`](docs/09-analysis/DOCUMENTATION_PLAN.md) §3 nhóm F.
 
 Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: masking hiện áp ở tầng Gold/serving, **không** ở Bronze. Bronze giữ giá trị gốc. Đó là lựa chọn hợp lý cho một lakehouse có kiểm soát truy cập theo tầng, nhưng sẽ sai nếu Bronze của bạn ai cũng đọc được.
 
@@ -83,4 +83,4 @@ Nêu rõ để không ai hiểu nhầm:
 - Không có quản lý secret cấp production (Vault, KMS, secret rotation)
 - Chưa có tài liệu ánh xạ tuân thủ BCBS 239 / SBV tới cài đặt cụ thể — DAG báo cáo đã có, bảng ánh xạ thì chưa
 
-Các khoảng trống này nằm trong [`docs/ROADMAP.md`](docs/ROADMAP.md) và [`docs/DOCUMENTATION_PLAN.md`](docs/DOCUMENTATION_PLAN.md), không bị bỏ quên.
+Các khoảng trống này nằm trong [`docs/ROADMAP.md`](docs/09-analysis/ROADMAP.md) và [`docs/DOCUMENTATION_PLAN.md`](docs/09-analysis/DOCUMENTATION_PLAN.md), không bị bỏ quên.

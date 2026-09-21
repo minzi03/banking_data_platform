@@ -2,7 +2,7 @@
 
 **Status**: Accepted
 **Ngày**: kế thừa từ template khoá học · chuyển thể thành ADR 2026-09-22
-**Liên quan**: [`0013`](0013-declared-sources-match-sql.md) · [`../COURSE_BASELINE_DIFF.md`](../COURSE_BASELINE_DIFF.md)
+**Liên quan**: [`0013`](0013-declared-sources-match-sql.md) · [`../COURSE_BASELINE_DIFF.md`](../../09-analysis/COURSE_BASELINE_DIFF.md)
 
 ---
 

@@ -50,7 +50,7 @@ def _force_utf8_output() -> None:
 _force_utf8_output()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = REPO_ROOT / "docs" / "DATA_DICTIONARY.md"
+OUTPUT = REPO_ROOT / "docs" / "03-data" / "DATA_DICTIONARY.md"
 
 ICEBERG_DDL = REPO_ROOT / "docker" / "init_iceberg"
 POSTGRES_DDL = REPO_ROOT / "docker" / "init_postgres"

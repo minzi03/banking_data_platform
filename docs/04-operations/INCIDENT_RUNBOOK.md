@@ -1,9 +1,9 @@
 # Incident Runbook — Sự Cố Dữ Liệu
 
-> **Đây không phải** [`RUNBOOK.md`](../RUNBOOK.md). Tài liệu đó trả lời *"chạy cái này thế nào?"*.
+> **Đây không phải** [`RUNBOOK.md`](../../RUNBOOK.md). Tài liệu đó trả lời *"chạy cái này thế nào?"*.
 > Tài liệu này trả lời *"nó hỏng rồi, làm gì?"*.
 >
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`INDEX.md`](INDEX.md)
+> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`INDEX.md`](../INDEX.md)
 
 ---
 
@@ -55,7 +55,7 @@ RuntimeError: Thiếu snapshot nguồn cho cob_dt=2026-09-17: lakehouse.silver.f
 Upstream chưa chạy hoặc partition đã bị xoá — dừng job thay vì ghi Gold bằng dữ liệu rỗng/toàn 0.
 ```
 
-**Đây là guard hoạt động đúng, không phải lỗi của guard.** Xem [`adr/0005`](adr/0005-fail-loud-before-overwrite.md) để hiểu nó ngăn chuyện gì.
+**Đây là guard hoạt động đúng, không phải lỗi của guard.** Xem [`adr/0005`](../02-architecture/adr/0005-fail-loud-before-overwrite.md) để hiểu nó ngăn chuyện gì.
 
 ### Chẩn đoán
 
@@ -87,7 +87,7 @@ WHERE cob_dt = DATE '<cob_dt>' GROUP BY cob_dt;
 
 **(b) Upstream chết giữa chừng** — tìm nguyên nhân gốc trong log Airflow trước. Chạy lại Silver: `overwritePartitions` theo `cob_dt` nên idempotent, chạy lại an toàn. Xoá dòng `R` cũ trong `flag_job_etl` nếu nó chặn sensor.
 
-**(c) `status = 'S'` nhưng partition rỗng** — **dừng lại, đừng chạy lại ngay.** Đây là dấu hiệu job báo thành công mà không ghi gì, tức là có một đường thoát lỗi âm thầm ở đâu đó. Chạy lại có thể che mất bằng chứng. Ghi lại log của lần chạy đó trước, rồi mới xử lý. Xem TD-5 trong [`technical-debt.md`](technical-debt.md) — mẫu "báo thành công mà không làm gì" đã xuất hiện 7 lần.
+**(c) `status = 'S'` nhưng partition rỗng** — **dừng lại, đừng chạy lại ngay.** Đây là dấu hiệu job báo thành công mà không ghi gì, tức là có một đường thoát lỗi âm thầm ở đâu đó. Chạy lại có thể che mất bằng chứng. Ghi lại log của lần chạy đó trước, rồi mới xử lý. Xem TD-5 trong [`technical-debt.md`](../05-quality/technical-debt.md) — mẫu "báo thành công mà không làm gì" đã xuất hiện 7 lần.
 
 **(d) Khai báo thừa** — bảng bị liệt kê trong `validation.require_snapshots` mà SQL không hề đọc. Đã xảy ra với `customer_360.yml`. Kiểm tra bằng:
 
@@ -137,7 +137,7 @@ SELECT count(*) FROM iceberg.silver.dim_customer WHERE is_current = 1;
 
 Nếu rỗng **hợp lệ** cho model đó: gỡ `validation.require_non_empty` khỏi YAML và **ghi lý do vào commit message**. Đừng gỡ chỉ để job xanh.
 
-Nếu rỗng **bất thường**: sửa SQL. Nghi ngờ trước tiên ở biểu thức business date — xem [`adr/0004`](adr/0004-business-date-under-utc-session.md). Một `CAST(ts AS DATE)` trần dưới session sai múi giờ sẽ lọc rỗng ở vùng biên ngày.
+Nếu rỗng **bất thường**: sửa SQL. Nghi ngờ trước tiên ở biểu thức business date — xem [`adr/0004`](../02-architecture/adr/0004-business-date-under-utc-session.md). Một `CAST(ts AS DATE)` trần dưới session sai múi giờ sẽ lọc rỗng ở vùng biên ngày.
 
 ### Xác minh đã khỏi
 
@@ -198,14 +198,14 @@ Phân loại thay đổi — `governance/schema_drift.py` trả về ba nhóm:
 | `removed_columns` | **breaking** | Model downstream tham chiếu cột đó sẽ fail, hoặc tệ hơn là join lệch |
 | `type_changes` | **breaking** | `int → string` hoặc `timestamp → text` gây cast sai âm thầm |
 
-Câu hỏi kiểm tra thêm — lấy từ checklist trong [`BOOTCAMP_CURRICULUM_ANALYSIS.md`](BOOTCAMP_CURRICULUM_ANALYSIS.md) §4.2:
+Câu hỏi kiểm tra thêm — lấy từ checklist trong [`BOOTCAMP_CURRICULUM_ANALYSIS.md`](../09-analysis/BOOTCAMP_CURRICULUM_ANALYSIS.md) §4.2:
 
 ```text
 □ count(*) vẫn ổn nhưng null_rate của field chính có tăng bất thường không?
 □ Model downstream nào đang dùng SELECT * ?
 ```
 
-Model serving **cố ý** dùng `SELECT *` — xem [`adr/0003`](adr/0003-serving-as-table-not-view.md). Nghĩa là cột thêm vào Gold sẽ tự xuất hiện ở serving mà không ai review.
+Model serving **cố ý** dùng `SELECT *` — xem [`adr/0003`](../02-architecture/adr/0003-serving-as-table-not-view.md). Nghĩa là cột thêm vào Gold sẽ tự xuất hiện ở serving mà không ai review.
 
 ### Xử lý
 
@@ -215,7 +215,7 @@ Model serving **cố ý** dùng `SELECT *` — xem [`adr/0003`](adr/0003-serving
 
 > ⚠️ **Giới hạn hiện tại**: `ops_schema_drift_dag` chạy 09:00 **sau** `ops_data_quality_dag`, như một safety check hậu kiểm. Nó **phát hiện nhưng không chặn**. Việc dừng publish hiện là thao tác **thủ công**. Và nó chỉ phủ 3 bảng: `dim_customer`, `dim_account`, `dim_loan`.
 >
-> Thêm severity và quyền chặn là mục 2.2 trong [`ROADMAP.md`](ROADMAP.md).
+> Thêm severity và quyền chặn là mục 2.2 trong [`ROADMAP.md`](../09-analysis/ROADMAP.md).
 
 ### Xác minh đã khỏi
 
@@ -280,7 +280,7 @@ echo "rc=$rc"
 
 ### Chẩn đoán
 
-Tầng serving là **table**, không phải view — xem [`adr/0003`](adr/0003-serving-as-table-not-view.md). Nó chỉ mới bằng lần `dbt build` gần nhất.
+Tầng serving là **table**, không phải view — xem [`adr/0003`](../02-architecture/adr/0003-serving-as-table-not-view.md). Nó chỉ mới bằng lần `dbt build` gần nhất.
 
 ```sql
 SELECT max(cob_dt) AS gold_max FROM iceberg.gold.mart_customer_360;
@@ -341,7 +341,7 @@ Code kết nối Trino fail với `Catalog 'lakehouse' not found`. Không crash 
 
 ### Chẩn đoán
 
-Spark dùng `lakehouse`, Trino dùng `iceberg`. Xem [`adr/0002`](adr/0002-cross-engine-catalog-naming.md). Đã xảy ra **4 lần**.
+Spark dùng `lakehouse`, Trino dùng `iceberg`. Xem [`adr/0002`](../02-architecture/adr/0002-cross-engine-catalog-naming.md). Đã xảy ra **4 lần**.
 
 ```bash
 py -3 -m pytest tests/governance/test_trino_catalog_contract.py -q
@@ -374,7 +374,7 @@ Mỗi sự cố cấp S1–S8 nên để lại một ghi chép ngắn trả lờ
 
 Câu 3 là câu quan trọng nhất, và câu trả lời **không bao giờ** là nới một gate hiện có. Nếu một gate đỏ vì lý do chính đáng, sửa nguyên nhân. Nếu nó đỏ vì lý do sai, sửa gate cho đúng — đừng tắt nó.
 
-Sự cố lặp lại từ 3 lần trở lên thì ghi thành mục có tên trong [`technical-debt.md`](technical-debt.md), như TD-5 (7 lần) và TD-7 (4 lần) đang làm.
+Sự cố lặp lại từ 3 lần trở lên thì ghi thành mục có tên trong [`technical-debt.md`](../05-quality/technical-debt.md), như TD-5 (7 lần) và TD-7 (4 lần) đang làm.
 
 ---
 
@@ -382,7 +382,7 @@ Sự cố lặp lại từ 3 lần trở lên thì ghi thành mục có tên tro
 
 Ghi ra để không ai tưởng là đã phủ hết:
 
-- **Chưa có ngưỡng cảnh báo**: không có định nghĩa "CDC lag bao nhiêu thì báo động". Cần `SLA_AND_FRESHNESS.md` — [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) §3 nhóm C.
+- **Chưa có ngưỡng cảnh báo**: không có định nghĩa "CDC lag bao nhiêu thì báo động". Cần `SLA_AND_FRESHNESS.md` — [`DOCUMENTATION_PLAN.md`](../09-analysis/DOCUMENTATION_PLAN.md) §3 nhóm C.
 - **Chưa có đường leo thang**: dự án một người nên chưa cần, nhưng đây là thứ đầu tiên phải thêm khi có người thứ hai.
 - **Chưa diễn tập**: các quy trình trên viết từ đọc code và thông điệp lỗi thật, **chưa được diễn tập trên sự cố thật**. Một runbook chưa chạy thử là một giả thuyết.
 - **`flag_job_etl` không có trạng thái Failed** — xem ghi chú ở đầu tài liệu.

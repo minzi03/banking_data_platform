@@ -2,7 +2,7 @@
 
 > ## ⛔ TÀI LIỆU ĐÃ BỊ THAY THẾ — 2026-09-21
 >
-> Dùng **[`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md)** thay cho tài liệu này.
+> Dùng **[`JD_MARKET_ANALYSIS.md`](../JD_MARKET_ANALYSIS.md)** thay cho tài liệu này.
 >
 > Giữ lại để tra cứu lịch sử. **Không dùng làm căn cứ ra quyết định**, vì:
 > - Chỉ phủ jd1–jd8; corpus hiện có 14 file (jd1–jd14 + `repo.md`).

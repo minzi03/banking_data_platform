@@ -295,7 +295,7 @@ GIAI ĐOẠN 6 — README rút gọn                        [P2 — làm CUỐI]
 |---|---|
 | Số liệu chỉ sống trong manifest | mở rộng `readme_bindings` cho tài liệu mới; `verify_readme_metrics.py` |
 | `DATA_DICTIONARY.md` sinh tự động | script đọc `governance/datasets/*.yaml` + DDL; test so sánh file đã commit với bản sinh lại |
-| Link nội bộ không gãy | test governance quét `[...](...)` trong `*.md`, kiểm tra file đích tồn tại |
+| Link nội bộ không gãy | test governance quét `[...](..)` trong `*.md`, kiểm tra file đích tồn tại |
 | ADR bất biến | không sửa nội dung; chỉ đổi `Status: superseded by ADR-00XX` |
 | Tài liệu phân tích có ngày đo | mọi file trong `09-analysis/` phải có dòng "Ngày đo"; đã áp dụng |
 | Không claim thứ chưa đo | `test_docs_no_stale_claims.py` đã có — mở rộng độ phủ |

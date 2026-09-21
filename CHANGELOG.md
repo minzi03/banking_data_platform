@@ -118,7 +118,7 @@ a PR touching only the timezone configuration cannot skip the job that checks it
 
 34 Trino-backed integration tests remain outside the main CI pipeline because
 they require the separate `ci-trino` topology; wiring them into CI is tracked
-separately in [docs/technical-debt.md](docs/technical-debt.md). They are a known
+separately in [docs/technical-debt.md](docs/05-quality/technical-debt.md). They are a known
 CI coverage gap and are **not** claimed as passing.
 
 ### Evidence
