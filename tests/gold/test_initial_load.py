@@ -114,11 +114,7 @@ class TestGoldJobOrder:
         """
         gold_root = Path(GOLD_JOB_ORDER[0]["config"]).parent.parent
         scheduled = {Path(j["config"]).resolve() for j in GOLD_JOB_ORDER}
-        on_disk = {
-            p.resolve()
-            for p in gold_root.rglob("*.yml")
-            if "base_job" not in p.parts
-        }
+        on_disk = {p.resolve() for p in gold_root.rglob("*.yml") if "base_job" not in p.parts}
         assert on_disk == scheduled, (
             f"Chưa schedule: {sorted(str(p) for p in on_disk - scheduled)}; "
             f"schedule nhưng không có file: {sorted(str(p) for p in scheduled - on_disk)}"
