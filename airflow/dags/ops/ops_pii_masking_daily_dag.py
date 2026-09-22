@@ -18,6 +18,7 @@ DAG_ID              = "ops_pii_masking_daily_dag"
 APPLICATION_PATH    = "/opt/project/code_etl/shared/ops/pii_masking.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
 COB_DT              = "{{ ds }}"
+PII_SALT_VARIABLE   = "pii_hash_salt"
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -33,7 +34,42 @@ SPARK_CONF = {
     "spark.executor.cores":  "1",
 }
 
-PII_ENV = {"PII_HASH_SALT": Variable.get("pii_hash_salt", default_var="banking-pii-salt-2025")}
+_MISSING_SALT_MESSAGE = (
+    f"Airflow Variable '{PII_SALT_VARIABLE}' chưa được đặt (hoặc rỗng), "
+    f"PII masking không chạy khi thiếu salt. Đặt bằng: "
+    f"airflow variables set {PII_SALT_VARIABLE} '<chuỗi ngẫu nhiên >= 32 ký tự>' "
+    f"— hoặc Admin → Variables trên Airflow UI. "
+    f"Xem RUNBOOK.md § '8. PII masking salt': đổi salt làm vô hiệu mọi "
+    f"cccd_hash đã publish."
+)
+
+
+def resolve_pii_hash_salt() -> str:
+    """
+    Trả về salt cho hash PII, đọc từ Airflow Variable.
+
+    KHÔNG có default_var: salt dự phòng nằm trong repo là salt mà ai đọc repo
+    cũng biết, và `cccd_hash = sha2(cccd || salt)` với salt đã biết thì chỉ còn
+    là phép liệt kê 12 chữ số — giả danh hoá trên danh nghĩa. Guard trong
+    `pii_masking.py` kiểm sự hiện diện của salt; default_var lấp đúng cái lỗ
+    guard đó định chặn.
+
+    Hàm này được đăng ký làm Jinja macro nên Airflow gọi nó lúc **render task**,
+    không phải lúc parse DAG (xem `jdbc_conn_utils.resolve_jdbc_conn`: không gọi
+    DB ở module level). Nhờ vậy: thiếu Variable làm *task* fail chứ không làm vỡ
+    DAG import, mỗi lượt parse không phải truy vấn metadata DB, và đổi Variable
+    có hiệu lực ngay ở lần chạy sau.
+    """
+    try:
+        salt = Variable.get(PII_SALT_VARIABLE)
+    except KeyError as exc:
+        raise ValueError(_MISSING_SALT_MESSAGE) from exc
+    if not salt.strip():
+        raise ValueError(_MISSING_SALT_MESSAGE)
+    return salt
+
+
+PII_ENV = {"PII_HASH_SALT": "{{ pii_hash_salt() }}"}
 
 dag = DAG(
     DAG_ID,
@@ -43,6 +79,7 @@ dag = DAG(
     catchup=False,
     max_active_tasks=1,
     tags=["ops", "pii", "masking", "compliance", "production"],
+    user_defined_macros={"pii_hash_salt": resolve_pii_hash_salt},
 )
 
 # Wait for gold_mart360_dag
