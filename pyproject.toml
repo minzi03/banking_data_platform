@@ -75,16 +75,21 @@ indent-style = "space"
 # ---------------------------------------------------------------------------
 # Pytest
 # ---------------------------------------------------------------------------
+# NGUỒN DUY NHẤT của cấu hình pytest. Không tạo lại `pytest.ini`, `setup.cfg`
+# hay `tox.ini`: pytest chọn MỘT configfile theo thứ tự ưu tiên và bỏ hẳn phần
+# còn lại — không merge. Khi `pytest.ini` còn tồn tại, cả block này bị bỏ qua
+# và pytest tự in cảnh báo `ignoring pytest config in pyproject.toml`; marker
+# `security` khai ở đây vì thế chưa bao giờ được đăng ký.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --strict-markers"
+addopts = "-v --tb=short"
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    # Marker duy nhất được dùng thật (66 test). Đây là ranh giới suite: mặc
+    # định chạy `-m "not integration"`, CI chạy riêng nhóm integration.
     "integration: tests requiring Docker/Spark infrastructure",
-    "security: security-related tests",
 ]
 # Fail fast in CI, allow parallel locally
 # CI sets: pytest -x (fail fast)

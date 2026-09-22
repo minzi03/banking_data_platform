@@ -52,7 +52,12 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
           echo "$CHANGED"
-          PATTERN='^(code_etl/|data_generator/|docker/|tests/integration/|requirements-ci-seed\.txt|pytest\.ini|scripts/summarize_junit\.py|\.github/workflows/ci\.yml)'
+          # `pyproject.toml` thay chỗ `pytest.ini` đã gỡ — nó là configfile duy
+          # nhất của pytest. Nó cũng chở ruff/mypy/coverage, nên pattern này
+          # kích hoạt rộng hơn trước một chút: đổi cấu hình lint cũng chạy
+          # Trino integration. Chấp nhận — thà chạy thừa còn hơn để cổng ngủ
+          # khi testpaths/marker đổi.
+          PATTERN='^(code_etl/|data_generator/|docker/|tests/integration/|requirements-ci-seed\.txt|pyproject\.toml|scripts/summarize_junit\.py|\.github/workflows/ci\.yml)'
           if echo "$CHANGED" | grep -qE "$PATTERN"; then
             echo "trino_integration=true" >> "$GITHUB_OUTPUT"
           else
@@ -1037,7 +1042,7 @@ jobs:
         set -euo pipefail
         TESTS="tests/integration/test_data_quality.py tests/integration/test_etl_validation.py"
 
-        # `-o addopts=` ghi đè addopts trong pytest.ini (`-v --tb=short`).
+        # `-o addopts=` ghi đè addopts trong pyproject.toml (`-v --tb=short`).
         # Có -v thì --collect-only in ra dạng CÂY (`<Function ...>`) kèm banner
         # `===== 34 tests collected =====`; không có -v thì in node id mỗi
         # dòng một cái. Đếm node id là ổn định, còn parse banner thì không —

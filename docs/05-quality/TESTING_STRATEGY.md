@@ -146,7 +146,7 @@ là định nghĩa, không phải bàn tay người soạn tài liệu.
 |---|---|---|
 | 🧪 **Unit Tests + SQL Invariants** | `-m "not integration"` + coverage + `verify_readme_metrics.py` | không — luôn chạy |
 | 🔬 **Gold Spark Regression** | 32 test (23 fan-out + 9 business-date), pyspark thật | đổi `code_etl/gold/`, `code_etl/shared/spark/`, `tests/gold/`, `docker/spark/conf/`, `.github/workflows/` |
-| 🧪 **Trino Integration** | 34 test, dựng cả stack Docker | đổi `code_etl/`, `data_generator/`, `docker/`, `tests/integration/`, `pytest.ini`, … |
+| 🧪 **Trino Integration** | 34 test, dựng cả stack Docker | đổi `code_etl/`, `data_generator/`, `docker/`, `tests/integration/`, `pyproject.toml`, … |
 
 Cổng của Gold Spark Regression liệt `code_etl/shared/spark/` và
 `docker/spark/conf/` **có lý do ghi trong workflow**:
@@ -284,24 +284,55 @@ coverage của dự án.
 
 ---
 
-## 8. Cấu hình pytest đang có ba chỗ hỏng
+## 8. Cấu hình pytest nằm đúng một chỗ
 
-pytest tự in ra chỗ thứ nhất:
+`[tool.pytest.ini_options]` trong `pyproject.toml` là **nguồn duy nhất**.
+`pytest.ini` đã gỡ. Kiểm bằng dòng pytest tự in:
 
 ```text
-configfile: pytest.ini (WARNING: ignoring pytest config in pyproject.toml!)
+configfile: pyproject.toml
 ```
 
-`pytest.ini` tồn tại nên `[tool.pytest.ini_options]` trong `pyproject.toml` bị
-**bỏ hoàn toàn**, không phải merge. Hệ quả:
+Không còn `(WARNING: ignoring pytest config in pyproject.toml!)`.
 
-1. Marker `security` chỉ khai trong `pyproject.toml` → **không được đăng ký**.
-   `py -3 -m pytest --markers` chỉ liệt `slow` và `integration`. Dùng
-   `@pytest.mark.security` sẽ thành marker lạ.
-2. Marker `slow` được đăng ký nhưng **dùng 0 lần** — cấu hình chết.
-3. Hai nơi khai marker sẽ tiếp tục trôi khỏi nhau, vì không gì so chúng.
+**Vì sao phải hợp nhất, không phải để cho gọn.** pytest chọn **một** configfile
+theo thứ tự ưu tiên (`pytest.ini` > `pyproject.toml`) rồi **bỏ hoàn toàn** phần
+còn lại — nó không merge hai file. Khi cả hai cùng tồn tại, ba thứ hỏng:
 
-Hai file đang mô tả cùng một thứ theo hai cách. Nên hợp nhất về **một** nơi.
+1. Marker `security` chỉ khai trong `pyproject.toml` → **không bao giờ được
+   đăng ký**. `@pytest.mark.security` là marker lạ, không lọc được gì.
+2. Marker `slow` được đăng ký (qua `pytest.ini`) nhưng **dùng 0 lần** — cấu
+   hình chết.
+3. Hai nơi khai marker trôi khỏi nhau, vì không gì so chúng.
+
+Đó là lý do đừng tạo lại `pytest.ini`, `setup.cfg` hay `tox.ini`: thêm file có
+độ ưu tiên cao hơn sẽ **âm thầm** vô hiệu cả block trong `pyproject.toml`, và
+triệu chứng duy nhất là một dòng banner ít ai đọc.
+
+**Marker sau khi hợp nhất — còn đúng một cái:**
+
+| Marker | Dùng | Quyết định |
+|---|---|---|
+| `integration` | 66 test | giữ — đây là ranh giới suite thật (§4, §10) |
+| `slow` | 0 test | **xoá** — không test nào mang, không job CI nào lọc theo nó |
+| `security` | 0 test | **xoá** — chưa từng được đăng ký nên chưa từng dùng được |
+
+`py -3 -m pytest --markers` giờ liệt đúng `integration` (cộng các marker built-in
+của pytest và plugin).
+
+`slow` bị xoá chứ không được gán cho 32 test pyspark ở `tests/gold/`: nhóm đó đã
+mang `integration` và đã bị loại khỏi suite mặc định, nên `slow` không thêm sức
+lọc nào. Nếu sau này cần tách "chậm nhưng không cần hạ tầng", khai lại marker
+**cùng lúc** với test đầu tiên mang nó — đừng khai trước.
+
+`addopts` giữ nguyên `-v --tb=short`. Bản trong `pyproject.toml` từng có thêm
+`--strict-markers` nhưng chưa bao giờ chạy (cả block bị bỏ qua); không bật kèm
+ở đây để thay đổi này chỉ là hợp nhất, không đổi hành vi. Bật `--strict-markers`
+là việc riêng, và giờ mới an toàn vì marker đã về một chỗ.
+
+`[tool.coverage.*]` **không** liên quan: coverage.py đọc `pyproject.toml` trực
+tiếp, không qua cơ chế configfile của pytest, nên nó chưa bao giờ bị bỏ qua.
+Vấn đề của nó là lệch scope — xem §7.
 
 ---
 
@@ -391,7 +422,8 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 | Property-based test | phân phối amount kiểm bằng mẫu seed cố định, không bằng sinh ngẫu nhiên có shrink |
 | Coverage cho Bronze/Silver/Gold job | ngoài `--cov` của CI |
 | Mutation testing | không có bằng chứng nào cho thấy test *bắt* được thay đổi, ngoài negative control viết tay |
-| Hợp nhất `pytest.ini` ↔ `pyproject.toml` | §8 |
+| `--strict-markers` | marker gõ sai chỉ cảnh báo rồi chạy tiếp, không đỏ — §8 |
+| Guard chặn `pytest.ini`/`setup.cfg`/`tox.ini` quay lại | không gì chặn ai đó thêm lại file ưu tiên cao hơn và vô hiệu cấu hình trong `pyproject.toml` — §8 |
 
 ---
 
@@ -401,7 +433,7 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 pytest      888 node · 655 hàm · 822 node chạy không cần hạ tầng
 suite       821 passed · 1 skipped (có chủ ý) · 66 deselected · 14s
 coverage    74% trên governance + code_etl/shared · fail_under 60 đang áp
-marker      2 đăng ký (integration dùng 66 lần · slow dùng 0 lần)
+marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
 manifest    22 invariant
