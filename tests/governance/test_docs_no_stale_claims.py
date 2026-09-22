@@ -65,14 +65,22 @@ BANNED_CLAIMS = [
     ("12 Gold Semantic Models", "cùng lý do"),
     ("312 Automated Tests", "số test trong sơ đồ phải khớp manifest, không đóng băng ở v1.0"),
     ("Per-Partition Watermarks", "watermark là (timestamp, batch id) theo bảng — sơ đồ nói sai giống prose cũ"),
-    # --- Component không tồn tại ---
-    # 24 service trong docker-compose gồm `streamlit`, KHÔNG có `superset`.
-    # Tài liệu gọi nhầm tên ứng dụng dashboard suốt một thời gian dài — demo.md
-    # còn ghi "Superset at http://localhost:8501", vốn là cổng của Streamlit.
-    # Chỉ cấm trong DOCS (tài liệu mô tả trạng thái HIỆN TẠI); CHANGELOG và
-    # technical-debt được phép nhắc nó như một claim lịch sử.
-    ("Superset", "không có service superset trong stack; ứng dụng dashboard là Streamlit"),
+    ("312 Automated Tests", "số test trong sơ đồ phải khớp manifest, không đóng băng ở v1.0"),
+    ("Per-Partition Watermarks", "watermark là (timestamp, batch id) theo bảng — sơ đồ nói sai giống prose cũ"),
+    ("freshness below one minute", "đo lại trên v1.1 với cadence */10: median 409.8s. Số <1 phút cũ đo khi chạy "),
 ]
+
+# Mục `("Superset", ...)` đã được GỠ ngày 2026-09-22.
+#
+# Nó đúng khi viết (2026-09-07, commit b507d94): lúc đó stack thật sự không có
+# service superset, và tài liệu gọi nhầm tên ứng dụng dashboard — demo.md còn
+# ghi "Superset at http://localhost:8501", vốn là cổng của Streamlit.
+#
+# Commit 664c604 sau đó đã thêm service thật: compose có `superset` và
+# `superset-init`, container banking-superset chạy healthy trên cổng 8088.
+# Từ đó mục cấm này chặn tài liệu mô tả ĐÚNG thực tế — đúng loại lỗi mà file
+# này tồn tại để chống. Một danh sách cấm không tự biết mình đã cũ; khi gỡ một
+# mục, ghi lại ngày và lý do tại đây thay vì xoá lặng lẽ.
 
 # Claim chỉ bị cấm trong ngữ cảnh mô tả Trino (Spark vẫn gọi warehouse là lakehouse)
 TRINO_CATALOG_HINTS = ("trino", "Trino")
