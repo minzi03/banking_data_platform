@@ -118,12 +118,13 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 
 | Tài liệu | Nội dung |
 |---|---|
+| [`TESTING_STRATEGY.md`](05-quality/TESTING_STRATEGY.md) | **Năm tầng kiểm chứng** và vì sao không tầng nào thay được tầng khác: marker là biên giới chứ không phải thư mục, coverage đo gì và bỏ gì, negative control |
 | [`EVIDENCE_MANIFEST.md`](05-quality/EVIDENCE_MANIFEST.md) | **Cơ chế chống số liệu bịa**: COLLECT → VERIFY → promote, `declared` vs `value`, `metric_type`, `not_collected ≠ verified` — và những chỗ cơ chế này KHÔNG bảo vệ |
 | [`technical-debt.md`](05-quality/technical-debt.md) | TD-1…TD-8: trạng thái, bằng chứng, tiêu chí chấp nhận |
 | [`evidence/p1-cdc-consolidation/README.md`](evidence/p1-cdc-consolidation/README.md) | Bằng chứng runtime: CDC consolidation |
 | [`evidence/p2-observability/README.md`](evidence/p2-observability/README.md) | Bằng chứng runtime: observability |
 
-> **Chưa có**: `TESTING_STRATEGY.md`, `DATA_QUALITY.md`.
+> **Chưa có**: `DATA_QUALITY.md`.
 
 ## 6. Quản trị & tuân thủ
 
