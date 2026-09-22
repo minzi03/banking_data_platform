@@ -24,7 +24,7 @@ help:
 	@echo "    make logs        Tail all logs"
 	@echo ""
 	@echo "  Data:"
-	@echo "    make seed        Generate seed data (inside container)"
+	@echo "    make seed        Generate seed data (in airflow-scheduler)"
 	@echo "    make seed-local  Generate seed data (from host)"
 	@echo ""
 	@echo "  Bronze Layer:"
@@ -144,9 +144,20 @@ psql:
 # ---------------------------------------------------------------------------
 # Seed data generation
 # ---------------------------------------------------------------------------
+# Chạy trong airflow-scheduler, KHÔNG phải postgres và KHÔNG phải spark-worker-1.
+#
+#   postgres         không mount repo — chỉ có data volume + init scripts (TD-8)
+#   spark-worker-1   mount repo, nhưng không có binary `python` (Spark image chỉ
+#                    có `python3`) và không có psycopg2. Thêm psycopg2 vào
+#                    Dockerfile.spark sẽ đi ngược quyết định đã ghi trong
+#                    requirements-ci-seed.txt: image Spark không mang package mà
+#                    ETL không dùng.
+#   airflow-scheduler mount repo tại /opt/project, có python + psycopg2 + yaml.
+#
+# --host postgres: kết nối theo service name trong compose network.
 seed:
-	@echo "Running seed data generator inside PostgreSQL container..."
-	$(DC) exec postgres python /opt/project/data_generator/generate_all.py \
+	@echo "Running seed data generator inside airflow-scheduler container..."
+	$(DC) exec -w /opt/project airflow-scheduler python data_generator/generate_all.py \
 		--host postgres --port 5432
 	@echo "Seed data generated successfully"
 
