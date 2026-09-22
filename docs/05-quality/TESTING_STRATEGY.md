@@ -117,6 +117,27 @@ Hệ quả: **đừng đếm test bằng tay.** `grep -c "def test_"` cho con s�
 vì nó không biết collector loại trừ gì. Collector là định nghĩa —
 [`EVIDENCE_MANIFEST.md` §6.5](EVIDENCE_MANIFEST.md).
 
+### Delta chưa vào manifest
+
+Mọi con số ở trên là giá trị đã promote trong `metrics-manifest.yaml`. Sau lần
+đo đó, `tests/governance/test_dq_rules_resolve.py` thêm **10 hàm → 150 node**
+(parametrize theo 29 mục `dq_rules.yml`, 88 check, 18 tham chiếu chéo và 5 nhóm
+quarantine — xem [`DATA_QUALITY.md` §6](DATA_QUALITY.md)). Đo lại ngay tại đây:
+
+```text
+py -3 -c "def test_* count"                 665   (655 + 10)
+pytest --collect-only -q tests/            1039
+py -3 -m pytest -q -m "not integration"     972 passed, 1 skipped, 66 deselected
+```
+
+Nên lượt promote kế tiếp sẽ thấy `test_functions` 655 → 665 và
+`collected_pytest_nodes` 888 → 1039. Bảng §3 và con số 822 ở §1 là ảnh chụp
+trước đó — và 1039 ≠ 888 + 150 vì bản thân §2 đã lệch 1 node từ trước: mỗi file
+markdown mới được track lại thêm một node cho `test_docs_links_resolve.py`.
+
+Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
+là định nghĩa, không phải bàn tay người soạn tài liệu.
+
 ---
 
 ## 4. Ba job CI chạy test

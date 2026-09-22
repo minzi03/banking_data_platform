@@ -7,8 +7,8 @@ Mọi con số đo trực tiếp trên repo tại `2026-09-22` bằng cách pars
 `dq_rules.yml`, `quarantine_rules.yml`, các file DAG và `DATA_DICTIONARY.md`.
 Chỗ nào chưa đo được thì nói là chưa đo.
 
-Tài liệu này có một mục về **lỗi đang sống** (§6). Đọc mục đó trước nếu bạn đang
-vận hành.
+Không còn lỗi đang sống nào trong đường DQ. §6 giữ lại lỗi vừa sửa cùng cơ chế
+đã dựng để nó không quay lại — đọc mục đó nếu bạn sắp thêm rule mới.
 
 ---
 
@@ -67,10 +67,10 @@ ghi kết quả vào `opslakehouse.data_quality_log` (PostgreSQL, qua JDBC).
 29 mục bảng   ·   88 check   ·   81 FAIL + 7 WARN
 ```
 
-Đó là số **mục khai trong file**. Một mục trỏ vào bảng không tồn tại (§6), nên
-số bảng thật được kiểm là **28** và số check thật là **86**. Cả tài liệu này giữ
-nguyên cách phân biệt đó: 29/88 là những gì file khai, 28/86 là những gì chạy
-được.
+Từ `2026-09-22` cả 29 mục đều trỏ vào bảng có thật, nên 29/88 vừa là số khai vừa
+là số chạy được. Trước đó một mục trỏ vào bảng không tồn tại và con số thật là
+28/86 — xem §6. `tests/governance/test_dq_rules_resolve.py` nạp file thật và
+chặn khoảng lệch đó tái xuất hiện.
 
 Phân bố loại check:
 
@@ -145,6 +145,11 @@ kiểm.
 Đây là lỗ fail-open duy nhất trong đường DQ, và nó nằm ở đúng chỗ khó thấy
 nhất: một cảnh báo trong log của một job mà không ai đọc log (§9).
 
+Hành vi runtime **chưa đổi** — vẫn `warning` rồi `continue`. Cái đã đổi là tên
+check sai không vào được `main` nữa: `test_dq_rules_resolve.py` đối chiếu mọi
+`name:` với khoá của `CHECK_DISPATCH`, nên lỗi bị bắt lúc commit thay vì lúc
+chạy. Đó là dịch chuyển thời điểm phát hiện, không phải sửa fail-open.
+
 ---
 
 ## 4. Phủ sóng: đo được
@@ -152,18 +157,19 @@ nhất: một cảnh báo trong log của một job mà không ai đọc log (§
 | Tầng | Có rule | Tổng bảng | Tỷ lệ |
 |---|---:|---:|---:|
 | silver | 13 | 17 | 76% |
-| gold | 9 | 14 | 64% |
+| gold | 10 | 14 | 71% |
 | bronze | 6 | 22 | 27% |
-| **lakehouse** | **28** | **53** | **53%** |
+| **lakehouse** | **29** | **53** | **55%** |
 
-(28, không phải 29 — mục thứ 29 trỏ vào bảng không tồn tại, §6.)
+(Gold là 10 từ `2026-09-22`. Trước đó đếm 9: mục thứ 10 trỏ vào bảng không tồn
+tại, §6.)
 
 Bảng **không** có DQ rule:
 
 ```text
 silver   dim_customer_current · dim_account_current · dim_deposit · dim_loan
 gold     aml_monitoring · fraud_risk_txn · loan_portfolio_risk
-         customer_loan_summary · mart_branch_monthly_summary
+         customer_loan_summary
 bronze   16 bảng core_* (toàn bộ đường batch)
 ```
 
@@ -213,24 +219,32 @@ tỷ đồng là bất thường, không phải bất hợp pháp).
 Xử lý sau đó: `scripts/resolve_quarantine.py`, có `--dry_run` và `--execute` —
 mặc định là `--dry_run`, nên một lần chạy nhầm sẽ không tự sửa dữ liệu.
 
----
+### 5 bảng đích không có DDL
 
-## 6. ⚠ Lỗi đang sống: rule trỏ vào bảng không tồn tại
+Bốn bảng `source_table` đều tồn tại — đã đối chiếu DDL bằng
+`test_dq_rules_resolve.py` cùng lượt với `dq_rules.yml`. Nhưng **không DDL nào
+tạo `lakehouse.quarantine.*`**, kể cả schema (`create_schemas.sql` tạo
+bronze/silver/gold/sandbox/staging). Nên `write_to_quarantine` luôn ném ngay ở
+`spark.table(target_table)`, log ERROR, và trả `0`:
 
-`dq_rules.yml:355` khai:
-
-```yaml
-lakehouse.gold.branch_monthly_summary:
-  checks:
-    - name: row_count
-      severity: FAIL
-    - name: null_check
-      severity: FAIL
-      columns: [branch_code]
+```python
+except Exception as e:
+    log.error(f"Error writing to quarantine table {target_table}: {e}")
+    return 0
 ```
 
-Bảng đó **không tồn tại**. Tên thật là `mart_branch_monthly_summary` — thiếu
-tiền tố `mart_`. Xác minh ở bốn nguồn độc lập:
+Hàng vi phạm vẫn được **đếm** và vẫn làm job `exit 1` khi có `FAIL`, nhưng không
+được ghi đi đâu. Khoảng hở này được ghi lại bằng một assertion ngược trong
+`test_quarantine_target_tables_have_no_ddl` — test đó đỏ khi ai đó thêm DDL, tức
+đúng lúc cần đảo nó thành "mọi `target_table` phải tồn tại".
+
+---
+
+## 6. Rule trỏ vào bảng không tồn tại — đã sửa 2026-09-22
+
+Đến `2026-09-22`, `dq_rules.yml` khai `lakehouse.gold.branch_monthly_summary`.
+Bảng đó **không tồn tại**: tên thật là `mart_branch_monthly_summary`, thiếu tiền
+tố `mart_`. Bốn nguồn độc lập đều viết đủ tiền tố, chỉ file rule viết thiếu:
 
 ```text
 docker/init_iceberg/03_ddl_gold.sql:212   CREATE TABLE ... mart_branch_monthly_summary
@@ -239,23 +253,61 @@ dbt/models/gold/_gold_sources.yml:220     - name: mart_branch_monthly_summary
 docs/03-data/DATA_DICTIONARY.md           mart_branch_monthly_summary
 ```
 
-Chỉ `dq_rules.yml` viết thiếu. Bản thân tên **file config** cũng là
-`branch_monthly_summary.yml` trong khi target là `mart_...` — nên rất dễ sao
-chép tên file thành tên bảng.
-
-**Hệ quả**: theo §3, exception được tính là FAIL. Nên mỗi lượt
+**Hệ quả**: theo §3, exception được tính là FAIL. Mỗi lượt
 `data_quality.py --layer gold` sinh 2 FAIL từ một bảng không tồn tại, `exit 1`,
-và task `dq_gold_checks` **fail mỗi ngày**. Cộng với §9 (`email_on_failure:
-False`), không ai được báo.
+nên task `dq_gold_checks` **fail mỗi ngày**. Cộng với §9 (`email_on_failure:
+False`, và không ai đọc `data_quality_log`), không ai được báo.
 
-**Vì sao không test nào bắt**: `tests/ops/test_data_quality.py` dùng fixture
-`sample_dq_rules` — một YAML tổng hợp dựng trong `tmp_path`. **Không test nào
-nạp `dq_rules.yml` thật.** Đúng cùng một lớp lỗ với "binding chỉ neo README" ở
-[`EVIDENCE_MANIFEST.md` §6.4](EVIDENCE_MANIFEST.md): cơ chế kiểm tồn tại, nhưng
-không trỏ vào tạo tác thật.
+### Cái đáng ghi lại không phải lỗi gõ
 
-Chưa xác minh được trên nền tảng đang chạy vì việc đó cần cả stack. Bằng chứng ở
-trên là bằng chứng tĩnh, và nó đủ rõ.
+Sửa tên là một dòng. Chuyện đáng ghi là **vì sao nó sống được**:
+`tests/ops/test_data_quality.py` — file mang đúng tên module — kiểm loader bằng
+fixture `sample_dq_rules`, một YAML tổng hợp dựng trong `tmp_path`. Nó chứng minh
+loader chạy đúng. **Không test nào nạp `dq_rules.yml` thật.** Nên 822 unit test
+xanh trong khi một task production đỏ hằng ngày.
+
+Cùng lớp lỗ với "binding chỉ neo README" ở
+[`EVIDENCE_MANIFEST.md` §6.4](EVIDENCE_MANIFEST.md): cơ chế kiểm tồn tại và
+chạy tốt, chỉ là không trỏ vào tạo tác thật.
+
+### Vì sao tên này dễ gõ sai
+
+Tên **file config** là `branch_monthly_summary.yml` trong khi target là
+`mart_branch_monthly_summary` — sao chép tên file ra chính là chuỗi sai.
+`customer_360.yml` → `mart_customer_360` cũng vậy, nên 2 trong 14 config Gold có
+tên file khác tên bảng và cái bẫy vẫn còn. Đã cân nhắc đổi tên file và **không
+làm**: đường dẫn đó được `gold_mart360_dag.py:61`, `initial_load.py:70`,
+`tests/gold/test_gold_sql_invariants.py:203` (khớp theo tên file) và hai tài liệu
+tham chiếu — sửa 5 file để lấp 1 trong 2 chỗ lệch, mà không thêm được lớp bảo vệ
+nào so với test dưới đây.
+
+### Cái đang chặn nó quay lại
+
+`tests/governance/test_dq_rules_resolve.py` nạp **file thật** (`dq_rules.yml` và
+`quarantine_rules.yml`) và đối chiếu:
+
+```text
+mọi khoá bảng      phải có CREATE TABLE trong docker/init_iceberg/*.sql
+mọi ref_table      như trên   (referential_integrity)
+mọi source_table   như trên   (reconciliation, nhóm quarantine)
+mọi tên check      phải là khoá của CHECK_DISPATCH
+```
+
+Danh sách bảng **parse từ DDL**, dùng lại `parse_ddl` và `SKIP_DDL` của
+`scripts/generate_data_dictionary.py` — viết cứng danh sách trong test chỉ dời
+chỗ của drift sang một file mới hơn. Test có guard chống pass rỗng (ngưỡng tối
+thiểu cho số bảng DDL, số mục rule, số check) nên một lần parse hỏng không thể
+xanh bằng cách không kiểm gì.
+
+Cả hai kiểu hỏng đã được kiểm chứng ngược trước khi viết mục này: tiêm lại tên
+bảng cũ và một `nul_check` gõ sai, bộ test đỏ ở cả hai, thông điệp lỗi nêu đúng
+tên sai và gợi ý ứng viên trong DDL.
+
+**Chưa xác minh trên nền tảng đang chạy** — việc đó cần cả stack Docker. Bằng
+chứng ở đây là tĩnh: DDL, bốn nguồn đồng thuận, và một test đỏ trên tên cũ. Lỗi
+đã sửa trong file; chưa quan sát được `dq_gold_checks` xanh trong Airflow.
+
+Ghi lại đầy đủ ở [`technical-debt.md` TD-9](technical-debt.md).
 
 ---
 
@@ -421,7 +473,14 @@ dbt test trên serving:
 docker exec banking-dbt bash -lc "cd /opt/dbt && dbt test --target docker --select serving"
 ```
 
-Kiểm rule file mà không cần stack:
+Kiểm rule file mà không cần stack — mọi tên bảng và tên check phải phân giải
+được (chạy cái này sau khi thêm rule mới, trước khi commit):
+
+```bash
+py -3 -m pytest tests/governance/test_dq_rules_resolve.py -q
+```
+
+Đếm nhanh số mục:
 
 ```bash
 py -3 -c "import yaml;d=yaml.safe_load(open('code_etl/shared/ops/dq_rules.yml',encoding='utf-8'));print(len(d['tables']),'bảng')"
@@ -436,8 +495,8 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Test nạp `dq_rules.yml` **thật** | §6 sống được vì không có test này |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
+| DDL cho `lakehouse.quarantine.*` | §5 — hàng vi phạm được đếm nhưng không ghi được đi đâu |
 | Ai đọc `data_quality_log` | write-only; không dashboard, không dbt model |
 | DQ rule cho 16 bảng Bronze batch | đường nạp chính đang phủ ít hơn đường CDC |
 | DQ rule cho `aml_monitoring`, `fraud_risk_txn` | hai bảng rủi ro không có DQ check |
@@ -453,11 +512,12 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 ## 13. Trạng thái hiện tại
 
 ```text
-DQ check        88 check khai / 86 chạy được · 28 bảng thật · 6/9 loại đang dùng
-phủ sóng        silver 13/17 · gold 9/14 · bronze 6/22 (chỉ CDC)
+DQ check        88 check · 29 bảng, tất cả phân giải được · 6/9 loại đang dùng
+phủ sóng        silver 13/17 · gold 10/14 · bronze 6/22 (chỉ CDC)
 quarantine      18 rule · 4 bảng Silver · 6 FAIL + 10 WARN + 2 INFO
 dbt             117 test (110 generic + 7 singular) trên serving
 guard           2 guard, chỉ ở Gold · 14/14 non_empty · 11/14 snapshots
-lỗi đang sống   1 (§6: dq_rules.yml trỏ gold.branch_monthly_summary)
+lỗi đang sống   0 (§6 đã sửa 2026-09-22, chưa xác minh trên stack đang chạy)
+hợp đồng tĩnh   test_dq_rules_resolve.py — 150 test trên rule file thật
 thông báo       không có
 ```

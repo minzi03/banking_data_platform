@@ -352,7 +352,10 @@ tables:
         severity: FAIL
         columns: [customer_id]
 
-  lakehouse.gold.branch_monthly_summary:
+  # Tên bảng có tiền tố `mart_`, khác tên file config
+  # (code_etl/gold/time_analytics/branch_monthly_summary.yml). Bỏ tiền tố ở đây
+  # làm task dq_gold_checks đỏ mỗi ngày — xem TD-9.
+  lakehouse.gold.mart_branch_monthly_summary:
     checks:
       - name: row_count
         severity: FAIL
