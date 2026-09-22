@@ -750,24 +750,27 @@ def write_run_artifact(manifest: dict) -> Path:
     return path
 
 
-def promote_canonical_if_verified(
-    manifest: dict, errors: list[str], allow_dirty: bool = False
-) -> bool:
+def promote_canonical_if_verified(manifest: dict, errors: list[str]) -> bool:
     """
     Canonical CHỈ được ghi đè khi không còn blocking error VÀ cây sạch.
 
     Cây bẩn nghĩa là số đo không quy được về một commit nào: `git_commit` trỏ
     HEAD trong khi thứ được đo là HEAD cộng các sửa đổi chưa commit. Đó là một
-    manifest không tái lập được. `--allow-dirty` nới điều kiện này cho lần chạy
-    thăm dò ở local, và khi đó `git_dirty: true` vẫn được ghi trung thực.
+    manifest không tái lập được, và KHÔNG có cờ nào nới điều kiện này.
+
+    Cây bẩn bị chặn hai lần: invariant `worktree_clean` đã đẩy nó vào `errors`
+    trước khi tới đây, nên nhánh `git_dirty` bên dưới là cổng thứ hai, thừa một
+    cách có chủ ý. Cổng thứ nhất sống trong contract YAML — dữ liệu sửa được;
+    cổng này sống trong code, nên xoá một invariant khỏi contract không âm thầm
+    mở đường promote từ cây bẩn.
     """
     if errors:
         return False
-    if manifest["manifest"]["build"].get("git_dirty") and not allow_dirty:
+    if manifest["manifest"]["build"].get("git_dirty"):
         print(
             "Từ chối promote canonical: worktree bẩn nên số đo không quy được "
-            "về một commit. Commit thay đổi rồi chạy lại, hoặc dùng --allow-dirty "
-            "nếu chấp nhận một manifest không tái lập được.",
+            "về một commit. Commit thay đổi rồi chạy lại, hoặc dùng "
+            "--collect-only nếu chỉ cần thu evidence.",
             file=sys.stderr,
         )
         return False
@@ -777,6 +780,25 @@ def promote_canonical_if_verified(
     )
     tmp.replace(MANIFEST_PATH)   # atomic
     return True
+
+
+def promotion_refusal_message(manifest: dict, errors: list[str]) -> str:
+    """
+    Dòng cuối cùng operator đọc, nên nó phải nói RA nguyên nhân sửa được.
+
+    `N blocking invariant fail` là đúng nhưng vô dụng khi nguyên nhân là cây
+    bẩn: người chạy phải cuộn ngược tìm dòng `ERROR worktree_clean` mới biết
+    việc cần làm là commit, chứ không phải đi debug số liệu.
+    """
+    parts = [f"KHÔNG promote canonical — {len(errors)} blocking invariant fail."]
+    if manifest["manifest"]["build"].get("git_dirty"):
+        parts.append(
+            "Trong đó có worktree BẨN (git_dirty: true): số đo không quy được về "
+            "một commit. Commit thay đổi rồi chạy lại; --collect-only nếu chỉ "
+            "cần thu evidence."
+        )
+    parts.append("Canonical giữ nguyên; xem run artifact để triage.")
+    return " ".join(parts)
 
 
 # =============================================================================
@@ -797,9 +819,6 @@ def main(argv: list[str] | None = None) -> int:
                              "(dùng cho lần runtime-validate đầu tiên)")
     parser.add_argument("--collect-only", action="store_true",
                         help="Thu evidence + ghi run artifact, KHÔNG promote canonical")
-    parser.add_argument("--allow-dirty", action="store_true",
-                        help="Cho phép promote canonical từ worktree bẩn (chỉ dùng khi "
-                             "chạy thăm dò ở local). git_dirty VẪN được ghi đúng sự thật.")
     parser.add_argument("--output", type=Path, help="Ghi kết quả ra file này thay vì canonical")
     parser.add_argument("--trino-host", default="localhost")
     parser.add_argument("--trino-port", type=int, default=8085)
@@ -901,15 +920,11 @@ def main(argv: list[str] | None = None) -> int:
         print("--collect-only: canonical không đổi.")
         return 1 if errors else 0
 
-    if promote_canonical_if_verified(result, errors, args.allow_dirty):
+    if promote_canonical_if_verified(result, errors):
         print(f"Canonical promoted: status={result['manifest']['verification']['status']}")
         return 0
 
-    print(
-        f"KHÔNG promote canonical — {len(errors)} blocking invariant fail. "
-        "Canonical giữ nguyên; xem run artifact để triage.",
-        file=sys.stderr,
-    )
+    print(promotion_refusal_message(result, errors), file=sys.stderr)
     return 1
 
 

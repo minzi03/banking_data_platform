@@ -222,12 +222,12 @@ thực tế. Manifest cũ vẫn cho 22/22 xanh trong khi cả hai đều đã sa
 Nó chỉ chặn được `status: pending` — manifest chưa từng sinh. Manifest **đã sinh
 nhưng cũ** thì nó không phân biệt được.
 
-### 6.2 `--allow-dirty` không làm được việc nó hứa
+### 6.2 Cây bẩn không promote được — và không có cờ nào nới ra
 
-Help text nói *"Cho phép promote canonical từ worktree bẩn"*. **Nó không.**
-
-`worktree_clean` là invariant severity `error`, và `evaluate_invariants()`
-không có ngoại lệ nào cho `allow_dirty`. Nên trên cây bẩn:
+**Không còn `--allow-dirty`.** Cờ đó từng hứa *"cho phép promote canonical từ
+worktree bẩn"* nhưng chưa bao giờ làm được: `worktree_clean` là invariant
+severity `error`, và `evaluate_invariants()` không có ngoại lệ nào cho nó. Nên
+trên cây bẩn:
 
 ```text
 errors = ['worktree_clean: manifest.build.git_dirty=True eq False → FAIL']
@@ -235,21 +235,32 @@ errors = ['worktree_clean: manifest.build.git_dirty=True eq False → FAIL']
 → nhánh kiểm git_dirty BÊN TRONG hàm đó không bao giờ chạy với cây bẩn
 ```
 
-Kết quả: cờ không đổi hành vi trong bất kỳ trường hợp nào — cây bẩn vẫn không
-promote được, cây sạch thì cờ vô nghĩa. Đây là điều tốt (không có đường vòng),
-nhưng help text và nhánh kiểm bên trong `promote_canonical_if_verified()` đang
-mô tả một cơ chế không tồn tại.
+Cờ không đổi hành vi trong bất kỳ trường hợp nào — cây bẩn vẫn không promote
+được, cây sạch thì cờ vô nghĩa. Đã gỡ, vì `CONTRIBUTING.md` và `ROADMAP.md` đều
+cấm dùng nó, và `--collect-only` đã phủ đúng nhu cầu hợp lệ *"chạy trên cây bẩn
+mà không promote"*.
 
-Thêm một cái bẫy khi đọc log: dòng cuối luôn in
+Cây bẩn giờ bị chặn ở **hai** cổng, thừa một cách có chủ ý:
+
+| Cổng | Ở đâu | Chặn khi |
+|---|---|---|
+| `worktree_clean` invariant | contract YAML — **dữ liệu sửa được** | luôn, vì `errors` không rỗng |
+| nhánh `git_dirty` trong `promote_canonical_if_verified()` | code | chỉ khi caller truyền `errors=[]` |
+
+Cổng thứ hai không bao giờ chạy từ `main()`. Nó được giữ lại vì cổng thứ nhất
+sống trong contract: xoá một invariant khỏi YAML không được phép âm thầm mở
+đường promote từ cây bẩn.
+
+Dòng cuối khi bị từ chối giờ nói thẳng nguyên nhân sửa được:
 
 ```text
-KHÔNG promote canonical — 1 blocking invariant fail.
+KHÔNG promote canonical — 1 blocking invariant fail. Trong đó có worktree BẨN
+(git_dirty: true): số đo không quy được về một commit. Commit thay đổi rồi chạy
+lại; --collect-only nếu chỉ cần thu evidence. Canonical giữ nguyên; xem run
+artifact để triage.
 ```
 
-Nó **không** nói "vì cây bẩn". Đọc dòng `ERROR worktree_clean` phía trên.
-
 > **Quy tắc vẫn giữ**: commit thay đổi trước, rồi mới sinh manifest.
-> `CONTRIBUTING.md` và `ROADMAP.md` đều đã cấm dùng cờ này.
 
 ### 6.3 Nền tảng lệch tầng vẫn "đo được"
 

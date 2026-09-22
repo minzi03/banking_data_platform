@@ -394,8 +394,10 @@ passed. The flag gated nothing else; falsifying the record was its only effect.
 *Why it stayed hidden:* it lived in the script whose purpose is to make claims
 trustworthy, and it was written to make a local run convenient.
 
-*Fix:* provenance always reports the truth; the flag decides whether the run may
-promote the canonical manifest, not what the record says.
+*Fix:* provenance always reports the truth. The flag survived one round as a
+promote gate, then turned out to gate nothing there either — the `worktree_clean`
+invariant already blocks a dirty tree — so it was removed. A dirty tree can be
+measured (`--collect-only`), never promoted.
 
 *Evidence:* a manifest built from a dirty tree pins a commit that does not
 describe what was measured — the one fact that makes it irreproducible, and

@@ -102,7 +102,7 @@ Số liệu công bố chỉ sống ở một nơi: `docs/evidence/metrics-manif
 py -3 scripts/generate_metrics_manifest.py --cob-dt <YYYY-MM-DD> --scope full
 ```
 
-Không dùng `--allow-dirty`. Manifest sinh từ worktree bẩn sẽ ghi `git_dirty: False` sai sự thật — tức là chính công cụ kiểm chứng lại nói dối.
+Sinh manifest từ worktree sạch. Cây bẩn nghĩa là số đo không quy được về một commit, nên invariant `worktree_clean` chặn promote và không có cờ nào nới ra — `--allow-dirty` đã bị gỡ. Cần chạy trên cây bẩn thì dùng `--collect-only`: thu evidence, ghi run artifact, không đụng canonical.
 
 `scripts/verify_readme_metrics.py` so README với manifest (18 binding). Lưu ý giới hạn: nó **không** so manifest với thực tế — vòng lặp chỉ khép khi regenerate.
 
