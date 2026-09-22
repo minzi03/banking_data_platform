@@ -10,6 +10,8 @@ import string
 from datetime import datetime, timedelta
 from typing import Any
 
+from .amounts import amount_sampler
+
 # Vietnamese names — expanded pool for 10K+ customer uniqueness
 FIRST_NAMES_MALE = [
     "Nguyen Van", "Tran Minh", "Le Hong", "Pham Duc", "Hoang Anh",
@@ -360,6 +362,13 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
     dc_dist = config.get("dc_distribution", {"D": 0.55, "C": 0.45})
     channel_dist = config.get("channel_distribution", {})
     amount_range = config.get("amount_range", [10000, 500000000])
+    # Log-normal thay cho uniform: xem amounts.py để biết vì sao uniform
+    # làm high_value_flag gắn cờ 60% giao dịch.
+    sample_amount = amount_sampler(
+        config,
+        {"median": 2_000_000, "p99": 200_000_000,
+         "min": amount_range[0], "max": amount_range[1]},
+    )
 
     txn_types = list(type_dist.keys())
     txn_weights = list(type_dist.values())
@@ -379,7 +388,7 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
         dc = random.choices(dcs, weights=dc_weights)[0]
         channel = random.choices(channels, weights=ch_weights)[0]
-        amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
+        amount = sample_amount()
         # Use seasonal datetime for realistic patterns
         txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
 

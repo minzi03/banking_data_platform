@@ -8,6 +8,8 @@ import random
 from datetime import datetime, timedelta
 from typing import Any
 
+from .amounts import amount_sampler
+
 
 MERCHANT_NAMES = [
     "VinMart", "Circle K", "Highlands Coffee", "The Coffee House",
@@ -132,6 +134,12 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
     channel_dist = config.get("channel_distribution", {"POS": 0.45, "ECOM": 0.40, "ATM": 0.15})
     status_dist = config.get("status_distribution", {"SUCCESS": 0.90, "FAILED": 0.07, "PENDING": 0.03})
     amount_range = config.get("amount_range", [50000, 50000000])
+    # Chi tiêu thẻ lệch phải: nhiều giao dịch nhỏ, ít giao dịch lớn.
+    sample_amount = amount_sampler(
+        config,
+        {"median": 500_000, "p99": 20_000_000,
+         "min": amount_range[0], "max": amount_range[1]},
+    )
     merchant_cats = config.get("merchant_categories", ["GROCERY", "RESTAURANT", "TRAVEL", "ECOM"])
 
     # Build lookup: card_id -> (customer_id, card_type)
@@ -163,7 +171,7 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
         channel = random.choices(channels, weights=ch_weights)[0]
         status = random.choices(statuses, weights=s_weights)[0]
-        amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
+        amount = sample_amount()
         merchant = random.choice(MERCHANT_NAMES)
         merchant_cat = random.choice(merchant_cats)
         txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
