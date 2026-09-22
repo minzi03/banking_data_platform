@@ -237,13 +237,13 @@ counts are ambiguous without them.
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
-| Data contracts             |             33 | Governance contract YAMLs                                                       |
+| Data contracts             |             34 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
 | dbt data tests             |            117 | `dbt test --target docker` → PASS=117, ERROR=0                                  |
-| Automated tests            |            616 | Python `def test_*` functions                                                   |
+| Automated tests            |            655 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |

@@ -13,6 +13,7 @@ dưới đây là một claim đã được chứng minh sai bằng runtime evid
 Chạy trong CI, không cần stack.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -164,6 +165,14 @@ class TestDocsAgreeOnArchitecture:
         """
         Số test xuất hiện ở cả bảng metric lẫn node sơ đồ. Neo cả hai vào
         manifest để không có chỗ nào đóng băng lại ở con số cũ.
+
+        Bản đầu assert `expected in text` — so khớp CHUỖI CON trên cả file.
+        Nó đã cho một false green: khi manifest ghi 616, `architecture.md` vẫn
+        khai 476 ở cả hai chỗ claim, nhưng chuỗi "616" tình cờ xuất hiện đúng
+        một lần ở chỗ khác trong file, nên test vẫn xanh.
+
+        Giờ trích con số NGAY CẠNH cụm "Automated tests" và so từng cái. Một
+        claim sai không thể nấp sau một con số trùng khớp ngẫu nhiên nữa.
         """
         import yaml
 
@@ -171,11 +180,22 @@ class TestDocsAgreeOnArchitecture:
             (REPO_ROOT / "docs" / "evidence" / "metrics-manifest.yaml").read_text(encoding="utf-8")
         )
         expected = str(manifest["metrics"]["platform"]["automated_tests"]["test_functions"]["value"])
+
+        # Bắt cả hai dạng claim đang dùng:
+        #   | Automated tests | 655 |          (bảng metric)
+        #   655 Automated Tests                (node mermaid)
+        claim_re = re.compile(r"(?:Automated [Tt]ests\D{0,40}?(\d[\d,]*)|(\d[\d,]*)\s+Automated [Tt]ests)")
+
         for path in DOCS:
             text = path.read_text(encoding="utf-8")
-            if "Automated Tests" not in text and "Automated tests" not in text:
+            claims = [(a or b).replace(",", "") for a, b in claim_re.findall(text) if (a or b)]
+            if not claims:
                 continue
-            assert expected in text, f"{path.name}: nêu số test nhưng không phải {expected} (giá trị trong manifest)"
+            wrong = [c for c in claims if c != expected]
+            assert not wrong, (
+                f"{path.name}: khai số test {wrong} nhưng manifest ghi {expected}. "
+                "Sinh lại manifest rồi cập nhật tài liệu, đừng sửa manifest bằng tay."
+            )
 
     def test_gold_counts_consistent_across_docs(self):
         """14 historical + 13 serving phải xuất hiện nhất quán."""
