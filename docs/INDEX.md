@@ -2,7 +2,7 @@
 
 > Cập nhật: 2026-09-22 · Cấu trúc đích và lý do: [`DOCUMENTATION_PLAN.md`](09-analysis/DOCUMENTATION_PLAN.md)
 
-Repo có 35 tài liệu. Trang này trả lời một câu: **bạn là ai, và cần đọc gì.**
+Trang này trả lời một câu: **bạn là ai, và cần đọc gì.**
 
 ```text
 docs/
@@ -11,7 +11,7 @@ docs/
 ├── 02-architecture/          kiến trúc + adr/ (11 quyết định)
 ├── 03-data/                  tra cứu: dictionary · glossary · contracts · lineage
 ├── 04-operations/            vận hành + sự cố
-├── 05-quality/               nợ kỹ thuật
+├── 05-quality/               nợ kỹ thuật + cơ chế evidence manifest
 ├── 06-security-compliance/   quản trị AI
 ├── 09-analysis/              nghiên cứu, có ngày đo · archive/ bản đã thay thế
 └── evidence/                 KHÔNG phải tài liệu — metrics-manifest + bằng chứng runtime
@@ -118,11 +118,12 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 
 | Tài liệu | Nội dung |
 |---|---|
-| [`technical-debt.md`](05-quality/technical-debt.md) | TD-1…TD-7: trạng thái, bằng chứng, tiêu chí chấp nhận |
+| [`EVIDENCE_MANIFEST.md`](05-quality/EVIDENCE_MANIFEST.md) | **Cơ chế chống số liệu bịa**: COLLECT → VERIFY → promote, `declared` vs `value`, `metric_type`, `not_collected ≠ verified` — và những chỗ cơ chế này KHÔNG bảo vệ |
+| [`technical-debt.md`](05-quality/technical-debt.md) | TD-1…TD-8: trạng thái, bằng chứng, tiêu chí chấp nhận |
 | [`evidence/p1-cdc-consolidation/README.md`](evidence/p1-cdc-consolidation/README.md) | Bằng chứng runtime: CDC consolidation |
 | [`evidence/p2-observability/README.md`](evidence/p2-observability/README.md) | Bằng chứng runtime: observability |
 
-> **Chưa có**: `TESTING_STRATEGY.md`, `DATA_QUALITY.md`, `EVIDENCE_MANIFEST.md` — cái cuối giải thích cơ chế đặc trưng nhất của dự án (`declared` vs `value`, `metric_type`, `not_collected ≠ verified`) mà hiện chưa có tài liệu riêng.
+> **Chưa có**: `TESTING_STRATEGY.md`, `DATA_QUALITY.md`.
 
 ## 6. Quản trị & tuân thủ
 
