@@ -17,7 +17,7 @@
 │                         STORAGE LAYER (MinIO + Iceberg)                      │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    BRONZE LAYER (Raw)                                │   │
-│  │  16 tables: core_banking(8) + card_crm(3) + digital_banking(5)     │   │
+│  │  17 tables: core_banking(9) + card_crm(3) + digital_banking(5)     │   │
 │  │  Format: Parquet + Iceberg metadata                                 │   │
 │  │  Strategy: full_snapshot (dims) + incremental (facts)               │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
@@ -25,17 +25,18 @@
 │                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    SILVER LAYER (Cleaned)                            │   │
-│  │  8 Dimensions: dim_customer(SCD2), dim_account(SCD2), dim_*, ...   │   │
-│  │  5 Facts: fact_txn_account, fact_card_txn, fact_*, ...             │   │
+│  │  10 Dimensions: dim_customer(SCD2), dim_account(SCD2), dim_*, ... │   │
+│  │  6 Facts: fact_txn_account, fact_card_txn, fact_*, ...             │   │
 │  │  Strategy: SCD1/SCD2 + incremental                                 │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
 │                                    ▼                                        │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │           HISTORICAL GOLD LAYER — 10 tables (Spark)                  │   │
-│  │  5 Mart360: mart_customer_360, customer_*_summary, ...             │   │
+│  │           HISTORICAL GOLD LAYER — 14 tables (Spark)                  │   │
+│  │  6 Mart360: mart_customer_360, customer_*_summary, ...             │   │
 │  │  4 Segments: rfm, churn, cross_sell, campaign_target               │   │
-│  │  1 Time analytics: branch_monthly_summary                          │   │
+│  │  3 Risk: loan_portfolio, fraud_risk_txn, aml_monitoring            │   │
+│  │  1 Time analytics: mart_branch_monthly_summary                     │   │
 │  │  Strategy: overwritePartitions by cob_dt                            │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -43,7 +44,7 @@
                                     │  GOLD_COMPLETE(cob_dt)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│              CURRENT-SERVING LAYER — 9 tables (dbt via Trino)               │
+│              CURRENT-SERVING LAYER — 13 tables (dbt via Trino)              │
 │  iceberg.serving.*  —  one row per customer, one cob_dt                    │
 │  Owned by dbt, materialized as Iceberg tables, published per cob_dt         │
 │  SERVING_COMPLETE(cob_dt) written only after dbt build + tests pass         │
@@ -147,7 +148,7 @@ YAML Contract ──▶ ContractRegistry ──▶ ContractEnforcer ──▶ Pi
 ```
 DQ Rules (dq_rules.yml) ──▶ data_quality.py ──▶ PostgreSQL (data_quality_log)
                               │
-                              └── 8 check types
+                              └── 9 check types
 ```
 
 ### Lineage Tracking
@@ -155,7 +156,7 @@ DQ Rules (dq_rules.yml) ──▶ data_quality.py ──▶ PostgreSQL (data_qua
 Pipeline Run ──▶ LineageTracker ──▶ PostgreSQL (lineage_log)
                      │
                      └── Bronze→Silver (13 transforms)
-                         Silver→Gold (11 transforms)
+                         Silver→Gold (14 transforms)
 ```
 
 ## 📊 Schema Mapping
@@ -181,42 +182,91 @@ Pipeline Run ──▶ LineageTracker ──▶ PostgreSQL (lineage_log)
 | Silver Tables | Gold Table | Transform |
 |---------------|------------|-----------|
 | dim_customer + dim_account + dim_card + fact_* | mart_customer_360 | Aggregation |
-| mart_customer_360 | rfm_segment | RFM scoring |
-| mart_customer_360 | churn_prediction | Churn risk |
-| mart_customer_360 | cross_sell_segment | Cross-sell |
-| dim_branch + dim_account + fact_txn_account | branch_monthly_summary | Monthly agg |
+| dim_customer + dim_account | customer_balance_summary | Balance agg |
+| dim_customer + fact_txn_account + fact_card_txn | customer_transaction_summary | Txn agg |
+| dim_customer + dim_account + dim_card + dim_loan | customer_product_summary | Product holding |
+| dim_customer + dim_card + fact_card_txn | customer_card_summary | Card agg |
+| dim_customer + dim_loan + fact_loan_payment | customer_loan_summary | Loan agg |
+| dim_customer + fact_txn_account + fact_card_txn | rfm_segment | RFM scoring |
+| dim_customer + fact_txn_account + fact_card_txn | churn_prediction | Churn risk |
+| mart_customer_360 + dim_customer | cross_sell_segment | Cross-sell |
+| dim_branch + dim_account + fact_txn_account | mart_branch_monthly_summary | Monthly agg |
+| dim_loan + dim_branch + fact_loan_payment | loan_portfolio_risk | Portfolio risk |
+| dim_customer + fact_txn_account + fact_online_transaction | fraud_risk_txn | Rule-based fraud scoring |
+| dim_customer + fact_txn_account | aml_monitoring | AML alert scoring |
 | rfm_segment + churn_prediction + cross_sell_segment | campaign_target | Campaign |
 
 ## 🔧 Tech Stack Details
 
-### Docker Services (20)
+### Docker Services (29)
+
+25 long-running + 4 one-shot initialization/migration jobs. Counted from the
+`services:` keys in `docker/docker-compose.yml`.
+
 | Service | Port | Purpose |
 |---------|------|---------|
+| **Storage & catalog** | | |
 | postgres | 5432 | Source database |
 | minio | 9000, 9001 | Object storage |
-| iceberg-rest | 8181 | Catalog service |
+| mc | — | MinIO bucket initialization (one-shot) |
+| iceberg-rest | 8181 | Iceberg REST catalog |
+| iceberg-init | — | Namespace creation (one-shot) |
+| **Processing** | | |
 | spark-master | 7077, 9090 | Spark coordinator |
 | spark-worker-1 | 9091 | Spark compute |
+| **Streaming & CDC** | | |
 | zookeeper | 2181 | Kafka coordination |
 | kafka | 9092 | Event streaming |
+| kafka-ui | 8090 | Kafka inspection UI |
 | debezium | 8083 | CDC connector |
+| **Query & publication** | | |
 | trino | 8085 | Query engine |
-| airflow-init | — | DB migration |
+| dbt | — | dbt runner |
+| **Orchestration** | | |
+| airflow-init | — | DB migration (one-shot) |
 | airflow-webserver | 8080 | Airflow UI |
 | airflow-scheduler | 8793 | Airflow scheduler |
+| **Serving & analytics** | | |
+| api | 8000 | FastAPI Customer 360 |
+| streamlit | 8501 | Streamlit dashboard |
+| superset | 8088 | Superset BI |
+| superset-init | — | Superset bootstrap |
+| mlflow | 5000 | Experiment tracking |
+| **Observability** | | |
+| prometheus | 9095 | Metrics collection |
+| grafana | 3000 | Dashboards |
+| alertmanager | 9093 | Alert routing |
+| freshness-exporter | 9119 | CDC freshness metrics |
+| **Governance** | | |
 | om-mysql | 3307 | OpenMetadata DB |
 | om-elasticsearch | 9200 | OpenMetadata search |
+| om-migrate | — | OpenMetadata migration (one-shot) |
 | openmetadata | 8585 | Data catalog |
+
+### CDC freshness
+
+| Measure | Value |
+|---------|------:|
+| Median local source→Silver | 409.8s |
+| Range | 65.9–576.2s |
+| Trials | 5 |
+| Consolidation cadence | 600s (`*/10 * * * *`) |
+
+Measured end to end: `t0` is the PostgreSQL `COMMIT`, `t1` is the moment the
+value becomes readable in `silver.dim_customer_current` through Trino. The
+figure therefore includes waiting for the next scheduled consolidation run,
+which dominates it — deliberately, because that is the delay a consumer
+experiences.
 
 ## 📈 Data Volume
 
 | Layer | Tables | Rows (approx) |
 |-------|--------|---------------|
-| Source | 16 | ~2.6M |
-| Bronze | 16 (batch) + 6 (CDC) | ~2.6M + CDC events |
-| Silver | 13 (batch) + 2 (CDC current) | 2.3M distinct txns + 40K |
-| Historical Gold | 10 | ~100K |
-| Current serving | 9 (dbt/Trino) | ~90K |
+| Source | 17 | ~2.6M |
+| Bronze | 17 (batch) + 6 (CDC) | ~2.6M + CDC events |
+| Silver | 16 (batch) + 2 (CDC current) | 2.3M distinct txns + 40K |
+| Historical Gold | 14 | ~100K |
+| Current serving | 13 (dbt/Trino) | ~90K |
 
 Transaction counts are distinct `(domain, transaction_id)` within one verified
 snapshot. Silver facts are full snapshots per `cob_dt`, so `COUNT(*)` across
