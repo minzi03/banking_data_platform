@@ -118,14 +118,14 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 
 | Tài liệu | Nội dung |
 |---|---|
-| [`DATA_QUALITY.md`](05-quality/DATA_QUALITY.md) | **DQ là phát hiện, không phải ngăn chặn**: dòng thời gian 02:00→09:00, 88 check trên 29 bảng, quarantine, phủ sóng đo được — và một lỗi đang sống |
+| [`DATA_QUALITY.md`](05-quality/DATA_QUALITY.md) | **DQ là phát hiện, không phải ngăn chặn**: dòng thời gian 02:00→09:00, 88 check trên 29 bảng, quarantine, phủ sóng đo được |
 | [`TESTING_STRATEGY.md`](05-quality/TESTING_STRATEGY.md) | **Năm tầng kiểm chứng** và vì sao không tầng nào thay được tầng khác: marker là biên giới chứ không phải thư mục, coverage đo gì và bỏ gì, negative control |
 | [`EVIDENCE_MANIFEST.md`](05-quality/EVIDENCE_MANIFEST.md) | **Cơ chế chống số liệu bịa**: COLLECT → VERIFY → promote, `declared` vs `value`, `metric_type`, `not_collected ≠ verified` — và những chỗ cơ chế này KHÔNG bảo vệ |
-| [`technical-debt.md`](05-quality/technical-debt.md) | TD-1…TD-8: trạng thái, bằng chứng, tiêu chí chấp nhận |
+| [`technical-debt.md`](05-quality/technical-debt.md) | TD-1…TD-9: trạng thái, bằng chứng, tiêu chí chấp nhận |
 | [`evidence/p1-cdc-consolidation/README.md`](evidence/p1-cdc-consolidation/README.md) | Bằng chứng runtime: CDC consolidation |
 | [`evidence/p2-observability/README.md`](evidence/p2-observability/README.md) | Bằng chứng runtime: observability |
 
-> `DATA_QUALITY.md` §6 ghi một **lỗi đang sống** trong `dq_rules.yml` — đọc mục đó nếu bạn đang vận hành.
+> Lỗi đang sống trong `dq_rules.yml` đã sửa `2026-09-22` (`DATA_QUALITY.md` §6, TD-9). Đáng đọc nếu bạn sắp thêm DQ rule: cái giữ nó không quay lại là `tests/governance/test_dq_rules_resolve.py`, không phải review.
 
 ## 6. Quản trị & tuân thủ
 

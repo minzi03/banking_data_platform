@@ -424,3 +424,126 @@ dependencies, which is the thing containers exist to avoid.
 
 Related: TD-4 (same class, different container), TD-5 (`make` targets still
 do not propagate child exit codes, so a broken target can report success).
+
+---
+
+## TD-9 — The test suite exercised a synthetic DQ rule file, never the real one
+
+**Status:** fixed (2026-09-22)
+
+`code_etl/shared/ops/dq_rules.yml` declared a rule on
+`lakehouse.gold.branch_monthly_summary`. No such table exists — the real name is
+`mart_branch_monthly_summary`. Four independent sources agreed on the `mart_`
+prefix and only the rule file disagreed:
+
+```text
+docker/init_iceberg/03_ddl_gold.sql:212                       CREATE TABLE ... mart_branch_monthly_summary
+code_etl/gold/time_analytics/branch_monthly_summary.yml:28    table: mart_branch_monthly_summary
+dbt/models/gold/_gold_sources.yml:220                         - name: mart_branch_monthly_summary
+docs/03-data/DATA_DICTIONARY.md                               mart_branch_monthly_summary
+```
+
+Every check function in `data_quality.py` wraps its body in `try/except` and
+returns `("FAIL", "N/A", f"Error: {e}")` — correct fail-loud behaviour. So the
+missing table produced 2 FAILs, `print_summary` counted them, and `main()`
+called `sys.exit(1)`. The `dq_gold_checks` task in
+`airflow/dags/ops/ops_data_quality_dag.py` therefore failed **every day**.
+
+### The typo is not the debt
+
+The name was a one-line fix. The debt is why it survived.
+
+`tests/ops/test_data_quality.py` — the file named after the module — exercises
+the loader against `sample_dq_rules`, a synthetic YAML written to `tmp_path` by
+`tests/conftest.py`. It asserts that the loader returns a dict, that the fixture
+has two tables, that a check list has three entries. All true. None of it
+touches the file that ships.
+
+```text
+what the tests proved     the YAML loader works
+what nobody checked       the YAML it loads in production resolves
+```
+
+So 822 unit tests were green while a production task was red daily. The suite
+was not weak, it was pointed at the wrong artifact. Same class as the evidence
+manifest binding that only anchored README (`EVIDENCE_MANIFEST.md` §6.4):
+the mechanism existed and did not point at the real thing.
+
+Two amplifiers kept it quiet. `ops_data_quality_dag.py:30` sets
+`"email_on_failure": False`, and nothing reads `opslakehouse.data_quality_log` —
+no dashboard, no dbt model, no script. A red task with no reader is
+indistinguishable from a green one.
+
+### Why the name was easy to get wrong
+
+The Gold config *file* is `branch_monthly_summary.yml` while its target is
+`mart_branch_monthly_summary`. Copying the filename gives exactly the wrong
+string. `customer_360.yml` → `mart_customer_360` has the same shape, so the trap
+is still there — 2 of 14 Gold configs have a filename that is not their table.
+
+Renaming the config was considered and **rejected**: the path is referenced by
+`airflow/dags/gold/gold_mart360_dag.py:61`,
+`code_etl/gold/bootstrap/initial_load.py:70`,
+`tests/gold/test_gold_sql_invariants.py:203` (`CALENDAR_MODELS`, matched by
+filename) and two docs. A five-file rename that touches DAG wiring would fix one
+of the two mismatches and buy no protection the test below does not already give.
+
+### What now catches it
+
+`tests/governance/test_dq_rules_resolve.py` loads the **real**
+`dq_rules.yml` and `quarantine_rules.yml` and asserts:
+
+```text
+every rule key            is a table declared in docker/init_iceberg/*.sql
+every ref_table           idem   (referential_integrity)
+every source_table        idem   (reconciliation, quarantine groups)
+every check name          is a key of CHECK_DISPATCH
+```
+
+The table list is parsed from DDL by reusing `parse_ddl` and `SKIP_DDL` from
+`scripts/generate_data_dictionary.py` — a hardcoded list in the test would only
+move the drift somewhere newer.
+
+The check-name assertion closes a second, quieter hole. `run_checks_for_table`
+skips an unknown check name with a `log.warning` and `continue`, so
+`nul_check` instead of `null_check` means the check never runs, nothing is
+written to `data_quality_log`, and the job still exits 0. That one is
+fail-*open*: nothing goes red at runtime, ever.
+
+Both holes were negative-tested before this entry was written: the old table
+name and a deliberately misspelled `nul_check` were re-injected, and the suite
+went red on both with the offending name in the message.
+
+### Acceptance
+
+```text
+[x] dq_rules.yml names mart_branch_monthly_summary
+[x] all 29 rule keys re-derived against DDL, not against this note
+[x] a test loads the real dq_rules.yml, not a tmp_path fixture
+[x] table existence comes from parsed DDL, no hardcoded table list
+[x] every check name is validated against CHECK_DISPATCH
+[x] anti-empty-pass guards so a broken parse cannot pass by checking nothing
+[x] both failure modes negative-tested (wrong table name, wrong check name)
+[x] quarantine_rules.yml source tables covered by the same test
+[ ] dq_gold_checks verified green on a running stack
+```
+
+The last item needs the Docker stack and is **not** done. The evidence here is
+static: DDL, four agreeing sources, and a test that goes red on the old name.
+Strong, but static — the daily failure is fixed in the file, not yet observed
+fixed in Airflow.
+
+### What remains open
+
+```text
+no DDL creates lakehouse.quarantine.*   write_to_quarantine always throws at
+                                        spark.table(target), logs ERROR, returns 0
+email_on_failure: False                 DQ and quarantine both silent, no callback
+data_quality_log has no reader          write-only, so red looks like green
+```
+
+The first is recorded as a deliberate assertion in
+`test_quarantine_target_tables_have_no_ddl` — it fails if someone adds the DDL,
+which is the moment to flip it into the opposite check. The other two are why
+this entry existed for as long as it did; they are documented in
+[`DATA_QUALITY.md`](DATA_QUALITY.md) §9 and not fixed here.
