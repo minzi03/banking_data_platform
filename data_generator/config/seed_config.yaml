@@ -132,7 +132,14 @@ core_banking:
     channel_distribution:
       {"BRANCH": 0.05, "ATM": 0.15, "INTERNET_BANKING": 0.25,
        "MOBILE_BANKING": 0.50, "POS": 0.05}
-    amount_range: [10000, 500000000]             # VND
+    amount_range: [10000, 500000000]             # VND — dải kẹp
+    # Log-normal thay uniform. Xem data_generator/generators/amounts.py:
+    # uniform cho median 250tr, làm high_value_flag (>=200tr) gắn cờ 60%.
+    amount_profile:
+      median:   2000000      # giao dịch điển hình 2tr
+      p99:    200000000      # khớp ngưỡng high_value_flag → gắn cờ ~1%
+      min:         10000
+      max:     500000000
 
   employee:
     row_count: 1800
@@ -166,7 +173,12 @@ card_crm:
     type_distribution: {"PURCHASE": 0.70, "CASH_ADVANCE": 0.15, "REFUND": 0.10, "REVERSAL": 0.05}
     channel_distribution: {"POS": 0.45, "ECOM": 0.40, "ATM": 0.15}
     status_distribution: {"SUCCESS": 0.90, "FAILED": 0.07, "PENDING": 0.03}
-    amount_range: [50000, 50000000]               # VND
+    amount_range: [50000, 50000000]               # VND — dải kẹp
+    amount_profile:
+      median:    500000      # chi tiêu thẻ điển hình 500k
+      p99:     20000000
+      min:        50000
+      max:     50000000
     merchant_categories: ["GROCERY", "RESTAURANT", "TRAVEL", "ECOM", "FUEL",
                           "EDUCATION", "HEALTHCARE", "ENTERTAINMENT", "UTILITIES"]
 
@@ -204,7 +216,12 @@ digital_banking:
     channel_distribution: {"MOBILE_APP": 0.55, "WEB": 0.25, "API": 0.10, "POS": 0.10}
     status_distribution: {"SUCCESS": 0.92, "FAILED": 0.05, "PENDING": 0.03}
     fraud_rate: 0.008                             # ~0.8% fraudulent
-    amount_range: [10000, 100000000]              # VND
+    amount_range: [10000, 100000000]              # VND — dải kẹp
+    amount_profile:
+      median:   1000000
+      p99:     50000000
+      min:        10000
+      max:    100000000
 
   support_ticket:
     row_count: 25000

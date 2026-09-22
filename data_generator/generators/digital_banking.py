@@ -9,6 +9,8 @@ import random
 import uuid
 from datetime import datetime, timedelta
 
+from .amounts import amount_sampler
+
 
 OS_OPTIONS = ["iOS", "Android", "Windows", "macOS", "Linux"]
 MERCHANT_NAMES = [
@@ -129,6 +131,11 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
     status_dist = config.get("status_distribution", {})
     fraud_rate = config.get("fraud_rate", 0.008)
     amount_range = config.get("amount_range", [10000, 100000000])
+    sample_amount = amount_sampler(
+        config,
+        {"median": 1_000_000, "p99": 50_000_000,
+         "min": amount_range[0], "max": amount_range[1]},
+    )
 
     txn_types = list(type_dist.keys())
     txn_weights = list(type_dist.values())
@@ -154,7 +161,7 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
         channel = random.choices(channels, weights=ch_weights)[0]
         status = random.choices(statuses, weights=s_weights)[0]
-        amount = round(random.uniform(amount_range[0], amount_range[1]), 2)
+        amount = sample_amount()
 
         # Fraud logic: 0.8% base rate, but higher if high-risk location
         is_fraud = 0
