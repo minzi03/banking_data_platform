@@ -111,6 +111,51 @@ dbt docs generate
 dbt docs serve --port 8081
 ```
 
+### 8. PII masking salt
+
+`ops_pii_masking_daily_dag` hashes `cccd` as `sha2(cccd || salt)` when it builds
+`sandbox.dim_customer_masked` and `sandbox.mart_customer_360_masked`. **There is no
+default salt.** The DAG reads the Airflow Variable `pii_hash_salt` at task render
+time and fails the masking task if it is unset or empty — a committed fallback salt
+is a salt every reader of this repo knows, and a deterministic hash under a known
+salt is pseudonymisation in name only (CCCD is 12 digits, so it is enumerable).
+
+Set it once per environment, before the first masking run:
+
+```bash
+# Any high-entropy string, >= 32 chars
+docker compose exec airflow-scheduler \
+  airflow variables set pii_hash_salt "$(openssl rand -hex 32)"
+
+# Confirm it exists (this prints the value — treat the output as a secret)
+docker compose exec airflow-scheduler airflow variables get pii_hash_salt
+```
+
+Or via the UI: **Admin → Variables → +**, key `pii_hash_salt`.
+
+**If it is missing**, `mask_silver_dim_customer` and `mask_gold_mart_customer_360`
+fail with a message naming the Variable and the command above. The DAG still
+imports and stays visible in the UI — the failure is scoped to the task, not to
+DAG parsing, so a missing salt never hides the DAG.
+
+**Rotating the salt invalidates every hash already published.** `cccd_hash` is
+deterministic: a new salt produces a different hash for the same person. After
+changing the Variable you must
+
+1. rebuild both masked tables — `airflow dags trigger ops_pii_masking_daily_dag`
+   (the job uses `CREATE OR REPLACE TABLE`, so one run replaces them in full), and
+2. re-key or drop anything downstream that joins on `cccd_hash`. Hashes from
+   before and after the rotation never match, and such a join returns zero rows
+   silently instead of failing.
+
+There is no re-hashing path for consumers holding old `cccd_hash` values, so treat
+rotation as a migration, not a config change.
+
+> Airflow does not mask this Variable in the UI: `pii_hash_salt` matches none of
+> Airflow's sensitive-name patterns, so its value is readable in Admin → Variables
+> and in the task's *Rendered Template* view. To hide it, add `salt` to
+> `[core] sensitive_var_conn_names`.
+
 ---
 
 ## 🐛 Troubleshooting
