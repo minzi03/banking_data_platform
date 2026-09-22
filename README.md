@@ -213,6 +213,19 @@ time semantics — see
 | Prometheus + Grafana monitoring        | ✅ Implemented |
 | GitHub Actions CI/CD                   | ✅ Implemented |
 
+### Operational capabilities
+
+| Capability                                                | Status         | Where |
+| --------------------------------------------------------- | -------------- | ----- |
+| Data contracts enforced at layer boundaries               | ✅ Implemented | 34 contract YAMLs |
+| Reconciliation between CDC and batch representations      | ✅ Implemented | `code_etl/cdc/reconcile_cdc.py` |
+| Schema drift detection with change classification         | ✅ Implemented | `governance/schema_drift.py`, daily DAG |
+| Backfill and idempotent replay by explicit `cob_dt`       | ✅ Implemented | `overwritePartitions` per partition |
+| Traceability from published number back to its source     | ✅ Implemented | evidence manifest, ADRs, lineage |
+| Incident response runbook with a verification step        | ✅ Implemented | [INCIDENT_RUNBOOK.md](docs/04-operations/INCIDENT_RUNBOOK.md), 8 scenarios |
+| Operations runbook                                        | ✅ Implemented | [RUNBOOK.md](RUNBOOK.md) |
+| Blast-radius limitation stated rather than implied        | ✅ Documented  | [Current Limitations](#current-limitations) |
+
 ---
 
 # Verified Portfolio Snapshot
@@ -1196,35 +1209,45 @@ Governance is implemented as a cross-cutting platform capability.
 ## Data Contracts
 
 ```text
-33 YAML data contracts
+34 YAML data contracts
 ```
 
-Contracts define expectations including:
+Contracts define expectations including schema, field constraints, ownership,
+quality rules and freshness expectations. They are enforced at the boundary
+between layers, so a breaking change is caught where it is introduced rather
+than where it surfaces.
 
-- schema
-- field constraints
-- ownership
-- quality rules
-- freshness expectations
+Two further controls sit alongside them and are worth naming, because they are
+the ones that catch drift rather than validate a declaration:
+
+- **Schema drift** — `governance/schema_drift.py` compares a table's live schema
+  against its contract and classifies each change as added column, removed
+  column or type change. The daily `ops_schema_drift_dag` runs it as a safety
+  check. Detecting a removed column after Gold has published is too late, which
+  is why the roadmap tracks giving drift the same blocking authority that
+  `assert_source_snapshots()` already has at the partition level.
+- **Reconciliation** — `code_etl/cdc/reconcile_cdc.py` compares CDC-derived
+  current state against the batch-derived SCD2 view. The two paths are
+  independent by design, so a difference between them is a signal about one of
+  the paths rather than a known offset to be tolerated.
 
 ---
 
 ## Data Quality
 
 ```text
-8 data-quality check types
+9 data-quality check types
 ```
 
-Examples:
+Row-count, null, uniqueness, range, referential-integrity, anomaly, freshness
+and schema-drift checks, plus a custom predicate where a rule needs one.
 
-- row-count checks
-- null checks
-- uniqueness checks
-- range checks
-- referential integrity
-- anomaly checks
-- freshness checks
-- schema-drift checks
+Data quality here is **detective, not preventive**: the checks report what
+already reached Silver, Gold and serving — they do not stop it being written.
+The only preventive mechanism is the two fail-loud guards inside the Gold jobs,
+which run before the write. Which invariants each check type does and does not
+cover, and the timeline gap this creates, is in
+[docs/05-quality/DATA_QUALITY.md](docs/05-quality/DATA_QUALITY.md).
 
 ---
 
@@ -1746,13 +1769,65 @@ FEATURE FREEZE
 
 # Documentation
 
-| Document                                                                   | Purpose                            |
-| -------------------------------------------------------------------------- | ---------------------------------- |
-| [Architecture](docs/02-architecture/architecture.md)                          | Detailed technical architecture    |
-| [Demo](docs/01-getting-started/demo.md)                                                  | 5-minute project walkthrough       |
-| [Evidence](docs/evidence)                                                 | Runtime screenshots                |
-| [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation)                     | CDC consolidation verification     |
-| [P2 Observability Evidence](docs/evidence/p2-observability)               | Observability verification         |
+Start at [docs/INDEX.md](docs/INDEX.md) — it maps every document by reader
+(assessor, new developer, on-call, analyst, auditor), so you do not have to
+guess which of the ~40 files applies to you.
+
+## Operations and incident response
+
+| Document                                                       | Purpose                                                                  |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [RUNBOOK.md](RUNBOOK.md)                                       | Operations manual — start/stop services, run the ETL, query, troubleshoot |
+| [Incident Runbook](docs/04-operations/INCIDENT_RUNBOOK.md)     | Data-incident procedures: S1 source partition missing, S2 Gold produced no rows, S3 DQ failure into quarantine, S4 schema drift, S5 CDC lag, S6 serving snapshot mismatch, S7 wrong backfill date, S8 catalog name. Each ends with an RCA section and a verification step that proves the incident is actually cleared |
+| [DBT Deployment](docs/04-operations/DBT_DEPLOYMENT.md)         | Serving-layer deployment                                                 |
+
+## Architecture and decisions
+
+| Document                                                            | Purpose                                                     |
+| ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [Architecture](docs/02-architecture/architecture.md)                | Detailed technical architecture                             |
+| [Architecture Decision Records](docs/02-architecture/adr/README.md) | 11 decisions with context, the choice made, and what it costs — why `overwritePartitions` rather than MERGE, why business dates are derived explicitly, why the serving layer is a table |
+| [CDC Pipeline](docs/02-architecture/cdc-pipeline.md)                | Postgres → Debezium → Kafka → Spark Streaming → Iceberg      |
+| [Observability Design](docs/02-architecture/observability-design.md) | Prometheus, Grafana, alerting                               |
+
+## Data and quality
+
+| Document                                                                    | Purpose                                                     |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [Data Dictionary](docs/03-data/DATA_DICTIONARY.md)                          | Every table and column, generated from DDL and contracts     |
+| [Data Input](docs/03-data/data-input-documentation.md)                      | Source tables and generation rules                           |
+| [Data Output](docs/03-data/data-output-documentation.md)                    | Gold and serving tables for analysts                         |
+| [Glossary](docs/03-data/GLOSSARY.md)                                        | Term definitions                                             |
+| [Data Quality](docs/05-quality/DATA_QUALITY.md)                             | The 9 check types, and which invariants they do not cover    |
+| [Evidence Manifest](docs/05-quality/EVIDENCE_MANIFEST.md)                   | How published numbers are generated and drift-checked        |
+| [Testing Strategy](docs/05-quality/TESTING_STRATEGY.md)                     | The five verification layers                                 |
+| [Technical Debt](docs/05-quality/technical-debt.md)                         | Known gaps, each with the condition that would close it      |
+
+## Security and compliance
+
+| Document                                                                   | Purpose                                              |
+| -------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [SECURITY.md](SECURITY.md)                                                 | Vulnerability reporting, secrets handling, PII       |
+| [PII Inventory](docs/06-security-compliance/PII_INVENTORY.md)              | The 31 tables holding personal data, and what does not protect them |
+| [AI Governance](docs/06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md)    | Model risk and governance                            |
+
+## Demo and evidence
+
+| Document                                                       | Purpose                             |
+| -------------------------------------------------------------- | ----------------------------------- |
+| [Demo](docs/01-getting-started/demo.md)                        | 5-minute project walkthrough        |
+| [Evidence](docs/evidence)                                      | Runtime verification artifacts      |
+| [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation)          | CDC consolidation verification      |
+| [P2 Observability Evidence](docs/evidence/p2-observability)    | Observability verification          |
+
+## Project
+
+| Document                        | Purpose                                       |
+| ------------------------------- | --------------------------------------------- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch, commit, test and lint conventions  |
+| [CHANGELOG.md](CHANGELOG.md)    | Release history                               |
+| [Roadmap](docs/09-analysis/ROADMAP.md) | What is planned, and the measurement behind each item |
+| [JD Market Analysis](docs/09-analysis/JD_MARKET_ANALYSIS.md) | 14 JD files, 2.77M characters, ~490 postings |
 
 ---
 
