@@ -756,8 +756,9 @@ invariants:
     expected: false
     severity: error
     rationale: 'Canonical verified manifest chỉ promote khi worktree sạch, nếu không
-      git_commit không mô tả đúng code đã sinh ra số liệu. Chạy local có thể bỏ qua
-      bằng --allow-dirty (chỉ ghi run artifact).
+      git_commit không mô tả đúng code đã sinh ra số liệu. Không có cờ nào bỏ qua được
+      invariant này; muốn chạy trên cây bẩn thì dùng --collect-only (chỉ ghi run artifact,
+      không promote).
 
       '
   legacy_spark_view_retired:

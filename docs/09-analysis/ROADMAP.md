@@ -58,7 +58,7 @@ Audit toàn bộ 14 Gold model: **1/14** — lỗi đơn lẻ.
 py -3 scripts/generate_metrics_manifest.py --cob-dt <ngày> --scope full
 ```
 
-- **Bắt buộc**: không dùng `--allow-dirty`. Manifest phải sinh từ worktree sạch, đúng `main`.
+- **Bắt buộc**: manifest phải sinh từ worktree sạch, đúng `main`. Không có cờ nào bỏ qua được `worktree_clean` (`--allow-dirty` đã bị gỡ); cây bẩn thì chỉ `--collect-only`.
 - **Acceptance**: `build.git_commit` = HEAD, `test_functions` = 598, `verify_readme_metrics.py` vẫn 22/22 sau khi cập nhật README.
 - **Size**: S
 

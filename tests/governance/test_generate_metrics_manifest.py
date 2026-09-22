@@ -644,9 +644,20 @@ class TestProvenanceIsNeverFalsified:
             "cây bẩn thì số đo không quy được về một commit — không được promote"
         )
 
-    def test_dirty_tree_can_be_overridden_explicitly(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
-        assert gen.promote_canonical_if_verified(self._manifest(True), [], allow_dirty=True) is True
+    def test_no_flag_can_override_a_dirty_tree(self):
+        """
+        `--allow-dirty` đã bị gỡ vì nó là no-op: invariant `worktree_clean`
+        (severity error) luôn đẩy cây bẩn vào `errors` trước, nên hàm promote
+        thoát ở `if errors` và nhánh trong không bao giờ chạy. CONTRIBUTING.md
+        lẫn ROADMAP.md đều cấm dùng cờ đó; `--collect-only` đã phủ đúng nhu cầu
+        "chạy trên cây bẩn mà không promote".
+        """
+        import inspect
+
+        params = inspect.signature(gen.promote_canonical_if_verified).parameters
+        assert "allow_dirty" not in params, "cờ nới cây bẩn đã bị gỡ — đừng thêm lại đường vòng"
+        with pytest.raises(SystemExit):
+            gen.main(["--allow-dirty", "--validate-contract"])
 
     def test_clean_tree_promotes(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
@@ -655,6 +666,19 @@ class TestProvenanceIsNeverFalsified:
     def test_errors_still_block_even_on_a_clean_tree(self, tmp_path, monkeypatch):
         monkeypatch.setattr(gen, "MANIFEST_PATH", tmp_path / "m.yaml")
         assert gen.promote_canonical_if_verified(self._manifest(False), ["some blocking error"]) is False
+
+    def test_refusal_message_names_the_dirty_worktree(self):
+        """
+        "1 blocking invariant fail" đúng nhưng bắt operator cuộn ngược tìm dòng
+        `ERROR worktree_clean` mới biết việc cần làm là commit.
+        """
+        msg = gen.promotion_refusal_message(self._manifest(True), ["worktree_clean: ... → FAIL"])
+        assert "BẨN" in msg and "--collect-only" in msg
+
+    def test_refusal_message_stays_generic_on_a_clean_tree(self):
+        msg = gen.promotion_refusal_message(self._manifest(False), ["some blocking error"])
+        assert "1 blocking invariant fail" in msg
+        assert "BẨN" not in msg
 
 
 class TestIntegrationTestsCollector:
