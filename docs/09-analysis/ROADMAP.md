@@ -17,30 +17,19 @@ main @ b787616   worktree sạch (trừ 6 file docs mới chưa commit)
 29 docker service · 20 DAG file · 10 CI job · 33 data contract · 9 DQ check type
 ```
 
-**Nợ kỹ thuật:**
+**Nợ kỹ thuật:** ✅ Tất cả TD-1 qua TD-8 đã fixed hoặc deliberate.
 
-| | Trạng thái ghi trong doc | Thực tế đã kiểm chứng |
-|---|---|---|
-| TD-1 · TD-3 · TD-4 · TD-7 | fixed | ✅ khớp |
-| TD-2 | disabled with reason | ✅ khớp |
-| TD-6 | deliberate | ✅ khớp |
-| **TD-5** | **open** | ⚠️ **thực chất đã xong** — `ruff \|\| true` đã gỡ, `test_shell_failure_propagation.py` tồn tại và pass (3 test). Các `\|\| true` còn lại đều nằm trên lệnh thu log chẩn đoán |
-
-**Evidence manifest đang lệch:**
-
-```text
-manifest sinh từ : f7ce77e  (branch fix/materialize-risk-marts-and-dbt-tests, 2026-09-19)
-HEAD hiện tại    : b787616  (2026-09-21)        → chênh 2 commit
-test_functions   : 476 (manifest)  vs  598 (thực tế)   → lệch 122
-```
-
-`verify_readme_metrics.py` vẫn báo 22/22 vì nó so **README ↔ manifest**, không so manifest ↔ thực tế. Vòng lặp chỉ khép khi regenerate.
+**Evidence manifest:** ✅ regenerate, `test_functions` = 655 khớp README và thực tế.
 
 ---
 
 ## 1. NGAY — dọn nền trước khi xây tiếp
 
 Mục tiêu: không còn tuyên bố nào sai trong repo. Làm hết nhóm này trước khi thêm tính năng.
+
+> ✅ **Nhóm này đã xong (2026-09-22).** 1.1 qua PR #7 · 1.2 regenerate manifest · 1.3 TD-5 đã đóng · 1.4 qua PR #35 · 1.5 qua PR #8 và các PR docs sau đó.
+>
+> Phát sinh thêm khi kiểm tra, đã sửa: `ARCHITECTURE.md` lệch 8 chỉ số so với thực tế (PR #34), và mục cấm `"Superset"` trong `test_docs_no_stale_claims.py` đã lỗi thời — service tồn tại từ commit `664c604`.
 
 ### 1.1 SỬA — `customer_360` phụ thuộc giả
 
@@ -168,23 +157,19 @@ Hiện `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, kh�
 
 ### 2.5 BỔ SUNG — incident runbook + RCA
 
-> **Đính chính (2026-09-21)**: bản đầu của mục này ghi "runbook chưa có" — sai.
-> `RUNBOOK.md` (313 dòng) **đã tồn tại**, nhưng là **runbook vận hành**:
-> start/stop service, chạy ETL, query, xử lý service không lên.
+> ✅ **Đã xong.** `docs/04-operations/INCIDENT_RUNBOOK.md` tồn tại với 8 kịch bản
+> S1–S8, mỗi cái theo cấu trúc triệu chứng → chẩn đoán → xử lý → **xác minh đã khỏi**,
+> cộng mục RCA ở cuối:
 >
-> Cái thiếu là **runbook sự cố dữ liệu** — một loại khác:
-
-| | `RUNBOOK.md` (đã có) | `INCIDENT_RUNBOOK.md` (thiếu) |
-|---|---|---|
-| Câu hỏi | "Chạy cái này thế nào?" | "Nó hỏng rồi, làm gì?" |
-| Nội dung | docker compose, spark-submit, trino CLI | partition nguồn thiếu · DQ fail → quarantine · schema drift → contract vỡ · CDC lag / DLQ đầy · backfill sai ngày |
-| Cấu trúc | theo thao tác | triệu chứng → chẩn đoán → xử lý → **xác minh đã khỏi** |
-
-Viết cho 3 pipeline chính: batch Gold, CDC, serving.
-
-Dùng đúng từ vựng thị trường: `runbook` (37 lần) · `incident response` (23) · `RCA` (64). **Không** dùng `RTO`/`RPO` — 0 lần trong toàn corpus JD.
-
-- **Size**: M · Chi tiết: [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) §3 nhóm C
+> S1 thiếu snapshot nguồn · S2 Gold không sinh dòng · S3 DQ fail → quarantine ·
+> S4 schema drift · S5 CDC lag · S6 serving lệch snapshot · S7 backfill sai ngày ·
+> S8 `Catalog 'lakehouse' not found`
+>
+> README trước đây không trỏ tới file này; đã thêm liên kết ở PR #35.
+>
+> Từ vựng đo lại trên 17 file JD (2026-09-22): `RCA`/root cause **63** ·
+> `incident response` **23** · `runbook` **9** · `RTO`/`RPO` **0**. Con số `runbook`
+> 37 ghi ở bản trước không tái lập được — dùng bảng đo mới, xem `JD_MARKET_ANALYSIS.md`.
 
 ### 2.6 BỔ SUNG — `dbt_expectations`
 
