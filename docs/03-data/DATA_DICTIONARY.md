@@ -1993,12 +1993,17 @@ _Chưa có data contract trong `governance/datasets/`._
 **Cột PII được đánh dấu bằng heuristic tên cột**, không phải bằng phân loại
 thủ công. Hai giới hạn cần biết:
 
-- **Sẽ bỏ sót** cột nhạy cảm đặt tên không theo mẫu thông dụng.
+- **Sẽ bỏ sót** cột nhạy cảm đặt tên không theo mẫu thông dụng. Đã đo:
+  mẫu không có `cccd` — số định danh cá nhân, và là trường nhạy cảm nhất
+  của nền tảng — nên nó KHÔNG được đánh dấu ở cả 5 bảng chứa nó. Các cột
+  khác cũng bị bỏ sót: `device_id`, `account_no`, `ip_address`,
+  `latitude`/`longitude`, `manager_name`.
 - **Đánh dấu cả cột đã masking** (ví dụ `full_name_masked`). Đây là chủ ý:
   cột đã che vẫn nằm trong lineage PII và vẫn cần kiểm soát truy cập.
 
-Đây là chỉ báo, không phải bản kiểm kê đầy đủ — bản kiểm kê thật là
-`PII_INVENTORY.md`, hiện chưa có (xem `DOCUMENTATION_PLAN.md` §3 nhóm F).
+Vì giới hạn thứ nhất, **đừng đọc con số trên là số cột PII**. Bản kiểm kê
+đầy đủ, dựng bằng cách parse DDL với danh sách cột rộng hơn, là
+[`PII_INVENTORY.md`](../06-security-compliance/PII_INVENTORY.md) §2.
 
 **File DDL bị loại khỏi tài liệu này**, kèm lý do:
 
