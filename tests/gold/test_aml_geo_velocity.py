@@ -163,6 +163,87 @@ class TestScoring:
             assert flag in alert_expr, f"{flag} không được tính vào alert_generated"
 
 
+class TestTypologyGrain:
+    """
+    Mọi typology AML nói về hành vi trong MỘT ngày nghiệp vụ.
+
+    Một partition `cob_dt` KHÔNG phải một ngày giao dịch: `cob_dt` là ngày NẠP.
+    Đo được trên snapshot 2026-09-20, partition đó chứa giao dịch trải **432
+    ngày nghiệp vụ** (2025-05-30 → 2026-08-04).
+
+    Đây từng là lỗi thật: `multi_channel_flag` tính `COUNT(DISTINCT channel)` ở
+    grain partition, nên nó đếm kênh trên ~14 tháng. 94,9% khách hàng chạm đủ
+    5 kênh trong khoảng đó → `>= 4` gắn cờ **99,9%** giao dịch. Cộng với
+    `high_value_flag` 60%, `alert_generated` (>= 2 flag) bắn trên **60%** toàn
+    bảng — model thực chất cảnh báo mọi giao dịch lớn.
+
+    Sửa grain đưa tỷ lệ cảnh báo từ 60% xuống 0,9%.
+    """
+
+    def test_channel_count_is_computed_per_day(self, sql: str):
+        assert "daily_channel_count" in sql, (
+            "channel_count phải tính trong daily_agg (grain customer-day). "
+            "Ở grain partition nó đếm kênh trên ~432 ngày và gắn cờ 99,9%."
+        )
+
+    def test_customer_stats_does_not_compute_channel_count(self, sql: str):
+        """
+        `customer_stats` gom toàn partition — chỉ hợp cho tổng credit/debit.
+
+        Nếu `COUNT(DISTINCT channel)` quay lại đây, flag sẽ âm thầm trở lại
+        99,9% mà không test nào khác đỏ.
+        """
+        cs_block = sql.split("customer_stats AS (")[1].split("),")[0]
+        assert "COUNT(DISTINCT channel)" not in cs_block, (
+            "COUNT(DISTINCT channel) nằm trong customer_stats (grain partition). Nó thuộc về daily_agg."
+        )
+
+    def test_multi_channel_reads_the_daily_column(self, sql: str):
+        assert "da.daily_channel_count >= 4" in sql
+
+
+class TestCalibratedThresholds:
+    """
+    Ngưỡng ĐO trên snapshot 2026-09-20, grain customer-day.
+
+    Đổi bất kỳ số nào ở đây thì phải đo lại phân phối và cập nhật cả docstring.
+    Một ngưỡng chọn cảm tính sẽ hoặc không bao giờ chạy, hoặc gắn cờ mọi thứ —
+    cả hai đều xảy ra thật trong repo này.
+    """
+
+    def test_velocity_threshold_is_reachable(self, sql: str):
+        """
+        `>= 10` là BẤT KHẢ THI: số giao dịch/khách/ngày tối đa đo được là 8.
+
+        Rule đó chưa từng gắn cờ một dòng nào. Phân phối thật:
+            >= 3 txn  2,7%  ·  >= 4 txn  0,4%  ·  >= 5 txn  0,0%
+        """
+        assert "da.daily_txn_count >= 4" in sql, (
+            "Ngưỡng velocity không còn là >= 4. Lưu ý >= 10 không bao giờ chạy "
+            "(max thực tế 8/ngày) — nếu đổi, đo lại trước."
+        )
+
+    def test_structuring_threshold_fires(self, sql: str):
+        """`>= 3` gắn cờ 0,0%; `>= 2` gắn cờ 0,2% ở grain ngày."""
+        assert "da.structured_count >= 2" in sql
+
+    def test_high_value_threshold_documents_why_it_is_uncalibrated(self, sql: str):
+        """
+        `high_value_flag` CỐ Ý giữ 200tr dù nó gắn cờ 60%.
+
+        Gốc rễ không phải ngưỡng mà là generator: `random.uniform(10.000,
+        500.000.000)` cho median 250tr — nằm TRÊN ngưỡng. Nâng lên p99 (~495tr)
+        sẽ cho tỷ lệ đẹp nhưng vô nghĩa với ngân hàng thật.
+
+        Test này không kiểm con số; nó kiểm rằng lý do vẫn được ghi lại, để
+        không ai tưởng 200tr là kết quả của một phép đo.
+        """
+        assert "ROADMAP 3.6" in sql, (
+            "Mất phần giải thích vì sao high_value_flag chưa hiệu chỉnh. "
+            "Nếu đã sửa generator, đo lại rồi cập nhật cả comment lẫn test này."
+        )
+
+
 class TestDDLAlignment:
     @pytest.mark.parametrize("column", ["geo_velocity_flag", "distinct_states", "high_risk_locations"])
     def test_column_exists_in_gold_ddl(self, column: str):
