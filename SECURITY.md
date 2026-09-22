@@ -53,16 +53,18 @@ Dữ liệu là tổng hợp, nhưng mô hình dữ liệu được thiết kế
 
 Cơ chế đang có:
 
-| Cơ chế | Vị trí |
-|---|---|
-| Column masking | `governance/` · `ops_pii_masking_daily_dag` |
-| RBAC | module `governance/rbac.py` |
-| Audit trail | module `governance/audit.py` |
-| Masking ở tầng serving | `full_name_masked` trong `mart_customer_360` |
+| Cơ chế | Vị trí | Có đang thực thi? |
+|---|---|---|
+| Column masking | `ops_pii_masking_daily_dag` → `lakehouse.sandbox.*_masked` | Có — nhưng là bản sao phái sinh, không sửa bản gốc |
+| Masking ở tầng serving | `full_name_masked` trong `mart_customer_360` | Có — che ngay khi ghi Gold |
+| Audit trail | module `governance/audit.py` | Có |
+| RBAC | module `governance/rbac.py` | **Không.** Định nghĩa 5 role và 24 permission, nhưng không file `.py` nào ngoài test import nó, và lakehouse không có lớp thực thi nào |
 
-**Chưa có tài liệu**: `PII_INVENTORY.md` (cột nào là PII, masking ở tầng nào, ai xem được bản gốc) và `RBAC_MATRIX.md`. Xem [`docs/DOCUMENTATION_PLAN.md`](docs/09-analysis/DOCUMENTATION_PLAN.md) §3 nhóm F.
+Kiểm kê đầy đủ — bảng nào, cột nào, tầng nào, ai xem được bản gốc:
+[`docs/06-security-compliance/PII_INVENTORY.md`](docs/06-security-compliance/PII_INVENTORY.md).
+**Chưa có tài liệu**: `RBAC_MATRIX.md`.
 
-Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: masking hiện áp ở tầng Gold/serving, **không** ở Bronze. Bronze giữ giá trị gốc. Đó là lựa chọn hợp lý cho một lakehouse có kiểm soát truy cập theo tầng, nhưng sẽ sai nếu Bronze của bạn ai cũng đọc được.
+Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: masking áp ở tầng Gold/serving, **không** ở Bronze **và cũng không ở Silver** — cả hai giữ giá trị gốc, gồm `cccd`. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng; dự án này chưa có lớp đó, nên hiện tại việc dùng bảng đã che là tự nguyện. Xem `PII_INVENTORY.md` §5 và §7.
 
 ---
 

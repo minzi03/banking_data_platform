@@ -12,7 +12,7 @@ docs/
 ├── 03-data/                  tra cứu: dictionary · glossary · contracts · lineage
 ├── 04-operations/            vận hành + sự cố
 ├── 05-quality/               nợ kỹ thuật + cơ chế evidence manifest
-├── 06-security-compliance/   quản trị AI
+├── 06-security-compliance/   kiểm kê PII + quản trị AI
 ├── 09-analysis/              nghiên cứu, có ngày đo · archive/ bản đã thay thế
 └── evidence/                 KHÔNG phải tài liệu — metrics-manifest + bằng chứng runtime
 ```
@@ -131,9 +131,12 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 
 | Tài liệu | Nội dung |
 |---|---|
+| [`PII_INVENTORY.md`](06-security-compliance/PII_INVENTORY.md) | **31 bảng chứa dữ liệu cá nhân**, cột nào ở tầng nào, ba cơ chế che và chỗ chúng lệch nhau — và vì sao lakehouse hiện không có kiểm soát truy cập |
 | [`AI_GOVERNANCE_FRAMEWORK.md`](06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md) | Khung quản trị cho thành phần AI/ML |
 
-> **Chưa có**: `PII_INVENTORY.md`, `RBAC_MATRIX.md`, `AUDIT_TRAIL.md`, `REGULATORY_MAPPING.md` (BCBS 239 / SBV → bảng, cột, job nào đáp ứng). Với ngân hàng, nhóm này là bắt buộc chứ không phải tuỳ chọn.
+> **Chưa có**: `RBAC_MATRIX.md`, `AUDIT_TRAIL.md`, `REGULATORY_MAPPING.md` (BCBS 239 / SBV → bảng, cột, job nào đáp ứng). Với ngân hàng, nhóm này là bắt buộc chứ không phải tuỳ chọn.
+>
+> `PII_INVENTORY.md` §6 và §7 ghi hai điểm yếu đang tồn tại — đọc trước nếu bạn định mang mẫu này sang hệ thống có dữ liệu thật.
 
 ## 7. Nghiên cứu & định hướng
 
