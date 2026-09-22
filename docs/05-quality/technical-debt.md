@@ -285,3 +285,79 @@ because:
 2. They cannot access any external service
 3. Git history rewrite risks repository integrity and PR/branch references
 4. The docker stack itself generates new credentials on `docker compose up`
+
+---
+
+## TD-8 — `make seed` runs the generator in a container that cannot see it
+
+**Status:** open (recorded 2026-09-22)
+
+`make seed` executes the data generator inside the `postgres` container:
+
+```makefile
+seed:
+	$(DC) exec postgres python /opt/project/data_generator/generate_all.py \
+		--host postgres --port 5432
+```
+
+That path does not exist there. `postgres` mounts only its data volume and
+the init scripts — not the repository:
+
+```text
+postgres          postgres-data:/var/lib/postgresql/data
+                  ./init_postgres:/docker-entrypoint-initdb.d
+
+spark-worker-1    ..:/opt/project          <- has the repo
+airflow-scheduler ..:/opt/project          <- has the repo
+dbt               ../dbt:/usr/src/dbt      <- has its own subtree
+```
+
+So the target fails with `No such file or directory` for
+`/opt/project/data_generator/`, and has presumably never worked.
+
+### How it was found
+
+During the 2026-09-22 re-seed after the log-normal amount change (#21).
+`make seed` was the documented way to regenerate data; it could not run, and
+`make seed-local` — which executes from the host — was used instead.
+
+The failure is immediate and loud, so nothing silently produced wrong data.
+The cost is time: the next person hits the same wall.
+
+### Why this is TD-4's family
+
+TD-4 was the same shape — bootstrap targets pointing at a working directory
+the container did not have. It was fixed by adding `-w /opt/project` to
+targets running in `spark-worker-1`, which *does* mount the repo. `seed` was
+not in that list because it targets a different container, and the container
+choice itself is the bug.
+
+A `make` target that cannot work is worse than no target. It reads as the
+supported path and consumes the time of whoever trusts it.
+
+### Options
+
+```text
+(a) point `seed` at a container that mounts the repo (spark-worker-1 or
+    airflow-scheduler), keeping --host postgres for the connection
+(b) make `seed` an alias for `seed-local` and delete the container variant
+(c) mount the repo into postgres — rejected: the database container has no
+    reason to carry application code
+```
+
+(a) is closest to the TD-4 fix and keeps seeding inside the compose network.
+(b) is simpler but makes seeding depend on a host Python with the right
+dependencies, which is the thing containers exist to avoid.
+
+### Acceptance
+
+```text
+[ ] `make seed` completes against a running stack, from a clean checkout
+[ ] the chosen container demonstrably mounts data_generator/
+[ ] `make seed-local` still works, or is removed deliberately with a reason
+[ ] a smoke check proves the target ran the generator rather than exiting 0
+    without doing anything — see TD-5 for why that distinction matters here
+```
+
+Related: TD-4 (same class, different container), TD-5 (`make` targets still
+do not propagate child exit codes, so a broken target can report success).
