@@ -655,9 +655,7 @@ class TestProvenanceIsNeverFalsified:
         import inspect
 
         params = inspect.signature(gen.promote_canonical_if_verified).parameters
-        assert "allow_dirty" not in params, (
-            "cờ nới cây bẩn đã bị gỡ — đừng thêm lại đường vòng"
-        )
+        assert "allow_dirty" not in params, "cờ nới cây bẩn đã bị gỡ — đừng thêm lại đường vòng"
         with pytest.raises(SystemExit):
             gen.main(["--allow-dirty", "--validate-contract"])
 
@@ -674,9 +672,7 @@ class TestProvenanceIsNeverFalsified:
         "1 blocking invariant fail" đúng nhưng bắt operator cuộn ngược tìm dòng
         `ERROR worktree_clean` mới biết việc cần làm là commit.
         """
-        msg = gen.promotion_refusal_message(
-            self._manifest(True), ["worktree_clean: ... → FAIL"]
-        )
+        msg = gen.promotion_refusal_message(self._manifest(True), ["worktree_clean: ... → FAIL"])
         assert "BẨN" in msg and "--collect-only" in msg
 
     def test_refusal_message_stays_generic_on_a_clean_tree(self):
