@@ -353,9 +353,11 @@ because:
 
 ## TD-8 — `make seed` runs the generator in a container that cannot see it
 
-**Status:** open (recorded 2026-09-22)
+**Status:** fixed (2026-09-22) — option (a), pointed at `airflow-scheduler`.
+Three of four acceptance items are verified against the running stack; the
+fourth is deliberately not executed, for a reason recorded under *Acceptance*.
 
-`make seed` executes the data generator inside the `postgres` container:
+`make seed` executed the data generator inside the `postgres` container:
 
 ```makefile
 seed:
@@ -412,15 +414,65 @@ supported path and consumes the time of whoever trusts it.
 (b) is simpler but makes seeding depend on a host Python with the right
 dependencies, which is the thing containers exist to avoid.
 
+### Correction: (a) offered two containers, only one of them works
+
+The option above named `spark-worker-1` and `airflow-scheduler` as
+interchangeable, because both mount the repo. Mounting the repo is necessary
+and not sufficient — the container also has to be able to *run* the generator.
+Measured against the running stack:
+
+```text
+spark-worker-1     mounts repo    no `python` on PATH (Spark image ships python3 only)
+                                  python3 -c "import psycopg2" → ModuleNotFoundError
+airflow-scheduler  mounts repo    python ✓   psycopg2 2.9.9 ✓   yaml ✓
+```
+
+Making `spark-worker-1` work would mean adding `psycopg2` to
+`docker/requirements-spark.txt`. That contradicts a decision already written
+down in `requirements-ci-seed.txt`: seed generation is bootstrap tooling, not a
+Spark workload, and the Spark image should carry no package the ETL does not
+use. So the choice is `airflow-scheduler`, and the reason is now a comment on
+the target itself rather than folklore.
+
+This is the same failure mode as the bug it fixes — a container was named from
+one property (does it mount the repo?) without checking the other (can it run
+the code?).
+
 ### Acceptance
 
 ```text
+[x] the chosen container demonstrably mounts data_generator/
+    docker inspect banking-airflow-scheduler →
+      F:\...\banking_data_platform -> /opt/project
+[x] a smoke check proves the target ran the generator rather than exiting 0
+    without doing anything
+    docker exec -w /opt/project banking-airflow-scheduler \
+      python data_generator/generate_all.py --help  → usage printed,
+    which means every module-level import resolved (psycopg2, yaml, and the
+    local connectors/ + generators/ packages). Connectivity checked separately:
+    psycopg2 connect from that container to host `postgres` → 10,000 customers.
+[x] `make seed-local` still works, or is removed deliberately with a reason
+    unchanged — kept as the host-side path, still the fallback when the stack
+    is not up
 [ ] `make seed` completes against a running stack, from a clean checkout
-[ ] the chosen container demonstrably mounts data_generator/
-[ ] `make seed-local` still works, or is removed deliberately with a reason
-[ ] a smoke check proves the target ran the generator rather than exiting 0
-    without doing anything — see TD-5 for why that distinction matters here
+    NOT RUN, deliberately. The generator sets no RNG seed anywhere under
+    data_generator/, so a re-seed produces different data than the snapshot
+    the lakehouse currently holds and than the one `portfolio-v2.0` was
+    verified against. Closing this item costs a full re-seed plus a Bronze →
+    Silver → Gold rebuild and a manifest regeneration. Run it when a re-seed
+    is wanted for its own sake, not to tick a box.
 ```
+
+The last item is recorded as unchecked rather than quietly dropped:
+`not_collected ≠ verified`. What is proven is that the container can reach and
+execute the generator — which is the entire failure this item describes. What
+is not proven is a full generation run end to end.
+
+**Regression guard:** `tests/governance/test_makefile_container_mounts.py`
+cross-checks Makefile `$(DC) exec` targets against the volumes declared in
+`docker-compose.yml` — an invariant that spans two files, which is why reading
+either one alone missed it twice. Negative-tested: restoring the `postgres`
+container in the target turns two of its three tests red.
 
 Related: TD-4 (same class, different container), TD-5 (`make` targets still
 do not propagate child exit codes, so a broken target can report success).
