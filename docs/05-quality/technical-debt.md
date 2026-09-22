@@ -175,7 +175,7 @@ in `trino-init` and `benchmark.yml` drifted apart in the first place.
 
 ## TD-5 — Shell failure propagation and false-success patterns
 
-**Status:** open (recorded at `portfolio-v1.1`)
+**Status:** fixed (2026-09-22, each acceptance item re-verified against current files)
 
 A swallowed child exit code has now been found five separate times in this
 repository. That is a pattern, not a run of bad luck, and each instance produced
@@ -214,11 +214,74 @@ by a check that looks for the pattern itself.
 ```text
 [x] critical shell steps use set -euo pipefail or equivalent
 [x] no critical command is masked by || true
-[ ] one-shot containers fail non-zero when any required command fails
-[ ] pipeline exit status comes from the producer being verified
-[ ] success logs are emitted only after post-condition verification
+[x] one-shot containers fail non-zero when any required command fails
+[x] pipeline exit status comes from the producer being verified
+[x] success logs are emitted only after post-condition verification
 [x] CI has a static contract test for known false-success patterns
 ```
+
+### Closing evidence (2026-09-22)
+
+The three items above were still unticked, so each was re-checked against the
+file as it stands rather than against memory of the fix.
+
+**One-shot containers** — `docker/docker-compose.ci.yml`, `trino-init`:
+
+```yaml
+entrypoint: >
+  /bin/sh -ec "
+    ...
+    trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA ...';
+```
+
+`-e` is present, so a failing `CREATE SCHEMA` now kills the container instead
+of falling through to the trailing `echo`. `--server trino:8080` is also
+there; without it the CLI targets localhost and all five statements fail.
+
+**Exit status from the producer** — `.github/workflows/benchmark.yml`, the
+query runner reads the Trino CLI's own status and keeps streams apart:
+
+```bash
+if ! docker exec ci-trino trino ... >"$out" 2>"$err"; then
+  echo "::error::benchmark query '$name' thất bại"
+  exit 1
+fi
+```
+
+The old `result=$(docker exec ... | grep -v WARNING)` returned `grep`'s
+status, which is how instance 6 published timings for a query that never ran.
+
+**Post-condition before the success log** — same workflow, after
+`trino-init` exits:
+
+```bash
+# Kiểm chứng kết quả bootstrap, không tin vào exit code một mình.
+docker exec ci-trino trino --execute "SHOW SCHEMAS FROM iceberg" > /tmp/schemas.out
+for schema in bronze silver gold serving; do
+  grep -qx "$schema" /tmp/schemas.out || missing="$missing $schema"
+done
+... echo "::error::trino-init exit 0 nhưng thiếu schema:$missing"; exit 1
+```
+
+This is the item that matters most, and it is the one the earlier assessment
+in this repository got wrong twice. Exit code is necessary, not sufficient.
+
+### Scope note
+
+Two of the three closing items live in `benchmark.yml`, which TD-2 left on
+`workflow_dispatch` only. The patterns are gone from the code; they are not
+exercised on a schedule. If that workflow is ever re-enabled, these are the
+lines to watch first.
+
+### What remains true
+
+The remaining `|| true` occurrences in `benchmark.yml` are on diagnostic
+commands — fetching a container id that may legitimately be empty, printing
+a log file that may not exist, dumping `compose logs` during triage. None of
+them masks a command whose success is being asserted.
+
+`make` targets still do not propagate child exit codes. That is recorded
+against TD-8, where it matters for `make seed`.
 
 **Fixed 2026-09-14:**
 - Instance 7 (ci.yml lint): removed `|| true` from `ruff check` and
