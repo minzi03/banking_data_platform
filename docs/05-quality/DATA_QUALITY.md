@@ -617,7 +617,7 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| `ops_contract_validation_dag` chạy được | pydantic đã có trên worker, nhưng `enforcement.py` chạy như script không thấy package `governance`, và không có CLI để nhận `--layer`/`--validate` (TD-10) |
+| Contract hợp lệ với bảng thật | `ops_contract_validation_dag` giờ chạy thật (`contract_validation.py`), và lượt đầu cho thấy 20/33 contract mô tả sai bảng của chúng (TD-12) |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
 | DDL cho `lakehouse.quarantine.*` | §5 — hàng vi phạm được đếm nhưng không ghi được đi đâu |
 | Ai đọc `data_quality_log` | write-only; không dashboard, không dbt model |

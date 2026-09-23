@@ -91,6 +91,38 @@ docker compose exec trino trino --catalog lakehouse
 SELECT * FROM opslakehouse.data_quality_log ORDER BY checked_at DESC LIMIT 10;
 ```
 
+### 5b. Contract validation
+
+Checks one day's snapshot of every contract in a layer against its
+`quality_rules` (`code_etl/shared/ops/contract_validation.py`, run daily by
+`ops_contract_validation_dag`). Exit 1 means at least one contract failed:
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/project/code_etl/shared/ops/contract_validation.py --cob_dt 2026-09-22 --layer silver
+```
+
+Results land in PostgreSQL, not the lakehouse — query them with `psql`:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT dataset_id, check_name, check_status, details FROM opslakehouse.contract_validation_log WHERE check_status <> '"'"'PASS'"'"' ORDER BY checked_at DESC LIMIT 20"'
+```
+
+**Stacks created before 2026-09-23 need two one-time steps.** The log table used
+to be defined only in `docker/init_openmetadata/`, which nothing runs, and the
+worker had no database credentials:
+
+```bash
+sed -n '/^-- Table: contract_validation_log/,/^COMMENT ON TABLE opslakehouse.contract_validation_log/p' docker/init_postgres/00_extensions.sql | docker exec -i banking-postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d banking_db'
+```
+
+```bash
+cd docker && docker compose up -d spark-worker-1
+```
+
+The first is idempotent (`CREATE ... IF NOT EXISTS`). The second recreates the
+worker so it picks up `POSTGRES_USER`/`POSTGRES_PASSWORD`; without them the job
+stops with an explicit error instead of falling back to a password in the code.
+
 ### 6. Check Lineage
 ```bash
 docker compose exec trino trino --catalog lakehouse

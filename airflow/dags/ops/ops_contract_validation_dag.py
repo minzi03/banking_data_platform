@@ -18,7 +18,7 @@ import pendulum
 from etl_flag import make_start_flag_task, make_end_flag_task
 
 DAG_ID              = "ops_contract_validation_dag"
-APPLICATION_PATH    = "/opt/project/governance/enforcement.py"
+APPLICATION_PATH    = "/opt/project/code_etl/shared/ops/contract_validation.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
 COB_DT              = "{{ ds }}"
 
@@ -92,7 +92,7 @@ validate_silver_contracts = BashOperator(
         "--conf spark.driver.memory=512m "
         "--conf spark.executor.memory=768m "
         "--conf spark.executor.cores=1 "
-        f"{APPLICATION_PATH} --cob_dt {COB_DT} --layer silver --validate"
+        f"{APPLICATION_PATH} --cob_dt {COB_DT} --layer silver"
     ),
     dag=dag,
 )
@@ -105,7 +105,7 @@ validate_gold_contracts = BashOperator(
         "--conf spark.driver.memory=512m "
         "--conf spark.executor.memory=768m "
         "--conf spark.executor.cores=1 "
-        f"{APPLICATION_PATH} --cob_dt {COB_DT} --layer gold --validate"
+        f"{APPLICATION_PATH} --cob_dt {COB_DT} --layer gold"
     ),
     dag=dag,
 )

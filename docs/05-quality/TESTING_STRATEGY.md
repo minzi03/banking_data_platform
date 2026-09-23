@@ -190,6 +190,19 @@ chúng đều xanh trong khi cả hai job bị Spark từ chối lúc phân tíc
 Chỉ lượt chạy trên stack mới thấy. Hai model này không nằm trong harness
 `test_gold_fanout_regression.py`, nơi SQL được Spark phân tích thật.
 
+CI chuyển sang Python 3.10 (TD-10) thêm **1 hàm → 1 node**:
+`test_ci_runs_the_worker_python`. Rồi contract validation (CLI thật cho
+`ops_contract_validation_dag`, freshness đánh giá được cột DATE) thêm **19 hàm →
+22 node**: 14 trong `tests/ops/test_contract_validation.py`, 5 trong
+`test_freshness_checks.py`, và 3 node do guard `test_worker_python_compat.py` tự
+quét file CLI mới.
+
+```text
+def test_* count                            769   (749 + 1 + 19)
+pytest --collect-only -q tests/            1433   (1410 + 1 + 22)
+py -3 -m pytest -q -m "not integration"    1366 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 

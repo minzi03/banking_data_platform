@@ -72,3 +72,28 @@ CREATE INDEX IF NOT EXISTS idx_dq_table_cobdt
     ON opslakehouse.data_quality_log (table_name, cob_dt);
 
 COMMENT ON TABLE opslakehouse.data_quality_log IS 'Data quality check results — audit trail for pipeline monitoring';
+
+-- =============================================================================
+-- Table: contract_validation_log — Data Contract Check Results
+-- =============================================================================
+-- Ghi bởi code_etl/shared/ops/contract_validation.py (ops_contract_validation_dag).
+-- Bảng này trước đây chỉ được khai trong docker/init_openmetadata/, thư mục
+-- không được mount vào đâu — nên nó chưa từng tồn tại trong stack.
+CREATE TABLE IF NOT EXISTS opslakehouse.contract_validation_log (
+    id              SERIAL PRIMARY KEY,
+    dataset_id      VARCHAR(255)   NOT NULL,   -- e.g. 'banking.dim_customer_silver'
+    check_name      VARCHAR(100)   NOT NULL,   -- e.g. 'required_columns', 'unique_check'
+    check_status    VARCHAR(20)    NOT NULL,   -- PASS / FAIL / WARN
+    expected_value  TEXT,
+    actual_value    TEXT,
+    details         TEXT,
+    cob_dt          DATE           NOT NULL,
+    checked_at      TIMESTAMP      NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT chk_contract_status CHECK (check_status IN ('PASS', 'FAIL', 'WARN'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_contract_validation_dataset_cobdt
+    ON opslakehouse.contract_validation_log (dataset_id, cob_dt);
+
+COMMENT ON TABLE opslakehouse.contract_validation_log IS 'Data contract check results per dataset and cob_dt';
