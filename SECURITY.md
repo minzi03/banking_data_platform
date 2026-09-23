@@ -62,7 +62,7 @@ Cơ chế đang có:
 
 Kiểm kê đầy đủ — bảng nào, cột nào, tầng nào, ai xem được bản gốc:
 [`docs/06-security-compliance/PII_INVENTORY.md`](docs/06-security-compliance/PII_INVENTORY.md).
-**Chưa có tài liệu**: `RBAC_MATRIX.md`.
+Ma trận role × schema × quyền và ai thấy PII gốc: [`docs/06-security-compliance/RBAC_MATRIX.md`](docs/06-security-compliance/RBAC_MATRIX.md) — sinh từ `rbac.py`, CI chặn drift.
 
 Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: che **lúc ghi** chỉ áp ở tầng Gold/serving. Bronze **và Silver** vẫn *lưu* giá trị gốc, gồm `cccd`; Trino chỉ che chúng **lúc đọc**, với user không phải admin/ETL. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng. Dự án này giờ có lớp đó ở Trino, nhưng chưa có xác thực — nên với ai cố ý khai tên `admin`, hoặc đọc thẳng MinIO, bản gốc vẫn đọc được. Xem `RUNBOOK.md` §9.
 

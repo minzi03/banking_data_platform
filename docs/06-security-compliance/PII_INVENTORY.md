@@ -317,8 +317,8 @@ Không có file cấu hình thì Trino dùng access control `default`: cho phép
 `rbac.py` khi đó cũng không được thực thi: không file nào ngoài test `import` nó,
 và nó mắc cùng lỗi che cột Gold không tồn tại.
 
-Ma trận role × dataset × quyền in được bằng lệnh ở §11. Tài liệu `RBAC_MATRIX.md`
-riêng vẫn chưa có.
+Ma trận role × schema × quyền, và ai thấy PII gốc ở bảng nào:
+[`RBAC_MATRIX.md`](RBAC_MATRIX.md) — sinh từ `rbac.py`, CI chặn drift.
 
 ---
 
@@ -467,7 +467,7 @@ Nếu mọi kiểm tra "phải bị chặn" lại *thành công*, Trino không n
 | Lý do cho bất đối xứng `age` vs `age_group_decade` | §4 |
 | Chính sách lưu trữ / xoá dữ liệu cá nhân | §10 — chỉ có cấu hình bảo trì chung |
 | Quy trình xử lý yêu cầu xoá (right to erasure) | không có runbook |
-| `RBAC_MATRIX.md` · `AUDIT_TRAIL.md` · `REGULATORY_MAPPING.md` | ba tài liệu còn lại của nhóm này |
+| `AUDIT_TRAIL.md` · `REGULATORY_MAPPING.md` | hai tài liệu còn lại của nhóm này |
 
 ---
 

@@ -133,9 +133,10 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 | Tài liệu | Nội dung |
 |---|---|
 | [`PII_INVENTORY.md`](06-security-compliance/PII_INVENTORY.md) | **31 bảng chứa dữ liệu cá nhân**, cột nào ở tầng nào, ba cơ chế che và chỗ chúng lệch nhau — và kiểm soát truy cập ở Trino phủ tới đâu |
+| [`RBAC_MATRIX.md`](06-security-compliance/RBAC_MATRIX.md) | **Sinh từ `governance/rbac.py`**: 8 role, 14 user, quyền theo schema, ai thấy PII gốc ở bảng nào — và những gì ma trận KHÔNG bảo đảm (chưa xác thực, Spark/MinIO đi vòng) |
 | [`AI_GOVERNANCE_FRAMEWORK.md`](06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md) | Khung quản trị cho thành phần AI/ML |
 
-> **Chưa có**: `RBAC_MATRIX.md`, `AUDIT_TRAIL.md`, `REGULATORY_MAPPING.md` (BCBS 239 / SBV → bảng, cột, job nào đáp ứng). Với ngân hàng, nhóm này là bắt buộc chứ không phải tuỳ chọn.
+> **Chưa có**: `AUDIT_TRAIL.md`, `REGULATORY_MAPPING.md` (BCBS 239 / SBV → bảng, cột, job nào đáp ứng). Với ngân hàng, nhóm này là bắt buộc chứ không phải tuỳ chọn.
 >
 > `PII_INVENTORY.md` §7 ghi giới hạn của lớp kiểm soát truy cập hiện có — chưa xác thực, không phủ Spark/MinIO — đọc trước nếu bạn định mang mẫu này sang hệ thống có dữ liệu thật.
 
