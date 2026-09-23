@@ -625,7 +625,10 @@ this entry existed for as long as it did; they are documented in
 
 ## TD-10 — Ops and governance jobs could not import on the Spark worker's Python 3.8
 
-**Status:** fixed for syntax (2026-09-23, verified on the stack) · open: runtime decision, pydantic
+**Status:** fixed (2026-09-23, verified on the stack) — runtime decision taken: the Spark
+image moved to Python 3.10 (Ubuntu 22.04, Java 17) and now installs pydantic. See
+[Runtime upgrade](#runtime-upgrade-2026-09-23). Residual: CI and Airflow still run 3.11;
+`ops_contract_validation_dag` is blocked by two causes that are not about Python.
 
 `banking-spark-worker-1` runs **Python 3.8.10**. Every ops and governance task in
 Airflow runs there: `docker exec banking-spark-worker-1 spark-submit ...` or
@@ -735,14 +738,108 @@ and deletes orphan files, which is not something to do for a verification.
 [x] zoneinfo removed without changing the timestamps produced
 [x] static regression test, negative-tested against the old code
 [x] data_quality.py and quarantine.py run end to end on the stack
-[ ] decide the runtime: upgrade the Spark image's Python, or add a 3.8 CI job
-[ ] install pydantic on the worker, or stop importing it there
-    (ops_contract_validation_dag cannot run until then)
+[x] decide the runtime: upgrade the Spark image's Python, or add a 3.8 CI job
+    → upgrade, 2026-09-23 (below)
+[x] install pydantic on the worker, or stop importing it there
+    → installed; every governance module imports on the worker
+[ ] ops_contract_validation_dag runs — NOT unblocked by pydantic, see below
 ```
 
-The first open item is the real fix and is an architecture decision, so it is
-not taken here. Until it is, any new syntax ruff "upgrades" into these files is
-caught by the static test only if it lands in an annotation.
+### Runtime upgrade (2026-09-23)
+
+**Decision: upgrade the image**, not add a 3.8 CI job. A 3.8 CI job would have kept
+the repo declaring one floor (`>=3.10`) while running another, and would not have
+fixed the missing pydantic.
+
+Python comes from the base image's OS, not from Spark. Measured with
+`docker run --rm --entrypoint python3 <image> --version` and friends:
+
+| | `apache/spark:3.5.3` (before) | `apache/spark:3.5.3-scala2.12-java17-python3-ubuntu` (after) |
+|---|---|---|
+| OS | Ubuntu 20.04.6 (focal) | Ubuntu 22.04.5 (jammy) |
+| Python | 3.8.10 | **3.10.12** |
+| Java | 11.0.24 | 17.0.12 |
+| Spark | 3.5.3 | 3.5.3 — same tarball, same GPG key upstream |
+| pydantic | absent | 2.13.5 (`pydantic>=2.9,<3`, the pyproject floor) |
+
+3.10 is the floor the repo already declared (`requires-python >=3.10`, ruff
+`target-version = "py310"`), so the runtime now matches the declarations instead
+of the other way round.
+
+**Verification, old image vs new image, same harness:**
+
+```text
+import all 15 worker entry points     old  7/15  (8× No module named 'pydantic')
+  (governance.* by package name,      new 15/15
+   the others by file path)
+spark-submit local[2]:                old  OK on Java 11 / Python 3.8
+  Iceberg write + overwritePartitions new  OK on Java 17 / Python 3.10
+  + read, and a Python UDF that            Python worker 3.10.12 = driver
+  forces a Python worker
+```
+
+Then on the stack — `spark-master` and `spark-worker-1` rebuilt from the new
+Dockerfile, with `postgres`, `minio`, `iceberg-rest` — using the DAG's own
+`spark-submit` command and `--cob_dt 2026-09-22`, the date TD-11 was verified on:
+
+```text
+data_quality --layer gold     20 checks · 20 PASS                   exit 0   same as TD-11
+data_quality --layer silver   62 checks · 61 PASS · 1 WARN · 0 FAIL  exit 0   same as TD-11
+                              JDBC write to opslakehouse.data_quality_log OK on Java 17
+quarantine   --layer all      14 PASS · 3 WARN · 1 FAIL              exit 1   same as before:
+                              lakehouse.quarantine.* tables do not exist (DATA_QUALITY §5)
+```
+
+Not run: Airflow itself, Trino, dbt, and the Bronze/Silver/Gold ETL jobs. The CI
+`Trino Integration` job builds `Dockerfile.spark` and runs the ETL against a REST
+catalog and MinIO, so it exercises the new image on the path this run skipped.
+
+**One correction to the table above.** Its "OK" rows for `schema_drift`,
+`freshness_checks`, `lineage` and `rbac` held for loading each **file**. Imported
+by **package name** — `from governance.x import ...`, which is how
+`data_quality.py` loads its `anomaly_detection`, `freshness_check` and
+`schema_drift` checks — every one of them failed on the old image, because
+`governance/__init__.py` eagerly imports `governance.contracts`, i.e. pydantic.
+No configured rule used those three check types, so nothing visible broke.
+With pydantic installed the point is moot, but the table was incomplete.
+
+**`ops_contract_validation_dag` still cannot run, and pydantic was never the only
+reason.** Run exactly as the DAG runs it on the upgraded worker:
+
+```text
+spark-submit /opt/project/governance/enforcement.py --cob_dt 2026-09-22 --layer silver --validate
+  File "/opt/project/governance/enforcement.py", line 28, in <module>
+    from governance.contracts import DatasetContract
+ModuleNotFoundError: No module named 'governance'                           exit 1
+```
+
+Run as a script, `/opt/project` is not on `sys.path`. And past that, the file has
+no `__main__` and no argument parser — `--layer silver --validate` would be
+ignored and the job would exit 0 having validated nothing. Both are out of scope
+here; fixing the path alone would turn a loud failure into a silent one.
+
+### What still does not match
+
+```text
+Spark worker     Python 3.10    ← runtime of code_etl/ and governance/
+pyproject        >=3.10 · ruff py310
+CI (all jobs)    Python 3.11
+Airflow image    Python 3.11    ← driver for the two SparkSubmitOperator DAGs
+```
+
+- **CI one minor ahead of the worker.** Same failure class as this entry, one step
+  smaller: 3.11-only syntax or API is green in CI and dies on the worker.
+  `tests/governance/test_worker_python_compat.py` (renamed from
+  `test_worker_python38_compat.py`) now checks that the image's measured Python,
+  `WORKER_PYTHON`, `requires-python` and ruff's target agree, and rejects 3.11+
+  syntax, `tomllib`, and a list of 3.11+ names (`typing.Self`, `datetime.UTC`,
+  `enum.StrEnum`, …). The list is selective, not exhaustive. Running CI on 3.10 is
+  the complete fix.
+- **Driver 3.11, executors 3.10** for `ops_maintenance_weekly_dag` and
+  `ops_pii_masking_daily_dag`, which launch from the Airflow container. PySpark
+  refuses mismatched minors only when it starts a Python worker (UDF, RDD,
+  pandas UDF). A search of `code_etl/`, `governance/`, `scripts/` and `ml/` finds
+  none, so this is latent — it was 3.11 vs 3.8 before, too.
 
 ---
 

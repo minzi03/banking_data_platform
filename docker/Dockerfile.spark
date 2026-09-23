@@ -2,7 +2,19 @@
 # Custom Spark Worker Image — Banking Data Platform
 # Based on apache/spark:3.5.3 with JDBC drivers, S3A, Iceberg, and Python deps
 # =============================================================================
-FROM apache/spark:3.5.3
+# Python đi theo hệ điều hành của base image, không theo Spark (TD-10):
+#
+#   apache/spark:3.5.3                            eclipse-temurin:11-jre-focal
+#                                                 Ubuntu 20.04 · Java 11 · Python 3.8
+#   apache/spark:3.5.3-scala2.12-java17-python3-ubuntu
+#                                                 eclipse-temurin:17-jammy
+#                                                 Ubuntu 22.04 · Java 17 · Python 3.10
+#
+# Cùng một bản Spark (cùng tarball spark-3.5.3-bin-hadoop3, cùng GPG key).
+# 3.10 là mức sàn repo đã khai: pyproject `requires-python >=3.10`, ruff
+# `target-version = "py310"`. tests/governance/test_worker_python_compat.py
+# giữ ba khai báo này khớp nhau — đổi dòng FROM phải đo lại Python của image.
+FROM apache/spark:3.5.3-scala2.12-java17-python3-ubuntu
 
 USER root
 

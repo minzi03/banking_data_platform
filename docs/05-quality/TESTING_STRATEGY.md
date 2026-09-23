@@ -160,6 +160,19 @@ Test Python 3.8 có **1 skip có chủ đích**: `governance/contracts.py` đư�
 annotation vì pydantic tự đánh giá annotation (lý do nằm trong `EXEMPT` của
 test). Skip thứ hai trong suite là cái đã nói ở §3.
 
+Rồi image Spark lên Python 3.10 (TD-10). Test đổi tên thành
+`test_worker_python_compat.py`: bỏ kiểm annotation lười (3.10 tự đánh giá được
+`dict[...]` và `X | Y`) cùng skip của `contracts.py`, thêm 3 kiểm tra khớp phiên
+bản giữa image, `requires-python` và ruff, một guard cho chính bộ dò, và một
+kiểm API 3.11+. **+3 hàm, 188 → 191 node, skip 2 → 1.** Đo trên nhánh, sau khi
+#40 và #41 đã merge:
+
+```text
+def test_* count                            728   (725 + 3)
+pytest --collect-only -q tests/            1388   (1385 + 3)
+py -3 -m pytest -q -m "not integration"    1321 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 

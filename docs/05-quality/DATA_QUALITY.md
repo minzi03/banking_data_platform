@@ -341,9 +341,13 @@ từ commit đầu tiên. CI chạy Python 3.11 nên không bao giờ thấy; ru
 
 Sửa: `from __future__ import annotations` ở 12 module, và thay `zoneinfo` (chỉ có
 từ 3.9) bằng offset UTC+7 cố định trong `iceberg_maintenance.py`.
-`tests/governance/test_worker_python38_compat.py` quét tĩnh để lỗi không quay
-lại. Chi tiết, bảng trước/sau và phần còn mở ở
+Một test quét tĩnh để lỗi không quay lại. Chi tiết và bảng trước/sau ở
 [`technical-debt.md` TD-10](technical-debt.md).
+
+Sau đó image Spark được nâng lên Python 3.10 (Ubuntu 22.04, Java 17), đúng mức
+sàn repo đã khai. Test đổi tên thành `test_worker_python_compat.py` và giờ canh
+bốn nơi khai phiên bản — image, `requires-python`, ruff `target-version`,
+`WORKER_PYTHON` — cùng các API 3.11+ mà CI chấp nhận còn worker thì không.
 
 ### Chạy thật, lần đầu
 
@@ -589,11 +593,12 @@ Kiểm rule file mà không cần stack — mọi tên bảng và tên check ph�
 py -3 -m pytest tests/governance/test_dq_rules_resolve.py -q
 ```
 
-Kiểm code chạy trên worker có import được bằng Python 3.8 không (§6a) — chạy sau
-khi sửa bất cứ gì trong `code_etl/` hay `governance/`:
+Kiểm code chạy trên worker có dùng thứ mới hơn Python của worker không (§6a) —
+chạy sau khi sửa bất cứ gì trong `code_etl/`, `governance/`, `docker/Dockerfile.spark`
+hay `pyproject.toml`:
 
 ```bash
-py -3 -m pytest tests/governance/test_worker_python38_compat.py -q
+py -3 -m pytest tests/governance/test_worker_python_compat.py -q
 ```
 
 Đếm nhanh số mục:
@@ -611,8 +616,8 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Quyết định Python của worker | 3.8 trong container, 3.11 trong CI; test tĩnh chỉ bắt được annotation (TD-10) |
-| pydantic trên worker | `ops_contract_validation_dag` không chạy được (TD-10) |
+| CI chạy đúng Python của worker | worker 3.10, CI 3.11; test tĩnh chặn cú pháp, `tomllib` và một danh sách API 3.11+, không phải toàn bộ (TD-10) |
+| `ops_contract_validation_dag` chạy được | pydantic đã có trên worker, nhưng `enforcement.py` chạy như script không thấy package `governance`, và không có CLI để nhận `--layer`/`--validate` (TD-10) |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
 | DDL cho `lakehouse.quarantine.*` | §5 — hàng vi phạm được đếm nhưng không ghi được đi đâu |
 | Ai đọc `data_quality_log` | write-only; không dashboard, không dbt model |
@@ -640,6 +645,6 @@ chạy thật       2026-09-23 · gold 20/20 PASS · silver 61 PASS + 1 WARN, 0 
                 · bronze 6 FAIL (CDC không chạy) · quarantine 1 FAIL, không ghi được
 lỗi đang sống   0 trong đường DQ — còn mở: quarantine không có bảng đích (§5)
 hợp đồng tĩnh   test_dq_rules_resolve.py — 150 test trên rule file thật
-                test_worker_python38_compat.py — code worker import được trên 3.8
+                test_worker_python_compat.py — code worker khớp Python 3.10 của image
 thông báo       không có
 ```
