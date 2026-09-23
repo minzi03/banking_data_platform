@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 11c69efd6f736ae6cf858e36192dd685d57aab90
-    git_branch: fix/td-14-bronze-alignment
+    git_commit: 1557877437912fd6259395e75b2dfb4b65b623fc
+    git_branch: chore/refresh-manifest-after-52
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-23T17:42:46Z'
+    generated_at_utc: '2026-09-23T18:32:23Z'
     requested_cob_dt: '2026-09-22'
     verification_scope: full
   environment:
@@ -544,13 +544,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 782
+        value: 800
         declared: 800
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 1578
+        value: 1688
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
