@@ -1,0 +1,684 @@
+{
+  "catalogs": [
+    {
+      "user": "admin|trino|trino_admin",
+      "catalog": ".*",
+      "allow": "all"
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "allow": "all"
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "allow": "read-only"
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "customer_api|ml|streamlit|superset",
+      "catalog": "iceberg",
+      "allow": "read-only"
+    },
+    {
+      "user": "customer_api|ml|streamlit|superset",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "allow": "all"
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "allow": "all"
+    },
+    {
+      "user": "dbt",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "allow": "read-only"
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "system",
+      "allow": "read-only"
+    },
+    {
+      "user": "readonly_viewer",
+      "catalog": "iceberg",
+      "allow": "read-only"
+    },
+    {
+      "user": "readonly_viewer",
+      "catalog": "system",
+      "allow": "read-only"
+    }
+  ],
+  "schemas": [
+    {
+      "user": "admin|trino|trino_admin",
+      "catalog": "iceberg",
+      "schema": ".*",
+      "owner": true
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": "bronze",
+      "owner": true
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "owner": true
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": "sandbox",
+      "owner": true
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "owner": true
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": "silver_cdc",
+      "owner": true
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "sandbox",
+      "owner": true
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "owner": true
+    }
+  ],
+  "tables": [
+    {
+      "user": "admin|trino|trino_admin",
+      "catalog": "iceberg",
+      "schema": ".*",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE",
+        "UPDATE",
+        "OWNERSHIP",
+        "GRANT_SELECT"
+      ]
+    },
+    {
+      "user": "admin|trino|trino_admin",
+      "catalog": "system",
+      "schema": ".*",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "iceberg",
+      "schema": ".*",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE",
+        "UPDATE",
+        "OWNERSHIP"
+      ]
+    },
+    {
+      "user": "airflow_etl",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer_current",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "sandbox",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "analytics_report",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "customer_api|ml|streamlit|superset",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "customer_api|ml|streamlit|superset",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer_current",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "sandbox",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE",
+        "UPDATE",
+        "OWNERSHIP"
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "data_steward_user",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "DELETE",
+        "UPDATE",
+        "OWNERSHIP"
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "bronze",
+      "table": "core_customer",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "bronze",
+      "table": "core_customer_cdc",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "CAST(NULL AS BIGINT)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer_current",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "bronze",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "sandbox",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "silver_cdc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "readonly_viewer",
+      "catalog": "iceberg",
+      "schema": "gold",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "readonly_viewer",
+      "catalog": "iceberg",
+      "schema": "serving",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "user": "readonly_viewer",
+      "catalog": "system",
+      "schema": "metadata|jdbc",
+      "privileges": [
+        "SELECT"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "user": "admin|trino|trino_admin",
+      "allow": [
+        "execute",
+        "view",
+        "kill"
+      ]
+    },
+    {
+      "allow": [
+        "execute"
+      ]
+    }
+  ],
+  "system_information": [
+    {
+      "user": "admin|trino|trino_admin",
+      "allow": [
+        "read",
+        "write"
+      ]
+    }
+  ]
+}

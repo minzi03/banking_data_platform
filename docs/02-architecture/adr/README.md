@@ -32,8 +32,9 @@ ADR kéo chúng ra chỗ đọc được, **không thay thế** comment trong co
 | [0012](0012-parameterised-seed-not-second-seeder.md) | Tham số hoá generator bằng `--scale`, không viết seeder thứ hai | Accepted |
 | [0013](0013-declared-sources-match-sql.md) | Khai báo nguồn phải khớp với SQL | Accepted |
 | [0014](0014-kimball-over-data-vault.md) | Kimball star schema, Data Vault chỉ ở mức tài liệu ánh xạ | Accepted |
+| [0015](0015-trino-access-control-generated-from-rbac.md) | Access control của Trino sinh từ `rbac.py`, danh tính do client tự khai | Accepted |
 
-Toàn bộ ADR trên được chuyển thể từ lý do **đã có sẵn bằng văn bản** trong code hoặc trong `technical-debt.md`. Không có phần nào được suy diễn thêm.
+ADR 0002–0014 được chuyển thể từ lý do **đã có sẵn bằng văn bản** trong code hoặc trong `technical-debt.md`. Không có phần nào được suy diễn thêm. ADR 0015 viết cùng lúc với thay đổi nó ghi lại.
 
 ### Hai số không được dùng
 

@@ -330,9 +330,25 @@ resource "docker_container" "trino" {
     external = var.ports.trino
   }
 
+  # Cùng ba mount như docker/docker-compose.yml. Trước đây mount CẢ thư mục
+  # init_trino vào /etc/trino/catalog: iceberg.properties nằm sâu một cấp
+  # (catalog/catalog/) và file access control rơi vào chỗ Trino đọc catalog.
   volumes {
-    host_path      = abspath("${path.module}/../docker/init_trino")
+    host_path      = abspath("${path.module}/../docker/init_trino/catalog")
     container_path = "/etc/trino/catalog"
+    read_only      = true
+  }
+
+  volumes {
+    host_path      = abspath("${path.module}/../docker/init_trino/access-control.properties")
+    container_path = "/etc/trino/access-control.properties"
+    read_only      = true
+  }
+
+  volumes {
+    host_path      = abspath("${path.module}/../docker/init_trino/rules.json")
+    container_path = "/etc/trino/rules.json"
+    read_only      = true
   }
 
   memory = var.trino_memory

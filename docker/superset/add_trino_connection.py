@@ -28,7 +28,7 @@ def add_trino_connection():
                 return
 
             # Create Trino connection
-            trino_uri = "trino://admin@trino:8080/lakehouse"
+            trino_uri = "trino://superset@trino:8080/lakehouse"
 
             db = get_or_create_db(
                 database_name="Trino (Lakehouse)",

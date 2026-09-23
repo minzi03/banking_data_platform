@@ -8,7 +8,7 @@ Trang này trả lời một câu: **bạn là ai, và cần đọc gì.**
 docs/
 ├── INDEX.md                  ← bạn đang ở đây
 ├── 01-getting-started/       chạy thử lần đầu
-├── 02-architecture/          kiến trúc + adr/ (11 quyết định)
+├── 02-architecture/          kiến trúc + adr/ (12 quyết định)
 ├── 03-data/                  tra cứu: dictionary · glossary · contracts · lineage
 ├── 04-operations/            vận hành + sự cố
 ├── 05-quality/               nợ kỹ thuật + cơ chế evidence manifest
@@ -76,6 +76,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [0012](02-architecture/adr/0012-parameterised-seed-not-second-seeder.md) | Tham số hoá generator `--scale`, không viết seeder thứ hai |
 | [0013](02-architecture/adr/0013-declared-sources-match-sql.md) | Khai báo nguồn phải khớp với SQL |
 | [0014](02-architecture/adr/0014-kimball-over-data-vault.md) | Kimball star schema, Data Vault chỉ ở mức ánh xạ |
+| [0015](02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) | Access control của Trino sinh từ `rbac.py`, danh tính do client tự khai |
 
 > **Chưa có**: `DATA_FLOW.md`, và **ADR-0001** (Iceberg vs Delta) — lý do chọn chưa được ghi ở đâu, cần tác giả xác nhận. Xem [`adr/README.md`](02-architecture/adr/README.md).
 

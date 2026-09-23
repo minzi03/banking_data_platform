@@ -50,7 +50,7 @@ def get_trino_connection():
     return connect(
         host=TRINO_HOST,
         port=TRINO_PORT,
-        user="admin",
+        user="ml",
         catalog=TRINO_CATALOG,
         schema=TRINO_SCHEMA,
     )

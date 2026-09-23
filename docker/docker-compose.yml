@@ -424,6 +424,10 @@ services:
       - "8085:8080"
     volumes:
       - ./init_trino/catalog:/etc/trino/catalog:ro
+      # Access control: Trino chỉ đọc đúng /etc/trino/access-control.properties.
+      # Thiếu mount này thì Trino chạy access control `default` — cho phép tất cả.
+      - ./init_trino/access-control.properties:/etc/trino/access-control.properties:ro
+      - ./init_trino/rules.json:/etc/trino/rules.json:ro
     mem_limit: 6000m
     environment:
       TZ: "Asia/Ho_Chi_Minh"
@@ -732,7 +736,7 @@ services:
     environment:
       - TRINO_HOST=trino
       - TRINO_PORT=8080
-      - TRINO_USER=admin
+      - TRINO_USER=customer_api
       - TRINO_CATALOG=iceberg
       - TRINO_SCHEMA=serving
       - TZ=Asia/Ho_Chi_Minh

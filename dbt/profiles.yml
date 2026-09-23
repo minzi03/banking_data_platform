@@ -22,7 +22,7 @@ banking:
       port: 8085
       catalog: iceberg
       schema: semantic
-      user: admin
+      user: dbt
       password: ""
       threads: 1
       timeout_seconds: 300
@@ -35,7 +35,7 @@ banking:
       port: 8080
       catalog: iceberg
       schema: semantic
-      user: admin
+      user: dbt
       password: ""
       threads: 4
       timeout_seconds: 300
@@ -47,7 +47,7 @@ banking:
       port: 8080
       catalog: iceberg
       schema: semantic
-      user: admin
+      user: dbt
       password: ""
       threads: 8
       timeout_seconds: 600

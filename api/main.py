@@ -46,7 +46,7 @@ app.add_middleware(
 # ── Config ──────────────────────────────────────────────────────────────────
 TRINO_HOST = os.environ.get("TRINO_HOST", "trino")
 TRINO_PORT = int(os.environ.get("TRINO_PORT", "8080"))
-TRINO_USER = os.environ.get("TRINO_USER", "admin")
+TRINO_USER = os.environ.get("TRINO_USER", "customer_api")
 TRINO_CATALOG = os.environ.get("TRINO_CATALOG", "iceberg")
 TRINO_SCHEMA = os.environ.get("TRINO_SCHEMA", "serving")
 

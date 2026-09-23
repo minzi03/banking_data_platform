@@ -512,7 +512,7 @@ class MetricQueryError(RuntimeError):
 class TrinoClient:
     """Client tối thiểu qua REST API. Test inject fake thay cho class này."""
 
-    def __init__(self, host: str = "localhost", port: int = 8085, user: str = "admin"):
+    def __init__(self, host: str = "localhost", port: int = 8085, user: str = "manifest_collector"):
         self.url = f"http://{host}:{port}/v1/statement"
         self.user = user
 

@@ -19,6 +19,7 @@ import os
 
 TRINO_HOST = os.getenv("TRINO_HOST", "trino")
 TRINO_PORT = os.getenv("TRINO_PORT", "8080")
+TRINO_USER = os.getenv("TRINO_USER", "freshness_exporter")
 TRINO_URL = f"http://{TRINO_HOST}:{TRINO_PORT}/v1/statement"
 FRESHNESS_TABLES = [
     "lakehouse.silver.dim_customer_current",
@@ -43,7 +44,7 @@ def query_trino(sql: str) -> list:
         data=data_bytes,
         headers={
             "Content-Type": "text/plain",
-            "X-Trino-User": "admin",
+            "X-Trino-User": TRINO_USER,
         },
         method="POST",
     )
@@ -71,7 +72,7 @@ def query_trino(sql: str) -> list:
             time.sleep(0.3)
             next_req = urllib.request.Request(
                 next_uri,
-                headers={"X-Trino-User": "admin"},
+                headers={"X-Trino-User": TRINO_USER},
             )
             with urllib.request.urlopen(next_req, timeout=30) as resp:
                 result = json.loads(resp.read().decode("utf-8"))

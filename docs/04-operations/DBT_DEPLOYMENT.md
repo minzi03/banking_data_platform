@@ -83,7 +83,7 @@ banking:
       port: 8080           # Your Trino port
       catalog: lakehouse   # Your Iceberg catalog
       schema: semantic     # Default schema for dbt
-      user: admin          # Your username
+      user: dbt            # Trino user của dbt — xem RUNBOOK.md §9
       password: ""         # Your password
       threads: 4
 ```
