@@ -1,6 +1,6 @@
 # Kiểm Kê Dữ Liệu Cá Nhân
 
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
+> Cập nhật: 2026-09-23 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
 > Liên quan: [`../../SECURITY.md`](../../SECURITY.md) · [`../03-data/DATA_DICTIONARY.md`](../03-data/DATA_DICTIONARY.md) · [`../05-quality/DATA_QUALITY.md`](../05-quality/DATA_QUALITY.md)
 
 Đây là bản kiểm kê mà `DATA_DICTIONARY.md` trỏ tới. Trình sinh từ điển tự khai:
@@ -108,7 +108,7 @@ như Bronze tương ứng, vì Bronze là bản sao trung thực của nguồn.
 | **Trung bình** | `device_id` · `ip_address` | Dấu vết thiết bị — định danh gián tiếp, dùng để lần theo hành vi |
 | **Trung bình** | `latitude` · `longitude` | Ở `dim_location` là địa lý **chi nhánh/địa điểm**, không phải vị trí khách hàng. Nhưng khi join với `fact_online_transaction` thì thành dấu vết di chuyển của người — và `aml_monitoring` làm đúng việc đó để tính `geo_velocity_flag` |
 | **Thấp** | `manager_name` · `full_name` của nhân viên | Dữ liệu nhân sự, không phải dữ liệu khách hàng |
-| **Giả danh hoá** | `cccd_hash` | SHA-256 có salt. Xem §6 — mức bảo vệ thật phụ thuộc salt |
+| **Giả danh hoá** | `cccd_hash` | SHA-256 có salt. Mức bảo vệ thật phụ thuộc salt được giữ bí mật — xem §6 |
 
 `latitude`/`longitude` là ví dụ vì sao kiểm kê theo cột là chưa đủ: một cột vô
 hại ở bảng này thành dữ liệu nhạy cảm sau một phép join. Bản kiểm kê ghi cột;
@@ -179,43 +179,64 @@ trước khi chạy.
 
 ---
 
-## 6. ⚠ Salt dự phòng nằm trong repo công khai
+## 6. Salt của `cccd_hash`: không còn giá trị dự phòng
 
-`code_etl/shared/ops/pii_masking.py` fail-loud đúng khi thiếu salt:
+> **Đã khắc phục** 2026-09-22 ở PR #33. Bản đầu của mục này mô tả một lỗ hổng
+> đang sống; phần "Trước đây" dưới đây giữ lại để người đọc hiểu vì sao cơ chế
+> hiện tại có hình dạng như vậy.
 
-```python
-_pii_salt_raw = os.environ.get("PII_HASH_SALT")
-if not _pii_salt_raw:
-    raise OSError("PII_HASH_SALT environment variable is required but not set")
-```
+### Trước đây
 
-Nhưng DAG gọi nó lại **luôn** cung cấp một giá trị:
+`code_etl/shared/ops/pii_masking.py` fail-loud khi thiếu salt, nhưng DAG gọi nó
+lại **luôn** cung cấp một giá trị: `Variable.get("pii_hash_salt", default_var=...)`
+với một chuỗi cố định nằm trong file đã commit của repo công khai. Guard kiểm
+**sự hiện diện** của salt, không kiểm **chất lượng**, nên `default_var` lấp đúng
+cái lỗ mà guard định chặn: Variable chưa đặt thì job vẫn chạy, với salt ai đọc
+repo cũng biết.
 
-```python
-# airflow/dags/ops/ops_pii_masking_daily_dag.py:36
-PII_ENV = {"PII_HASH_SALT": Variable.get("pii_hash_salt", default_var="...")}
-```
+Vì sao điều đó nghiêm trọng: `cccd_hash = sha2(cccd || salt)` là hash tất định.
+CCCD Việt Nam là 12 chữ số, và không gian thực tế nhỏ hơn 10¹² nhiều vì ba số đầu
+là mã tỉnh và có thành phần ngày sinh. Với salt đã biết, đây là phép liệt kê,
+không phải phá mã — giả danh hoá trên danh nghĩa.
 
-`default_var` là một chuỗi ký tự cố định **nằm trong file đã commit của repo
-công khai**. Nếu Airflow Variable `pii_hash_salt` chưa được đặt, job vẫn chạy —
-với salt mà bất kỳ ai đọc repo cũng biết.
+### Hiện tại
 
-Guard kiểm **sự hiện diện** của salt, không kiểm **chất lượng**. Đường mà guard
-định chặn thì bị `default_var` lấp lại.
+`airflow/dags/ops/ops_pii_masking_daily_dag.py` không còn `default_var`. Salt
+được đọc từ Airflow Variable `pii_hash_salt` **lúc render task**, qua hàm
+`resolve_pii_hash_salt` đăng ký làm Jinja macro (`user_defined_macros`):
 
-Hệ quả cụ thể: `cccd_hash = sha2(cccd || salt)`. CCCD Việt Nam là 12 chữ số, tức
-không gian tối đa 10¹² và thực tế nhỏ hơn nhiều vì ba số đầu là mã tỉnh và có
-thành phần ngày sinh. Với salt đã biết, đây là phép liệt kê, không phải phá mã.
-**Hash tất định với salt công khai là giả danh hoá trên danh nghĩa.**
+| Tình huống | Hành vi |
+|---|---|
+| Variable đã đặt | task chạy với salt đó |
+| Variable chưa đặt, hoặc rỗng | **task** fail, thông báo nêu tên Variable và lệnh đặt nó |
+| Parse DAG | không đọc Variable — DAG vẫn import được, không truy vấn metadata DB mỗi lượt parse |
 
-Hai chi tiết nữa của cùng dòng code:
+Đọc lúc render chứ không lúc parse là có chủ ý: đọc Variable không default ở
+module level sẽ làm DAG **lỗi import** và biến mất khỏi UI thay vì hiện đỏ.
+`tests/dags/test_ops_pii_masking_daily_dag.py` khoá các hành vi trên, gồm cả việc
+không có `default_var=` nào trong file DAG.
 
-- `Variable.get()` được gọi ở **thời điểm parse DAG**, không phải lúc chạy task.
-  Nên mỗi lượt Airflow parse file đều truy vấn metadata DB, và đổi Variable chỉ
-  có hiệu lực sau khi DAG được parse lại.
-- `docker/.env` cũng đặt `PII_HASH_SALT`, nhưng file đó **được gitignore và không
-  được track** (`.gitignore:6`) — đã kiểm. Rủi ro nằm ở `default_var`, không ở
-  `.env`. TD-3 đã đóng và không phủ trường hợp này.
+Cách đặt salt, và hệ quả khi xoay vòng nó: [`RUNBOOK.md`](../../RUNBOOK.md) §8.
+
+### Còn lại
+
+- **Xoay vòng salt làm vô hiệu mọi `cccd_hash` đã publish.** Hash tất định nên
+  salt mới cho hash khác trên cùng một người: phải dựng lại cả hai bảng
+  `sandbox.*_masked`, và mọi join downstream trên `cccd_hash` sẽ trả 0 dòng qua
+  mốc xoay vòng thay vì báo lỗi. Không có đường re-hash cho bên đã giữ hash cũ.
+- **Airflow không che giá trị Variable này trên UI** — `pii_hash_salt` không khớp
+  mẫu tên nhạy cảm nào của Airflow, nên giá trị đọc được ở *Admin → Variables* và
+  ở tab *Rendered Template*. Muốn che thì thêm `salt` vào
+  `[core] sensitive_var_conn_names`.
+- Guard trong `pii_masking.py` vẫn chỉ kiểm sự hiện diện: một salt yếu hay ngắn
+  vẫn được chấp nhận. Chặn nay nằm ở đầu DAG, không nằm ở job.
+- `docker/.env` cũng đặt `PII_HASH_SALT`, nhưng file đó được gitignore và không
+  được track (`.gitignore:6`); `.env.example` chỉ có `CHANGE_ME`. Chạy
+  `pii_masking.py` trực tiếp ngoài DAG thì salt đến từ môi trường, không từ
+  Variable.
+- Salt cũ vẫn còn trong **lịch sử git** của repo công khai. Nó không còn được
+  dùng, nhưng mọi `cccd_hash` từng sinh bằng salt đó vẫn liệt kê được — cần dựng
+  lại bảng `sandbox` bằng salt mới nếu môi trường nào từng chạy với nó.
 
 ---
 
@@ -393,7 +414,6 @@ py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[p
 | Lý do cho bất đối xứng `age` vs `age_group_decade` | §4 |
 | Chính sách lưu trữ / xoá dữ liệu cá nhân | §10 — chỉ có cấu hình bảo trì chung |
 | Quy trình xử lý yêu cầu xoá (right to erasure) | không có runbook |
-| `default_var` của salt bị loại bỏ | §6 — salt dự phòng nằm trong repo công khai |
 | `RBAC_MATRIX.md` · `AUDIT_TRAIL.md` · `REGULATORY_MAPPING.md` | ba tài liệu còn lại của nhóm này |
 
 ---
@@ -407,6 +427,7 @@ che ở Silver     không
 che ở Gold       có — chỉ full_name_masked, không có cccd/phone/email
 che ở serving    có, thừa hưởng từ Gold qua select *
 bản sao đã che   2 bảng trong lakehouse.sandbox, tạo lại 08:00 hằng ngày
+salt cccd_hash   Airflow Variable, đọc lúc render task, không có giá trị dự phòng
 quy tắc che      2 quy tắc khác nhau cho cùng trường full_name
 kiểm soát        lakehouse: không · PostgreSQL nguồn: có
 phân loại máy đọc  không
