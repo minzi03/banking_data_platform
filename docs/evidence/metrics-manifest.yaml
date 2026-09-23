@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 100ca4b111c29551e44e3823216f0ab09b0f59e0
-    git_branch: chore/refresh-evidence-manifest
+    git_commit: 11c69efd6f736ae6cf858e36192dd685d57aab90
+    git_branch: fix/td-14-bronze-alignment
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-23T17:28:28Z'
+    generated_at_utc: '2026-09-23T17:42:46Z'
     requested_cob_dt: '2026-09-22'
     verification_scope: full
   environment:
@@ -140,9 +140,9 @@ metrics:
       provenance: query:bronze.partitions_present
       definition: Số cob_dt partition trong bronze.core_txn_account.
     tables_at_cob_dt:
-      value: null
+      value: 17
       declared: null
-      missing: null
+      missing: ''
       metric_type: runtime
       provenance: query:bronze.tables_at_cob_dt
       definition: Số bảng Bronze batch có snapshot đúng requested_cob_dt; `missing`
@@ -544,13 +544,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 776
+        value: 782
         declared: 782
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 1572
+        value: 1578
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -658,8 +658,8 @@ invariants:
     severity: error
     rationale: 'snapshot_bronze_exists chỉ đo core_txn_account. Dimension Bronze nạp
       full-snapshot nên lượt nạp lại cho ngày cũ để chúng lệch ngày mà mọi invariant
-      khác vẫn xanh — xảy ra 2026-09-23, 13/17 bảng (TD-14). So với số workload
-      trong config nên workload mới quên thêm vào query cũng đỏ.
+      khác vẫn xanh — xảy ra 2026-09-23, 13/17 bảng (TD-14). So với số workload trong
+      config nên workload mới quên thêm vào query cũng đỏ.
 
       '
   snapshot_silver_exists:
