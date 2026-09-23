@@ -78,7 +78,7 @@ COMMENT ON TABLE opslakehouse.data_quality_log IS 'Data quality check results �
 -- =============================================================================
 -- Ghi bởi code_etl/shared/ops/contract_validation.py (ops_contract_validation_dag).
 -- Bảng này trước đây chỉ được khai trong docker/init_openmetadata/, thư mục
--- không được mount vào đâu — nên nó chưa từng tồn tại trong stack.
+-- không được mount vào đâu (đã xoá 2026-09-24) — nên nó chưa từng tồn tại.
 CREATE TABLE IF NOT EXISTS opslakehouse.contract_validation_log (
     id              SERIAL PRIMARY KEY,
     dataset_id      VARCHAR(255)   NOT NULL,   -- e.g. 'banking.dim_customer_silver'
@@ -97,3 +97,31 @@ CREATE INDEX IF NOT EXISTS idx_contract_validation_dataset_cobdt
     ON opslakehouse.contract_validation_log (dataset_id, cob_dt);
 
 COMMENT ON TABLE opslakehouse.contract_validation_log IS 'Data contract check results per dataset and cob_dt';
+
+-- =============================================================================
+-- Table: lineage_log — Table-level lineage edges
+-- =============================================================================
+-- Cột đúng với những gì governance/lineage.py (LineageTracker.write_to_postgres)
+-- ghi. Giống contract_validation_log, bảng này trước đây chỉ được khai trong
+-- docker/init_openmetadata/ — không ai chạy — nên chưa từng tồn tại (TD-13).
+--
+-- ⚠ Có bảng không có nghĩa là có dữ liệu: tới 2026-09-24 chưa job nào ghi vào
+-- đây. ops_lineage_dag chỉ in danh sách cạnh viết tay, và danh sách đó lệch với
+-- nguồn các job khai trong YAML. Xem TD-13.
+CREATE TABLE IF NOT EXISTS opslakehouse.lineage_log (
+    id              SERIAL PRIMARY KEY,
+    source_table    VARCHAR(255)   NOT NULL,   -- e.g. 'lakehouse.silver.dim_customer'
+    target_table    VARCHAR(255)   NOT NULL,   -- e.g. 'lakehouse.gold.mart_customer_360'
+    transform_type  VARCHAR(100)   NOT NULL,   -- governance.lineage.TransformType
+    dag_id          VARCHAR(255)   NOT NULL,
+    dag_run_id      VARCHAR(255)   NOT NULL,
+    snapshot_id     VARCHAR(255),
+    row_count       INTEGER        DEFAULT 0,
+    created_at      TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_lineage_log_source ON opslakehouse.lineage_log (source_table);
+CREATE INDEX IF NOT EXISTS idx_lineage_log_target ON opslakehouse.lineage_log (target_table);
+CREATE INDEX IF NOT EXISTS idx_lineage_log_dag    ON opslakehouse.lineage_log (dag_id);
+
+COMMENT ON TABLE opslakehouse.lineage_log IS 'Table-level lineage edges — see TD-13: no writer yet';

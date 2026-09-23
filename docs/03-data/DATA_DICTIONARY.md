@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**86 bảng · 974 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
+**87 bảng · 980 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -21,7 +21,7 @@
 | [card_crm](#card_crm) | 3 | 20 |
 | [core_banking](#core_banking) | 14 | 110 |
 | [digital_banking](#digital_banking) | 6 | 34 |
-| [opslakehouse](#opslakehouse) | 9 | 64 |
+| [opslakehouse](#opslakehouse) | 10 | 70 |
 
 ---
 
@@ -1934,6 +1934,21 @@ _Chưa có data contract trong `governance/datasets/`._
 | `id` | `SERIAL` |  |  |
 | `job_name` | `VARCHAR(100)` |  |  |
 | `S` | `=` |  |  |
+
+<sub>Nguồn DDL: `00_extensions.sql`</sub>
+
+### `opslakehouse.lineage_log`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `id` | `SERIAL` |  |  |
+| `source_table` | `VARCHAR(255)` |  |  |
+| `dag_run_id` | `VARCHAR(255)` |  |  |
+| `snapshot_id` | `VARCHAR(255)` |  |  |
+| `row_count` | `INTEGER` |  |  |
+| `created_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `00_extensions.sql`</sub>
 
