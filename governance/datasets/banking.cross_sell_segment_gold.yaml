@@ -15,7 +15,7 @@ physical_location:
   namespace: gold
   table: cross_sell_segment
 
-dag_id: gold_mart360_dag
+dag_id: gold_all_dag
 
 upstream_dataset_ids:
   - banking.dim_customer_silver

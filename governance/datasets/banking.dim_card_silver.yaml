@@ -27,7 +27,7 @@ quality_rules:
     - customer_id
     - account_id
     - card_type
-    - card_number_masked
+    - card_no_masked
     - expiry_date
     - status
     - issue_date
@@ -35,7 +35,7 @@ quality_rules:
     - card_id
     - customer_id
     - card_type
-    - card_number_masked
+    - card_no_masked
     - expiry_date
     - status
   min_row_count: 1000

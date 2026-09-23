@@ -28,7 +28,7 @@ quality_rules:
     - branch_code
     - role
     - hire_date
-    - is_active
+    - status
   non_null_columns:
     - employee_id
     - full_name

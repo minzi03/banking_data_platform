@@ -1011,7 +1011,7 @@ the DAG uses; Airflow itself was not started.
 
 ## TD-12 — 20 of 33 data contracts do not describe the tables they govern
 
-**Status:** open (2026-09-23)
+**Status:** fixed (2026-09-23, verified on the stack) — see [Fix](#fix-2026-09-23)
 
 The contracts in `governance/datasets/` had never been checked against real tables:
 `ops_contract_validation_dag` could not run (TD-10). The first run of
@@ -1039,11 +1039,60 @@ does not flag a mismatch.
 ### Acceptance
 
 ```text
-[ ] every contract's table exists in the DDL, and its required / non-null / unique
+[x] every contract's table exists in the DDL, and its required / non-null / unique
     columns exist in that table — enforced by a static test, like test_dq_rules_resolve.py
-[ ] the 9 *_current contracts either point at the dbt serving tables or are removed
-[ ] contract_validation.py exits 0 for silver and gold on a healthy snapshot
+[x] the 9 *_current contracts either point at the dbt serving tables or are removed
+    → pointed at serving, layer `serving`, validated after dbt publishes
+[x] contract_validation.py exits 0 for silver and gold on a healthy snapshot
+    → and for serving
 ```
+
+### Fix (2026-09-23)
+
+**The static test came first**, so every fix is checked the same way a run would
+check it. `tests/governance/test_contracts_match_tables.py`, for every contract:
+
+```text
+table exists        DDL under docker/init_*/, or a dbt serving model
+columns exist       required / non_null / unique / unique_column_sets / date_column
+layer == namespace  the CLI and DAG pick contracts by layer
+dag_id exists       declared as DAG_ID somewhere in airflow/dags/
+```
+
+Serving tables have no DDL — dbt creates them. All 13 serving models are
+`select * from {{ source('gold', X) }}`, so `serving.X_current` has exactly the
+columns of `gold.X`; a model that stops following that form fails the test instead
+of being guessed at. Against `main`'s contracts the test fails **30 times** — the 20
+found on the stack plus 10 it found on its own:
+
+- **10 × `dag_id: gold_mart360_dag`** — no such DAG. The file is
+  `gold_mart360_dag.py`; its `DAG_ID` is `gold_all_dag`.
+- **`branch_monthly_summary`'s columns** (`month`, `total_transactions`, …), which
+  the stack run never reached because it stopped at "table not readable".
+
+**What changed**
+
+| Contracts | Change |
+|---|---|
+| 10 Silver | Columns fixed against the DDL. Renamed where the table carries the same meaning under another name (`card_number_masked`→`card_no_masked`, `os`→`operating_system`, `created_date`→`date_opened`, `agent_id`→`assigned_to`, `is_active`→`status`, …); dropped where it has nothing equivalent (`browser`, `interest_rate`, `min_balance`, `merchant_id`, `resolution`, `district`, `address`). No column was invented |
+| `branch_monthly_summary_gold` | Table `mart_branch_monthly_summary`; `month` → `txn_year` + `txn_month`, and the four metric names to the real ones |
+| 10 Gold | `dag_id: gold_mart360_dag` → `gold_all_dag` |
+| 9 `*_current` | `namespace` and `layer` → `serving`, `dag_id` → `dbt_serving_publish`. The description said "latest available cob_dt"; the dbt models deliberately use the run's `cob_dt`, never `MAX(cob_dt)` — corrected |
+
+`contract_validation.py` accepts `--layer serving`, and `ops_contract_validation_dag`
+gains `validate_serving_contracts`, which waits for dbt's `SERVING_COMPLETE` flag
+rather than for Gold. A test fails if any contract has a layer the CLI does not
+accept — otherwise those contracts would silently never be checked.
+
+**On the stack**, `cob_dt 2026-09-22`, the DAG's own `spark-submit`:
+
+```text
+silver   13 contracts · 13 PASS · 0 FAIL · 0 WARN   exit 0
+gold     11 contracts · 11 PASS · 0 FAIL · 0 WARN   exit 0
+serving   9 contracts ·  9 PASS · 0 FAIL · 0 WARN   exit 0
+```
+
+Airflow itself was not run.
 
 ---
 

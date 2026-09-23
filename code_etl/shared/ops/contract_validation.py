@@ -59,7 +59,7 @@ log = getLogger("contract_validation")
 
 LOG_TABLE = "opslakehouse.contract_validation_log"
 JDBC_URL = "jdbc:postgresql://postgres:5432/banking_db"
-LAYERS = ("bronze", "silver", "gold")
+LAYERS = ("bronze", "silver", "gold", "serving")
 
 
 @dataclass

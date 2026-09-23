@@ -15,7 +15,7 @@ physical_location:
   namespace: gold
   table: campaign_target
 
-dag_id: gold_mart360_dag
+dag_id: gold_all_dag
 
 upstream_dataset_ids:
   - banking.rfm_segment_gold

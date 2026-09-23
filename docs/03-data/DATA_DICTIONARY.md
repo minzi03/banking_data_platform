@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**86 bảng · 974 cột · 24 bảng có data contract · 31 cột nghi chứa PII**
+**86 bảng · 974 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -1062,7 +1062,7 @@ Daily snapshot of AML typology flags scored at transaction grain. Five typologie
 
 Daily snapshot history of campaign targeting outputs. Grain is one row per customer per cob_dt. Used for campaign auditability, replay, and historical analysis.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 500 dòng · **Freshness**: 24h
 
@@ -1097,7 +1097,7 @@ Daily snapshot history of campaign targeting outputs. Grain is one row per custo
 
 Daily snapshot history of churn risk prediction. Grain is one row per customer per cob_dt. Used for retention analytics and backtesting.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 1,000 dòng · **Freshness**: 24h
 
@@ -1124,7 +1124,7 @@ Daily snapshot history of churn risk prediction. Grain is one row per customer p
 
 Daily snapshot history of cross-sell opportunity analysis. Grain is one row per customer per cob_dt. Used for product recommendation analytics over time.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 1,000 dòng · **Freshness**: 24h
 
@@ -1148,7 +1148,7 @@ Daily snapshot history of cross-sell opportunity analysis. Grain is one row per 
 
 Daily snapshot history of customer balance summary. Grain is one row per customer per cob_dt. Used for balance trend analysis and historical AUM tracking.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 5,000 dòng · **Freshness**: 24h
 
@@ -1172,7 +1172,7 @@ Daily snapshot history of customer balance summary. Grain is one row per custome
 
 Daily snapshot history of customer card portfolio summary. Grain is one row per customer per cob_dt. Used for historical card usage and portfolio analysis.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 5,000 dòng · **Freshness**: 24h
 
@@ -1229,7 +1229,7 @@ _Chưa có data contract trong `governance/datasets/`._
 
 Daily snapshot history of customer product portfolio summary. Grain is one row per customer per cob_dt. Used for historical product holding analysis.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 5,000 dòng · **Freshness**: 24h
 
@@ -1258,7 +1258,7 @@ Daily snapshot history of customer product portfolio summary. Grain is one row p
 
 Daily snapshot history of customer transaction activity. Grain is one row per customer per cob_dt. Used for transaction behavior trends and activity tracking.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 5,000 dòng · **Freshness**: 24h
 
@@ -1338,7 +1338,15 @@ _Chưa có data contract trong `governance/datasets/`._
 
 ### `lakehouse.gold.mart_branch_monthly_summary`
 
-_Chưa có data contract trong `governance/datasets/`._
+Monthly aggregated branch performance metrics including transaction volume, customer count, and revenue by branch.
+
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
+
+**Tối thiểu**: 100 dòng · **Freshness**: 24h
+
+**AI risk tier**: `minimal_risk` · **Cấm dùng cho**: `automated_decision_making`
+
+**Upstream**: `banking.dim_branch_silver`, `banking.fact_txn_account_silver`
 
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
@@ -1364,7 +1372,7 @@ _Chưa có data contract trong `governance/datasets/`._
 
 Daily snapshot history of the 360-degree customer view joining all dimensions and facts. Grain is one row per customer per cob_dt. Used for historical analytics, trend analysis, and backtesting.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 5,000 dòng · **Freshness**: 24h
 
@@ -1420,7 +1428,7 @@ Daily snapshot history of the 360-degree customer view joining all dimensions an
 
 Daily snapshot history of RFM segmentation. Grain is one row per customer per cob_dt. Used for historical customer value classification and backtesting.
 
-**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_mart360_dag`
+**Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: important · **DAG**: `gold_all_dag`
 
 **Grain**: (customer_id, cob_dt) · **Tối thiểu**: 1,000 dòng · **Freshness**: 24h
 

@@ -26,9 +26,7 @@ quality_rules:
     - device_id
     - customer_id
     - device_type
-    - os
-    - browser
-    - is_active
+    - operating_system
   non_null_columns:
     - device_id
     - customer_id

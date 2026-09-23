@@ -27,9 +27,7 @@ quality_rules:
     - product_code
     - product_name
     - product_type
-    - category
-    - interest_rate
-    - min_balance
+    - product_group
   non_null_columns:
     - product_code
     - product_name

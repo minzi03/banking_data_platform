@@ -5,17 +5,17 @@ dataset_id: banking.customer_transaction_summary_current_gold
 owner: Data Engineering Team
 business_purpose: >
   Latest current-serving customer transaction summary. Grain is exactly one row
-  per customer, derived from the latest available cob_dt in customer_transaction_summary.
+  per customer, published by dbt from gold.customer_transaction_summary for the run's cob_dt — not MAX(cob_dt), so a failed day is never served as the previous one.
 refresh_sla: daily
 quality_class: important
-layer: gold
+layer: serving
 
 physical_location:
   catalog: lakehouse
-  namespace: gold
+  namespace: serving
   table: customer_transaction_summary_current
 
-dag_id: gold_all_dag
+dag_id: dbt_serving_publish
 
 upstream_dataset_ids:
   - banking.customer_transaction_summary_gold

@@ -29,7 +29,6 @@ quality_rules:
     - device_id
     - transaction_date
     - amount
-    - merchant_id
     - status
     - channel
   non_null_columns:

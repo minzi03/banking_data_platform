@@ -5,17 +5,17 @@ dataset_id: banking.churn_prediction_current_gold
 owner: Data Engineering Team
 business_purpose: >
   Latest current-serving churn prediction. Grain is exactly one row per customer,
-  derived from the latest available cob_dt in churn_prediction.
+  published by dbt from gold.churn_prediction for the run's cob_dt — not MAX(cob_dt), so a failed day is never served as the previous one.
 refresh_sla: daily
 quality_class: important
-layer: gold
+layer: serving
 
 physical_location:
   catalog: lakehouse
-  namespace: gold
+  namespace: serving
   table: churn_prediction_current
 
-dag_id: gold_all_dag
+dag_id: dbt_serving_publish
 
 upstream_dataset_ids:
   - banking.churn_prediction_gold

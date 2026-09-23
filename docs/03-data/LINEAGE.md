@@ -38,15 +38,15 @@ và chưa có gì dùng tới.
 | `banking.dim_product_silver` | silver | **đáng xem lại** |
 | `banking.fact_crm_interaction_silver` | silver | **đáng xem lại** |
 | `banking.fact_support_ticket_silver` | silver | **đáng xem lại** |
-| `banking.campaign_target_current_gold` | gold | serving — lá hợp lệ |
-| `banking.churn_prediction_current_gold` | gold | serving — lá hợp lệ |
-| `banking.cross_sell_segment_current_gold` | gold | serving — lá hợp lệ |
-| `banking.customer_balance_summary_current_gold` | gold | serving — lá hợp lệ |
-| `banking.customer_card_summary_current_gold` | gold | serving — lá hợp lệ |
-| `banking.customer_product_summary_current_gold` | gold | serving — lá hợp lệ |
-| `banking.customer_transaction_summary_current_gold` | gold | serving — lá hợp lệ |
-| `banking.mart_customer_360_current_gold` | gold | serving — lá hợp lệ |
-| `banking.rfm_segment_current_gold` | gold | serving — lá hợp lệ |
+| `banking.campaign_target_current_gold` | serving | serving — lá hợp lệ |
+| `banking.churn_prediction_current_gold` | serving | serving — lá hợp lệ |
+| `banking.cross_sell_segment_current_gold` | serving | serving — lá hợp lệ |
+| `banking.customer_balance_summary_current_gold` | serving | serving — lá hợp lệ |
+| `banking.customer_card_summary_current_gold` | serving | serving — lá hợp lệ |
+| `banking.customer_product_summary_current_gold` | serving | serving — lá hợp lệ |
+| `banking.customer_transaction_summary_current_gold` | serving | serving — lá hợp lệ |
+| `banking.mart_customer_360_current_gold` | serving | serving — lá hợp lệ |
+| `banking.rfm_segment_current_gold` | serving | serving — lá hợp lệ |
 
 **7 lá đáng xem lại · 9 lá serving hợp lệ.**
 
@@ -141,100 +141,104 @@ Mỗi dataset kèm upstream (cái nó đọc) và downstream (cái đọc nó).
 - ↑ đọc từ: `banking.fact_txn_account_silver`, `banking.dim_customer_silver`, `banking.dim_account_silver`, `banking.fact_online_transaction_silver`, `banking.dim_location_silver`
 - ↓ được đọc bởi: _(không có)_
 
-**`banking.branch_monthly_summary_gold`** · `gold.branch_monthly_summary` · DAG `gold_mart360_dag`
+**`banking.branch_monthly_summary_gold`** · `gold.mart_branch_monthly_summary` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.dim_branch_silver`, `banking.fact_txn_account_silver`
 - ↓ được đọc bởi: _(không có)_
 
-**`banking.campaign_target_current_gold`** · `gold.campaign_target_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.campaign_target_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.campaign_target_gold`** · `gold.campaign_target` · DAG `gold_mart360_dag`
+**`banking.campaign_target_gold`** · `gold.campaign_target` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.rfm_segment_gold`, `banking.churn_prediction_gold`, `banking.cross_sell_segment_gold`, `banking.mart_customer_360_gold`
 - ↓ được đọc bởi: `banking.campaign_target_current_gold`
 
-**`banking.churn_prediction_current_gold`** · `gold.churn_prediction_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.churn_prediction_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.churn_prediction_gold`** · `gold.churn_prediction` · DAG `gold_mart360_dag`
+**`banking.churn_prediction_gold`** · `gold.churn_prediction` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.dim_customer_silver`, `banking.fact_txn_account_silver`, `banking.fact_card_txn_silver`
 - ↓ được đọc bởi: `banking.campaign_target_gold`, `banking.churn_prediction_current_gold`
 
-**`banking.cross_sell_segment_current_gold`** · `gold.cross_sell_segment_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.cross_sell_segment_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.cross_sell_segment_gold`** · `gold.cross_sell_segment` · DAG `gold_mart360_dag`
+**`banking.cross_sell_segment_gold`** · `gold.cross_sell_segment` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.dim_customer_silver`, `banking.dim_card_silver`
 - ↓ được đọc bởi: `banking.campaign_target_gold`, `banking.cross_sell_segment_current_gold`
 
-**`banking.customer_balance_summary_current_gold`** · `gold.customer_balance_summary_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.customer_balance_summary_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.customer_balance_summary_gold`** · `gold.customer_balance_summary` · DAG `gold_mart360_dag`
+**`banking.customer_balance_summary_gold`** · `gold.customer_balance_summary` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.mart_customer_360_gold`
 - ↓ được đọc bởi: `banking.customer_balance_summary_current_gold`
 
-**`banking.customer_card_summary_current_gold`** · `gold.customer_card_summary_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.customer_card_summary_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.customer_card_summary_gold`** · `gold.customer_card_summary` · DAG `gold_mart360_dag`
+**`banking.customer_card_summary_gold`** · `gold.customer_card_summary` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.mart_customer_360_gold`
 - ↓ được đọc bởi: `banking.customer_card_summary_current_gold`
 
-**`banking.customer_product_summary_current_gold`** · `gold.customer_product_summary_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.customer_product_summary_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.customer_product_summary_gold`** · `gold.customer_product_summary` · DAG `gold_mart360_dag`
+**`banking.customer_product_summary_gold`** · `gold.customer_product_summary` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.mart_customer_360_gold`
 - ↓ được đọc bởi: `banking.customer_product_summary_current_gold`
 
-**`banking.customer_transaction_summary_current_gold`** · `gold.customer_transaction_summary_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.customer_transaction_summary_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.customer_transaction_summary_gold`** · `gold.customer_transaction_summary` · DAG `gold_mart360_dag`
+**`banking.customer_transaction_summary_gold`** · `gold.customer_transaction_summary` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.mart_customer_360_gold`
 - ↓ được đọc bởi: `banking.customer_transaction_summary_current_gold`
 
-**`banking.mart_customer_360_current_gold`** · `gold.mart_customer_360_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.mart_customer_360_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.mart_customer_360_gold`** · `gold.mart_customer_360` · DAG `gold_mart360_dag`
+**`banking.mart_customer_360_gold`** · `gold.mart_customer_360` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.dim_customer_silver`, `banking.dim_account_silver`, `banking.dim_card_silver`, `banking.fact_txn_account_silver`, `banking.fact_card_txn_silver`
 - ↓ được đọc bởi: `banking.campaign_target_gold`, `banking.customer_balance_summary_gold`, `banking.customer_card_summary_gold`, `banking.customer_product_summary_gold`, `banking.customer_transaction_summary_gold`, `banking.mart_customer_360_current_gold`
 
-**`banking.rfm_segment_current_gold`** · `gold.rfm_segment_current` · DAG `gold_all_dag`
-
-- ↑ đọc từ: `banking.rfm_segment_gold`
-- ↓ được đọc bởi: _(không có)_
-
-**`banking.rfm_segment_gold`** · `gold.rfm_segment` · DAG `gold_mart360_dag`
+**`banking.rfm_segment_gold`** · `gold.rfm_segment` · DAG `gold_all_dag`
 
 - ↑ đọc từ: `banking.dim_customer_silver`, `banking.fact_txn_account_silver`, `banking.fact_card_txn_silver`
 - ↓ được đọc bởi: `banking.campaign_target_gold`, `banking.rfm_segment_current_gold`
+
+---
+
+### serving
+
+**`banking.campaign_target_current_gold`** · `serving.campaign_target_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.campaign_target_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.churn_prediction_current_gold`** · `serving.churn_prediction_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.churn_prediction_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.cross_sell_segment_current_gold`** · `serving.cross_sell_segment_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.cross_sell_segment_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.customer_balance_summary_current_gold`** · `serving.customer_balance_summary_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.customer_balance_summary_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.customer_card_summary_current_gold`** · `serving.customer_card_summary_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.customer_card_summary_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.customer_product_summary_current_gold`** · `serving.customer_product_summary_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.customer_product_summary_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.customer_transaction_summary_current_gold`** · `serving.customer_transaction_summary_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.customer_transaction_summary_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.mart_customer_360_current_gold`** · `serving.mart_customer_360_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.mart_customer_360_gold`
+- ↓ được đọc bởi: _(không có)_
+
+**`banking.rfm_segment_current_gold`** · `serving.rfm_segment_current` · DAG `dbt_serving_publish`
+
+- ↑ đọc từ: `banking.rfm_segment_gold`
+- ↓ được đọc bởi: _(không có)_
 
 ---
 

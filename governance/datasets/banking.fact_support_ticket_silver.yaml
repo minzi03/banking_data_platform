@@ -29,16 +29,15 @@ quality_rules:
     - issue_type
     - priority
     - status
-    - created_date
-    - resolved_date
-    - channel
+    - date_opened
+    - date_resolved
   non_null_columns:
     - ticket_id
     - customer_id
     - issue_type
     - priority
     - status
-    - created_date
+    - date_opened
   min_row_count: 2000
   unique_check:
     - ticket_id
