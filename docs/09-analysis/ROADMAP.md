@@ -17,9 +17,9 @@ main @ b787616   worktree sạch (trừ 6 file docs mới chưa commit)
 29 docker service · 20 DAG file · 10 CI job · 33 data contract · 9 DQ check type
 ```
 
-**Nợ kỹ thuật:** ✅ Tất cả TD-1 qua TD-8 đã fixed hoặc deliberate.
+**Nợ kỹ thuật:** ✅ TD-1 qua TD-11 đều fixed, disabled có lý do, hoặc deliberate (2026-09-23). TD-10 còn phần dư ghi rõ trong mục của nó: CI và Airflow chạy Python 3.11, worker 3.10; `ops_contract_validation_dag` chưa chạy được vì lý do không liên quan Python.
 
-**Evidence manifest:** ✅ regenerate, `test_functions` = 655 khớp README và thực tế.
+**Evidence manifest:** ⚠️ **lệch** (2026-09-23). Manifest và README ghi `test_functions` = 655; thực tế là 749. `verify_readme_metrics.py` vẫn báo 22/22 vì nó so README ↔ manifest, không so manifest ↔ thực tế — vòng lặp chỉ khép khi sinh lại, và việc đó cần cả stack. Xem [`EVIDENCE_MANIFEST.md`](../05-quality/EVIDENCE_MANIFEST.md) §6.1.
 
 ---
 
