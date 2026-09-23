@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from logging import INFO, basicConfig, getLogger
 from typing import Any
 
@@ -66,6 +66,50 @@ def load_rules(path: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Scope: một snapshot, phiên bản hiện hành
+# ---------------------------------------------------------------------------
+# Khoá mà run_checks_for_table gắn vào rule. Không nằm trong dq_rules.yml —
+# gọi check trực tiếp (không có khoá này) thì đọc cả bảng như trước.
+SCOPE_KEY = "_cob_dt"
+
+
+def _scoped_table(spark, table: str, rule: dict):
+    """
+    Đọc bảng trong phạm vi mà một lượt DQ hằng ngày thực sự hỏi tới.
+
+    Bảng fact và Gold giữ mỗi `cob_dt` một snapshot đầy đủ; dim SCD2 giữ mọi
+    phiên bản của một khoá. Đọc cả bảng thì `unique_check` đếm mỗi giao dịch
+    8 lần và mỗi khách hàng 2 lần — Silver đỏ trên dữ liệu lành (TD-11). Nên:
+
+        có cột cob_dt      → chỉ snapshot cob_dt đang kiểm
+        có cột is_current  → chỉ phiên bản hiện hành
+
+    Lọc theo cột có THẬT lúc chạy, không theo danh sách bảng: bảng không có
+    cột nào trong hai cột này (dim SCD1, bảng CDC) vẫn đọc cả bảng.
+
+    Hệ quả có chủ đích: `row_count` trên bảng có `cob_dt` giờ FAIL khi thiếu
+    snapshot của ngày đang kiểm — trước đây nó PASS miễn còn snapshot cũ nào.
+
+    Trả về (DataFrame, nhãn phạm vi để ghi vào details).
+    """
+    df = spark.table(table)
+    cob_dt = rule.get(SCOPE_KEY)
+    if cob_dt is None:
+        return df, ""
+    # cob_dt đi vào chuỗi SQL bên dưới — chỉ nhận đúng định dạng ngày.
+    cob_dt = date.fromisoformat(str(cob_dt)).isoformat()
+
+    scope = []
+    if "cob_dt" in df.columns:
+        df = df.filter(f"cob_dt = DATE '{cob_dt}'")
+        scope.append(f"cob_dt={cob_dt}")
+    if "is_current" in df.columns:
+        df = df.filter("CAST(is_current AS INT) = 1")
+        scope.append("is_current")
+    return df, f" [{', '.join(scope)}]" if scope else ""
+
+
+# ---------------------------------------------------------------------------
 # Individual Check Executors
 # ---------------------------------------------------------------------------
 
@@ -73,16 +117,16 @@ def load_rules(path: str) -> dict[str, Any]:
 def check_row_count(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check row count >= min_rows."""
     try:
-        df = spark.table(table)
+        df, scope = _scoped_table(spark, table, rule)
         count = df.count()
         min_rows = rule.get("min_rows", 1)
         max_rows = rule.get("max_rows")
 
         if count < min_rows:
-            return "FAIL", str(min_rows), f"Actual: {count} (min: {min_rows})"
+            return "FAIL", str(min_rows), f"Actual: {count} (min: {min_rows}){scope}"
         if max_rows and count > max_rows:
-            return "FAIL", str(max_rows), f"Actual: {count} (max: {max_rows})"
-        return "PASS", str(count), f"Row count OK: {count}"
+            return "FAIL", str(max_rows), f"Actual: {count} (max: {max_rows}){scope}"
+        return "PASS", str(count), f"Row count OK: {count}{scope}"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
 
@@ -90,7 +134,7 @@ def check_row_count(spark, table: str, rule: dict) -> tuple[str, str, str]:
 def check_null(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check columns are not NULL."""
     try:
-        df = spark.table(table)
+        df, scope = _scoped_table(spark, table, rule)
         columns = rule.get("columns", [])
         issues = []
         for col in columns:
@@ -103,16 +147,16 @@ def check_null(spark, table: str, rule: dict) -> tuple[str, str, str]:
 
         if issues:
             detail = "; ".join(issues)
-            return "FAIL", "0", detail
-        return "PASS", "0", f"All {len(columns)} columns non-null"
+            return "FAIL", "0", f"{detail}{scope}"
+        return "PASS", "0", f"All {len(columns)} columns non-null{scope}"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
 
 
 def check_unique(spark, table: str, rule: dict) -> tuple[str, str, str]:
-    """Check columns are unique."""
+    """Check columns are unique within the scoped snapshot / current version."""
     try:
-        df = spark.table(table)
+        df, scope = _scoped_table(spark, table, rule)
         columns = rule.get("columns", [])
         issues = []
         for col in columns:
@@ -127,16 +171,28 @@ def check_unique(spark, table: str, rule: dict) -> tuple[str, str, str]:
 
         if issues:
             detail = "; ".join(issues)
-            return "FAIL", "0", detail
-        return "PASS", "0", f"All {len(columns)} columns unique"
+            return "FAIL", "0", f"{detail}{scope}"
+        return "PASS", "0", f"All {len(columns)} columns unique{scope}"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
+
+
+def _bounds_label(min_val, max_val) -> str:
+    """
+    `is not None`, không phải truthiness: `min_value: 0` là một cận thật.
+    Bản cũ viết `if min_val and max_val` nên cận 0 in ra "<=None" (TD-11).
+    """
+    if min_val is not None and max_val is not None:
+        return f"[{min_val}, {max_val}]"
+    if min_val is not None:
+        return f">={min_val}"
+    return f"<={max_val}"
 
 
 def check_range(spark, table: str, rule: dict) -> tuple[str, str, str]:
     """Check column values are within min/max bounds."""
     try:
-        df = spark.table(table)
+        df, scope = _scoped_table(spark, table, rule)
         col_name = rule.get("column")
         min_val = rule.get("min_value")
         max_val = rule.get("max_value")
@@ -156,10 +212,10 @@ def check_range(spark, table: str, rule: dict) -> tuple[str, str, str]:
         elif min_val is None and max_val is not None:
             out_of_range = df.filter(df[col_name] > max_val).count()
 
+        bounds = _bounds_label(min_val, max_val)
         if out_of_range > 0:
-            bounds = f"[{min_val}, {max_val}]" if min_val and max_val else f">={min_val}" if min_val else f"<={max_val}"
-            return "FAIL", bounds, f"{out_of_range} values out of range {bounds}"
-        return "PASS", str(min_val), "All values within bounds"
+            return "FAIL", bounds, f"{out_of_range} values out of range {bounds}{scope}"
+        return "PASS", bounds, f"All values within bounds {bounds}{scope}"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
 
@@ -174,22 +230,26 @@ def check_referential_integrity(spark, table: str, rule: dict) -> tuple[str, str
         if not all([col_name, ref_table, ref_column]):
             return "FAIL", "N/A", "Missing column/ref_table/ref_column in rule"
 
-        df = spark.table(table)
-        ref_df = spark.table(ref_table)
+        df, scope = _scoped_table(spark, table, rule)
+        # Bảng tham chiếu cũng thu về phiên bản hiện hành / cùng snapshot: FK
+        # trỏ tới một phiên bản dim đã hết hiệu lực không phải là FK hợp lệ.
+        ref_df, _ = _scoped_table(spark, ref_table, rule)
 
         if col_name not in df.columns:
             return "FAIL", "N/A", f"Column '{col_name}' not found in {table}"
         if ref_column not in ref_df.columns:
             return "FAIL", "N/A", f"Column '{ref_column}' not found in {ref_table}"
 
-        # Find orphan records
-        source_vals = df.select(col_name).distinct()
+        # FK NULL không phải orphan: left-anti join coi NULL là một giá trị không
+        # khớp gì, nên 2.672 thẻ không có account_id từng hiện thành "1 orphan"
+        # (TD-11). Cột nào bắt buộc có giá trị thì khai null_check riêng.
+        source_vals = df.select(col_name).filter(df[col_name].isNotNull()).distinct()
         ref_vals = ref_df.select(ref_column).distinct()
         orphans = source_vals.join(ref_vals, source_vals[col_name] == ref_vals[ref_column], "left_anti").count()
 
         if orphans > 0:
-            return "FAIL", "0", f"{orphans} orphan records: {col_name} not in {ref_table}.{ref_column}"
-        return "PASS", "0", f"All FK values exist in {ref_table}.{ref_column}"
+            return "FAIL", "0", f"{orphans} orphan records: {col_name} not in {ref_table}.{ref_column}{scope}"
+        return "PASS", "0", f"All FK values exist in {ref_table}.{ref_column}{scope}"
     except Exception as e:
         return "FAIL", "N/A", f"Error: {e}"
 
@@ -282,17 +342,30 @@ def check_reconciliation(spark, table: str, rule: dict) -> tuple[str, str, str]:
         # `compare` selects the population being reconciled. Previously it was
         # read and then ignored — every rule reconciled distinct keys, so a rule
         # declaring `compare: row_count` silently checked something else.
-        if compare == "row_count":
-            source_count = spark.table(source_table).count()
-            target_count = spark.table(table).count()
+        # Cả hai phía cùng một phạm vi: snapshot Bronze của ngày đang kiểm so với
+        # phiên bản hiện hành của Silver — không phải toàn bộ lịch sử hai bên.
+        #
+        # Ngoại lệ khai tường minh trong rule: `source_scope: whole_table` cho
+        # nguồn KHÔNG partition theo cob_dt (vd. bronze.core_customer) — mỗi lần
+        # nạp ghi đè cả bảng, nên bảng chỉ giữ lần nạp mới nhất và cột cob_dt là
+        # ngày của lần nạp đó, không phải một snapshot để lọc theo.
+        if rule.get("source_scope") == "whole_table":
+            source_df, source_scope = spark.table(source_table), " [whole table]"
         else:
-            source_count = spark.table(source_table).select(source_key).distinct().count()
-            target_count = spark.table(table).select(target_key).distinct().count()
+            source_df, source_scope = _scoped_table(spark, source_table, rule)
+        target_df, target_scope = _scoped_table(spark, table, rule)
+        if compare == "row_count":
+            source_count = source_df.count()
+            target_count = target_df.count()
+        else:
+            source_count = source_df.select(source_key).distinct().count()
+            target_count = target_df.select(target_key).distinct().count()
 
         diff_pct = abs(source_count - target_count) / max(source_count, 1) * 100
 
         details = (
-            f"Source({source_table}): {source_count}, Target({table}): {target_count}, "
+            f"Source({source_table}{source_scope}): {source_count}, "
+            f"Target({table}{target_scope}): {target_count}, "
             f"Diff: {diff_pct:.1f}% [{compare}]"
         )
         if diff_pct <= tolerance_pct:
@@ -335,7 +408,9 @@ def run_checks_for_table(spark, table: str, checks: list[dict], cob_dt: str) -> 
             continue
 
         log.info(f"  Running {check_name} on {table} ...")
-        status, expected, details = executor(spark, table, check)
+        # Gắn cob_dt vào bản sao của rule để check tự thu về đúng snapshot /
+        # phiên bản hiện hành (_scoped_table). Không sửa dict gốc từ YAML.
+        status, expected, details = executor(spark, table, {**check, SCOPE_KEY: cob_dt})
 
         # If severity is WARN, downgrade FAIL to WARN
         if severity == "WARN" and status == "FAIL":

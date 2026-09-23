@@ -40,6 +40,10 @@ tables:
       - name: reconciliation
         severity: FAIL
         source_table: lakehouse.bronze.core_customer
+        # core_customer không PARTITIONED BY cob_dt (01_ddl_bronze.sql): mỗi lần
+        # nạp ghi đè cả bảng, nên bảng chỉ giữ lần nạp mới nhất. Lọc nó theo
+        # cob_dt của lượt DQ cho 0 dòng và FAIL giả — xem TD-11.
+        source_scope: whole_table
         source_key_column: customer_id
         target_key_column: customer_id
         compare: distinct_key_count

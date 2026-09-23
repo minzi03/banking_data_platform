@@ -12,7 +12,8 @@ thì nói là chưa đo.
 > **chưa từng chạy được** trên `spark-worker-1`: worker chạy Python 3.8, còn code
 > dùng cú pháp 3.9+ nên chết ngay lúc import. Mọi mô tả hành vi runtime trong
 > tài liệu này trước ngày đó là suy từ code, không phải quan sát. Đã sửa (TD-10);
-> giờ Silver DQ chạy được và đỏ vì check đếm mọi snapshot (TD-11).
+> sau đó Silver DQ đỏ vì check đếm mọi snapshot — cũng đã sửa (TD-11): giờ
+> Silver và Gold `exit 0` trên dữ liệu hiện tại.
 
 ---
 
@@ -368,10 +369,53 @@ Job giờ **chạy hết và báo cáo** — `exit 1` là kết quả của chec
 
 Nguyên nhân chung: check đọc **cả bảng**, nhận `--cob_dt` nhưng không lọc theo
 nó, và không biết SCD2. Một check luôn đỏ trên dữ liệu lành sẽ dạy người ta bỏ
-qua nó. Ghi ở [`technical-debt.md` TD-11](technical-debt.md), chưa sửa — phạm vi
-của check (một snapshot hay cả lịch sử) là quyết định thiết kế.
+qua nó.
 
 Bronze đỏ vì Kafka/Debezium không chạy trong môi trường này — không nói gì về CDC.
+
+### Phạm vi check: một snapshot, phiên bản hiện hành — đã sửa 2026-09-23
+
+Quyết định: một lượt DQ hằng ngày hỏi về **snapshot của ngày đang kiểm**, không
+phải cả lịch sử. `_scoped_table` trong `data_quality.py` lọc theo cột có thật lúc
+chạy:
+
+```text
+có cột cob_dt       → cob_dt = DATE '<cob_dt của lượt DQ>'
+có cột is_current   → CAST(is_current AS INT) = 1
+không có cột nào    → cả bảng (dim SCD1, bảng CDC)
+```
+
+Kèm theo: `referential_integrity` bỏ qua FK `NULL` (cột bắt buộc thì khai
+`null_check`), nhãn cận của `range_check` in đúng `>=0` thay vì `<=None`, và mọi
+kết quả ghi rõ đã đọc phạm vi nào (`[cob_dt=2026-09-22]`, `[is_current]`).
+
+**Hệ quả có chủ đích:** `row_count` trên bảng có `cob_dt` giờ FAIL khi thiếu
+snapshot của ngày đang kiểm. Trước đây nó PASS miễn còn snapshot cũ nào.
+
+**Một ngoại lệ, khai tường minh.** `bronze.core_customer` **không** partition theo
+`cob_dt` (khác `core_txn_account`): mỗi lần nạp ghi đè cả bảng, nên bảng chỉ giữ
+lần nạp mới nhất, và lọc theo ngày của lượt DQ ra 0 dòng. Rule reconciliation của
+`dim_customer` khai `source_scope: whole_table`. Test
+`test_reconciliation_source_scope_matches_partitioning` buộc lựa chọn này khớp DDL
+theo cả hai chiều.
+
+Chạy lại trên stack, `--cob_dt 2026-09-22`:
+
+| Job | Trước | Sau |
+|---|---|---|
+| DQ silver | 8 FAIL · `exit 1` | 61 PASS · 1 WARN · **0 FAIL** · `exit 0` |
+| DQ gold | 20 PASS | 20 PASS |
+| DQ bronze | 6 FAIL (CDC rỗng) | không đổi |
+
+WARN còn lại là thật: `89994 values out of range >=0 [cob_dt=2026-09-22]` — số
+tiền âm trong `fact_txn_account` của một snapshot (trước đây 720.270 vì cộng cả
+8 snapshot).
+
+Lỗi cấy vào (trên temp view của Spark, không đụng lakehouse) vẫn đỏ: trùng
+**trong** một snapshot, hai dòng `is_current` cho một khoá, và FK chỉ khớp với phiên
+bản dim đã hết hiệu lực — cả ba FAIL; còn trùng **giữa** các snapshot, phiên bản cũ
+của SCD2 và FK `NULL` đều PASS. Chi tiết ở
+[`technical-debt.md` TD-11](technical-debt.md).
 
 ---
 
@@ -567,7 +611,6 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Check theo từng `cob_dt` và `is_current` | §6a — Silver DQ đỏ 8 FAIL trên dữ liệu lành (TD-11) |
 | Quyết định Python của worker | 3.8 trong container, 3.11 trong CI; test tĩnh chỉ bắt được annotation (TD-10) |
 | pydantic trên worker | `ops_contract_validation_dag` không chạy được (TD-10) |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
@@ -592,9 +635,10 @@ phủ sóng        silver 13/17 · gold 10/14 · bronze 6/22 (chỉ CDC)
 quarantine      18 rule · 4 bảng Silver · 6 FAIL + 10 WARN + 2 INFO
 dbt             117 test (110 generic + 7 singular) trên serving
 guard           2 guard, chỉ ở Gold · 14/14 non_empty · 11/14 snapshots
-chạy thật       2026-09-23 · gold 20/20 PASS · silver 8 FAIL (thiết kế check, TD-11)
+phạm vi check   snapshot cob_dt của lượt DQ · is_current cho SCD2 (TD-11)
+chạy thật       2026-09-23 · gold 20/20 PASS · silver 61 PASS + 1 WARN, 0 FAIL
                 · bronze 6 FAIL (CDC không chạy) · quarantine 1 FAIL, không ghi được
-lỗi đang sống   TD-11 — Silver DQ đỏ trên dữ liệu lành
+lỗi đang sống   0 trong đường DQ — còn mở: quarantine không có bảng đích (§5)
 hợp đồng tĩnh   test_dq_rules_resolve.py — 150 test trên rule file thật
                 test_worker_python38_compat.py — code worker import được trên 3.8
 thông báo       không có
