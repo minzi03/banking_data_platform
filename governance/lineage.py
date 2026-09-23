@@ -85,6 +85,60 @@ class TransformType:
 
 
 # ---------------------------------------------------------------------------
+# Declared edges — lineage lấy từ chính cấu hình job
+# ---------------------------------------------------------------------------
+#
+# Trước đây ops_lineage_dag giữ một danh sách cạnh viết tay, và nó lệch khỏi
+# thực tế: 3/11 cạnh vào Gold không tồn tại, 43/51 cạnh thật bị thiếu (TD-13).
+# Nguồn đáng tin là `source.tables` trong YAML của job Silver/Gold — chính
+# `validation.require_snapshots` dựa vào đó, và
+# tests/governance/test_declared_sources_match_sql.py giữ nó khớp với SQL.
+#
+# Chưa phủ: nguồn → Bronze (YAML Bronze không khai bảng nguồn theo cùng cách),
+# CDC, và dbt serving.
+
+EDGE_LAYERS = ("silver", "gold")
+
+_JOB_TYPE_TRANSFORM = {
+    "scd_type1": TransformType.SCD1_UPSERT,
+    "scd_type2": TransformType.SCD2_MERGE,
+    "fact_txn": TransformType.FACT_LOAD,
+    "mart360": TransformType.GOLD_MART,
+    "risk": TransformType.GOLD_MART,
+    "segment": TransformType.GOLD_MART,
+    "time_analytics": TransformType.GOLD_MART,
+}
+
+
+def declared_edges(etl_root: str | os.PathLike, catalog: str = "lakehouse") -> list[tuple[str, str, str]]:
+    """
+    Mọi cạnh (source, target, transform_type) mà job Silver/Gold khai báo.
+
+    Đọc `code_etl/<layer>/**/*.yml` có khối `sql`. Job type chưa biết → raise,
+    để một job mới không lặng lẽ mang transform_type sai.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    edges: list[tuple[str, str, str]] = []
+    root = Path(etl_root)
+    for layer in EDGE_LAYERS:
+        for path in sorted((root / layer).rglob("*.yml")):
+            config = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(config, dict) or not isinstance(config.get("sql"), str):
+                continue
+            job_type = (config.get("job") or {}).get("type")
+            if job_type not in _JOB_TYPE_TRANSFORM:
+                raise ValueError(f"{path}: job.type {job_type!r} chưa có transform_type trong governance/lineage.py")
+            target = config["target"]
+            target_table = f"{target.get('catalog', catalog)}.{target['schema']}.{target['table']}"
+            for source in (config.get("source") or {}).get("tables") or []:
+                edges.append((f"{catalog}.{source}", target_table, _JOB_TYPE_TRANSFORM[job_type]))
+    return edges
+
+
+# ---------------------------------------------------------------------------
 # Lineage Tracker
 # ---------------------------------------------------------------------------
 

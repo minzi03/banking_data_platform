@@ -1098,9 +1098,10 @@ Airflow itself was not run.
 
 ## TD-13 — `opslakehouse.lineage_log` is written to but never created
 
-**Status:** partly fixed (2026-09-24) — the table exists, the dead DDL is gone,
-the RUNBOOK queries work. **Open: nothing writes lineage, and the edges the DAG
-knows are wrong.**
+**Status:** fixed for Silver/Gold edges (2026-09-24) — the table exists, the dead
+DDL is gone, the RUNBOOK queries work, and `ops_lineage_dag` writes the edges the
+jobs declare. **Open: the DAG is manual-trigger only, and two more lineage tables
+nobody writes (below).**
 
 `governance/lineage.py` and `ops_lineage_dag` name `opslakehouse.lineage_log`.
 Its only DDL was in `docker/init_openmetadata/01_create_schemas.sql`, which
@@ -1129,16 +1130,12 @@ nothing mounts or runs — the same reason `contract_validation_log` was missing
   `lakehouse`, which Trino does not have (ADR-0002). Both now use `psql`, were run
   verbatim against the stack, and §6 says plainly that the table is empty.
 
-### Still open — who writes lineage, and what
+### Was open — who writes lineage, and what (fixed 2026-09-24)
 
-**No job writes `lineage_log`.** `ops_lineage_dag`'s task builds `LineageTracker`
-records and prints them; the code says *"Actual PG write would need SparkSession.
-For now, just log the lineage."* `code_etl/shared/ops/lineage_tracker.py` is not
-called by any ETL job.
-
-**Wiring the writer as-is would persist wrong lineage.** The DAG's edge list is
-hand-written. Compared with the sources the Gold jobs declare in YAML
-(`source.tables`, enforced against their SQL by `test_declared_sources_match_sql.py`):
+`ops_lineage_dag`'s task built `LineageTracker` records from a hand-written edge
+list and only printed them (*"For now, just log the lineage"*). Compared with the
+sources the Gold jobs declare in YAML (`source.tables`, enforced against their
+SQL by `test_declared_sources_match_sql.py`):
 
 ```text
 hand-written edges into Gold     11
@@ -1148,6 +1145,41 @@ declared Gold edges              51
 Gold tables absent from the DAG   9 of 14
 ```
 
+Now:
+
+- `governance.lineage.declared_edges(code_etl/)` reads `source.tables`, `target`
+  and `job.type` from every Silver/Gold job YAML: **75 edges** (51 into Gold, 24
+  into Silver) over 30 target tables. An unknown `job.type` raises instead of
+  guessing a transform type.
+- `emit_lineage` writes them through `PostgresHook("postgres-etl")` — the
+  connection every DAG already uses — deleting the same `dag_run_id` first, in
+  one transaction. `row_count` and `snapshot_id` are NULL: the task does not
+  measure them, and a 0 would read as "the job wrote no rows".
+  `LineageTracker.write_to_pg` (Spark JDBC) is not used.
+- `tests/governance/test_lineage_declared_edges.py`: edges equal the declared
+  sources exactly; every job is a target; the DAG names no table itself.
+  `tests/dags/test_ops_lineage_dag.py`: DELETE-then-INSERT, every edge, NULL counts.
+
+Run on the stack (2026-09-24):
+
+```text
+airflow tasks test ops_lineage_dag emit_lineage 2026-09-22
+  → Wrote 75 lineage edges … Marking task as SUCCESS
+lineage_log by transform_type:  fact_load 14 · gold_mart 51 · scd1_upsert 8 · scd2_merge 2
+emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then deleted)
+```
+
+### Still open
+
+- **Nothing triggers `ops_lineage_dag`** (`schedule_interval=None`, no DAG
+  triggers it). The table fills only when someone runs it.
+- **Not covered:** source → Bronze, CDC, dbt serving. Bronze YAMLs do not declare
+  source tables the same way.
+- **Two more lineage tables, both without a writer:** `opslakehouse.data_lineage`
+  (`05_security.sql`) and `opslakehouse.data_lineage_audit`
+  (`09_ddl_regulatory.sql`). README §OpenMetadata points at `data_lineage`.
+  Three tables for one fact invite readers to query the empty one.
+
 ### Acceptance
 
 ```text
@@ -1156,9 +1188,11 @@ Gold tables absent from the DAG   9 of 14
 [x] docker/init_openmetadata/01_create_schemas.sql either applied somewhere or removed,
     so no DDL lives where nothing reads it → removed
 [x] RUNBOOK.md §5 and §6 use psql against PostgreSQL, run verbatim on the stack
-[ ] lineage edges derived from what the jobs declare (source.tables / contracts),
+[x] lineage edges derived from what the jobs declare (source.tables / contracts),
     not a hand-written list — a test compares them
-[ ] ops_lineage_dag writes those edges, run on the stack, rows observed
+[x] ops_lineage_dag writes those edges, run on the stack, rows observed
+[ ] ops_lineage_dag triggered after gold_all_dag, or its manual status documented
+[ ] one lineage table: data_lineage / data_lineage_audit removed or given a writer
 ```
 
 ---
