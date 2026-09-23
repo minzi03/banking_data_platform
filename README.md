@@ -1256,10 +1256,11 @@ cover, and the timeline gap this creates, is in
 OpenMetadata 1.5.6 runs healthy and serves the catalog UI on port 8585.
 
 Catalog population is a separate ingestion step that has **not been re-verified**
-after the last stack recreate: the `table_entity` count is currently 0. The
-lineage DAG (`ops_lineage_dag`) completes, but it logs lineage to stdout only —
-it does not yet persist to `opslakehouse.data_lineage`, which is why that table
-holds 0 rows. Both are tracked as known limitations rather than claimed metrics.
+after the last stack recreate: the `table_entity` count is currently 0 — a known
+limitation, not a claimed metric. Table-level lineage is not sent to OpenMetadata:
+`ops_lineage_dag` writes the edges Silver/Gold jobs declare to
+`opslakehouse.lineage_log` (75 per run), and runs only when triggered by hand
+(RUNBOOK §6, TD-13).
 
 Capabilities include:
 

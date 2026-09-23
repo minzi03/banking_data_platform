@@ -135,11 +135,17 @@ stops with an explicit error instead of falling back to a password in the code.
 
 ### 6. Check Lineage
 
-**Expect this table to be empty.** `opslakehouse.lineage_log` exists since
-2026-09-24 (it used to be defined only in an unmounted directory, so it never
-existed at all), but nothing writes to it yet: `ops_lineage_dag` only prints a
-hard-coded edge list, and that list disagrees with the sources the jobs declare
-in YAML. See TD-13 in `docs/05-quality/technical-debt.md`.
+`opslakehouse.lineage_log` holds the table-level edges that Silver/Gold jobs
+declare in their YAML (`source.tables` → `target`), written by `ops_lineage_dag`.
+**Nothing schedules that DAG** — the table is empty until you run it:
+
+```bash
+docker exec banking-airflow-webserver airflow tasks test ops_lineage_dag emit_lineage 2026-09-22
+```
+
+Expect 75 rows per run: 51 into Gold, 24 into Silver. `row_count` is NULL — the
+DAG does not measure it. Source → Bronze, CDC and dbt edges are not included.
+See TD-13 in `docs/05-quality/technical-debt.md`.
 
 ```bash
 docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT source_table, target_table, transform_type, dag_id, created_at FROM opslakehouse.lineage_log ORDER BY created_at DESC LIMIT 20"'

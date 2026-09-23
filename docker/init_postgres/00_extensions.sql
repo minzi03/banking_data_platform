@@ -105,9 +105,9 @@ COMMENT ON TABLE opslakehouse.contract_validation_log IS 'Data contract check re
 -- ghi. Giống contract_validation_log, bảng này trước đây chỉ được khai trong
 -- docker/init_openmetadata/ — không ai chạy — nên chưa từng tồn tại (TD-13).
 --
--- ⚠ Có bảng không có nghĩa là có dữ liệu: tới 2026-09-24 chưa job nào ghi vào
--- đây. ops_lineage_dag chỉ in danh sách cạnh viết tay, và danh sách đó lệch với
--- nguồn các job khai trong YAML. Xem TD-13.
+-- Writer: ops_lineage_dag ghi các cạnh job Silver/Gold khai trong YAML
+-- (governance.lineage.declared_edges). DAG không có lịch — bảng rỗng cho tới khi
+-- có người chạy nó. Xem TD-13.
 CREATE TABLE IF NOT EXISTS opslakehouse.lineage_log (
     id              SERIAL PRIMARY KEY,
     source_table    VARCHAR(255)   NOT NULL,   -- e.g. 'lakehouse.silver.dim_customer'
@@ -124,4 +124,4 @@ CREATE INDEX IF NOT EXISTS idx_lineage_log_source ON opslakehouse.lineage_log (s
 CREATE INDEX IF NOT EXISTS idx_lineage_log_target ON opslakehouse.lineage_log (target_table);
 CREATE INDEX IF NOT EXISTS idx_lineage_log_dag    ON opslakehouse.lineage_log (dag_id);
 
-COMMENT ON TABLE opslakehouse.lineage_log IS 'Table-level lineage edges — see TD-13: no writer yet';
+COMMENT ON TABLE opslakehouse.lineage_log IS 'Table-level lineage edges declared by Silver/Gold jobs, written by ops_lineage_dag';

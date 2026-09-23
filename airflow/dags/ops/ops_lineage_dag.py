@@ -1,14 +1,13 @@
 """
 Ops DAG — Lineage Emission (post-Silver/Gold).
-Records data lineage across the pipeline and emits to OpenMetadata.
-Results written to opslakehouse.lineage_log.
+Ghi các cạnh lineage mà job Silver/Gold khai trong YAML vào opslakehouse.lineage_log.
+Không emit sang OpenMetadata.
 """
 
 from datetime import timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
@@ -24,12 +23,6 @@ DEFAULT_ARGS = {
     "retries": 0,
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": False,
-}
-
-SPARK_CONF = {
-    "spark.driver.memory":   "512m",
-    "spark.executor.memory": "768m",
-    "spark.executor.cores":  "1",
 }
 
 dag = DAG(
@@ -86,74 +79,56 @@ end   = make_end_flag_task("end", DAG_ID, "ops", dag, cob_dt=COB_DT)
 # ---------------------------------------------------------------------------
 # Lineage Emission Task — PythonOperator
 # ---------------------------------------------------------------------------
+PROJECT_ROOT = "/opt/project"
+LINEAGE_TABLE = "opslakehouse.lineage_log"
+
+
 def emit_lineage(**context):
     """
-    Emit lineage records for all pipeline tables.
-    Reads Airflow run metadata and Iceberg snapshots.
+    Ghi mọi cạnh lineage mà job Silver/Gold khai trong YAML vào lineage_log.
+
+    Cạnh lấy từ governance.lineage.declared_edges — không còn danh sách viết
+    tay (TD-13). Ghi lại cùng một dag_run thì thay thế, không nhân đôi: xoá
+    cạnh cũ của run đó rồi chèn, trong một transaction.
+
+    row_count và snapshot_id để NULL: task này không đo chúng, và một số 0
+    giả sẽ đọc như "job ghi 0 dòng".
     """
-    import sys
     import os
+    import sys
 
-    # Add project to path
-    sys.path.insert(0, "/opt/project")
+    sys.path.insert(0, PROJECT_ROOT)
 
-    from governance.lineage import LineageTracker, TransformType
+    from airflow.providers.postgres.hooks.postgres import PostgresHook
 
-    tracker = LineageTracker()
+    from governance.lineage import declared_edges
+
+    edges = declared_edges(os.path.join(PROJECT_ROOT, "code_etl"))
+    if not edges:
+        raise RuntimeError("declared_edges trả về 0 cạnh — nghi đường dẫn code_etl sai")
+
     dag_id = context["dag"].dag_id
     dag_run_id = context["run_id"]
+    rows = [(src, tgt, transform, dag_id, dag_run_id) for src, tgt, transform in edges]
 
-    # Bronze → Silver lineage (SCD transforms)
-    bronze_silver_lineage = [
-        ("lakehouse.bronze.core_customer", "lakehouse.silver.dim_customer", TransformType.SCD2_MERGE),
-        ("lakehouse.bronze.core_account", "lakehouse.silver.dim_account", TransformType.SCD2_MERGE),
-        ("lakehouse.bronze.core_product", "lakehouse.silver.dim_product", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_branch", "lakehouse.silver.dim_branch", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_card", "lakehouse.silver.dim_card", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_employee", "lakehouse.silver.dim_employee", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_device", "lakehouse.silver.dim_device", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_location", "lakehouse.silver.dim_location", TransformType.SCD1_UPSERT),
-        ("lakehouse.bronze.core_txn_account", "lakehouse.silver.fact_txn_account", TransformType.FACT_LOAD),
-        ("lakehouse.bronze.core_card_txn", "lakehouse.silver.fact_card_txn", TransformType.FACT_LOAD),
-        ("lakehouse.bronze.core_crm_interaction", "lakehouse.silver.fact_crm_interaction", TransformType.FACT_LOAD),
-        ("lakehouse.bronze.core_online_transaction", "lakehouse.silver.fact_online_transaction", TransformType.FACT_LOAD),
-        ("lakehouse.bronze.core_support_ticket", "lakehouse.silver.fact_support_ticket", TransformType.FACT_LOAD),
-    ]
+    conn = PostgresHook(postgres_conn_id=POSTGRES_ETL_CONN_ID).get_conn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {LINEAGE_TABLE} WHERE dag_id = %s AND dag_run_id = %s",
+                (dag_id, dag_run_id),
+            )
+            cur.executemany(
+                f"INSERT INTO {LINEAGE_TABLE} "
+                "(source_table, target_table, transform_type, dag_id, dag_run_id, snapshot_id, row_count) "
+                "VALUES (%s, %s, %s, %s, %s, NULL, NULL)",
+                rows,
+            )
+    finally:
+        conn.close()
 
-    # Silver → Gold lineage (mart aggregations)
-    silver_gold_lineage = [
-        ("lakehouse.silver.dim_customer", "lakehouse.gold.mart_customer_360", TransformType.GOLD_MART),
-        ("lakehouse.silver.dim_account", "lakehouse.gold.mart_customer_360", TransformType.GOLD_MART),
-        ("lakehouse.silver.dim_card", "lakehouse.gold.mart_customer_360", TransformType.GOLD_MART),
-        ("lakehouse.silver.fact_txn_account", "lakehouse.gold.mart_customer_360", TransformType.GOLD_MART),
-        ("lakehouse.silver.fact_card_txn", "lakehouse.gold.mart_customer_360", TransformType.GOLD_MART),
-        ("lakehouse.gold.mart_customer_360", "lakehouse.gold.rfm_segment", TransformType.GOLD_MART),
-        ("lakehouse.gold.mart_customer_360", "lakehouse.gold.churn_prediction", TransformType.GOLD_MART),
-        ("lakehouse.gold.mart_customer_360", "lakehouse.gold.cross_sell_segment", TransformType.GOLD_MART),
-        ("lakehouse.gold.rfm_segment", "lakehouse.gold.campaign_target", TransformType.GOLD_MART),
-        ("lakehouse.gold.churn_prediction", "lakehouse.gold.campaign_target", TransformType.GOLD_MART),
-        ("lakehouse.gold.cross_sell_segment", "lakehouse.gold.campaign_target", TransformType.GOLD_MART),
-    ]
-
-    # Record all lineage
-    all_lineage = bronze_silver_lineage + silver_gold_lineage
-
-    for source, target, transform_type in all_lineage:
-        tracker.record_lineage(
-            source_table=source,
-            target_table=target,
-            transform_type=transform_type,
-            dag_id=dag_id,
-            dag_run_id=dag_run_id,
-            row_count=0,  # Will be updated if needed
-        )
-
-    # Summary
-    print(tracker.summary())
-
-    # Note: Actual PG write would need SparkSession
-    # For now, just log the lineage
-    print(f"Lineage emission complete: {len(all_lineage)} records")
+    print(f"Wrote {len(rows)} lineage edges to {LINEAGE_TABLE} for run {dag_run_id}")
+    return len(rows)
 
 
 emit_lineage_task = PythonOperator(
