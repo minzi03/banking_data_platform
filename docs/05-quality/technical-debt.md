@@ -1199,7 +1199,7 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
 
 ## TD-14 — Bronze alignment is measured on one fact table, so dimensions can drift unseen
 
-**Status:** open (2026-09-24)
+**Status:** fixed (2026-09-24, verified on the stack)
 
 `snapshot.bronze_max_cob_dt` and `snapshot.bronze_partition_exists` in
 `docs/evidence/metrics-manifest.sql` both read `bronze.core_txn_account` only.
@@ -1221,10 +1221,52 @@ regenerated.
 ### Acceptance
 
 ```text
-[ ] every Bronze dimension's cob_dt is measured, not only core_txn_account's
-[ ] an error invariant fails when any Bronze table lacks the requested cob_dt
+[x] every Bronze dimension's cob_dt is measured, not only core_txn_account's
+[x] an error invariant fails when any Bronze table lacks the requested cob_dt
     (all invariants use `eq`, so e.g. "count of Bronze tables at cob_dt" eq
     "count of Bronze tables" needs no new operator)
-[ ] negative-tested: reload one dimension for another date, the manifest refuses
+[x] negative-tested: reload one dimension for another date, the manifest refuses
     to promote
 ```
+
+### Fix (2026-09-24)
+
+`docs/evidence/metrics-manifest.sql` gains `bronze.tables_at_cob_dt`: one branch
+per Bronze batch table, each filtered to the requested `cob_dt`, returning the
+number of tables that have it (`value`) and the names of those that do not
+(`missing`). The new invariant compares it with the existing static metric that
+counts Bronze workloads from config:
+
+```yaml
+bronze_every_table_at_cob_dt:
+  metric:     metrics.bronze.tables_at_cob_dt.value
+  compare_to: metrics.bronze.batch_tables.value
+  operator:   eq
+  severity:   error
+```
+
+Comparing against the config count means a new Bronze workload that nobody adds
+to the query also turns the manifest red. `tests/governance/test_bronze_alignment_query.py`
+catches that earlier, at commit time: the query's table list must equal the
+config targets, and every branch must filter on `:cob_dt`.
+
+**Found while doing it.** The first version had a `;` inside its SQL comment.
+The generator takes everything before a block's first `;` as the statement, so
+the query was cut in half and Trino rejected it — `--render-sql` looked fine,
+because it only prints. A new test applies the generator's own split rule to
+every block in the file: after the first `;` only comments may remain. It fails
+on that version, naming the block.
+
+**On the stack**, `cob_dt 2026-09-22`, with `--collect-only`:
+
+```text
+all 17 Bronze tables at 09-22        tables_at_cob_dt = 17 · missing = ''
+core_mcc_code reloaded for 09-21     bronze_every_table_at_cob_dt: 16 eq 17 → FAIL
+                                     missing = 'core_mcc_code'
+                                     layers_aligned = True   ← the old check, still blind
+core_mcc_code reloaded for 09-22     restored, 109 rows at 09-22 (checked through Trino)
+```
+
+Unit test `test_bronze_dimensions_on_another_date_block_promotion` pins the same
+case without a stack: 4 of 17 tables at `cob_dt`, `layers_aligned` still `True`,
+the new invariant errors.

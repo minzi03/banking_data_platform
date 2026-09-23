@@ -34,7 +34,7 @@ verifier.**
 ```text
 COLLECT  →  LUÔN ghi timestamped run artifact vào docs/evidence/generated/
    ↓
-VERIFY   →  chạy 22 invariant
+VERIFY   →  chạy 23 invariant
    ↓
 ERROR == 0 ?
       yes → ghi đè canonical (atomic: .yaml.tmp rồi Path.replace)
@@ -97,7 +97,7 @@ những node này, nên một metric nội bộ không kéo cả manifest sang `
 | Loại | Số | Nguồn | Sinh lại được? |
 |---|---:|---|---|
 | `static` | 24 | đếm file, parse YAML/DDL trong repo | ✅ mỗi lần chạy |
-| `runtime` | 10 | query qua Trino trên nền tảng đang chạy | ✅ nếu stack lên |
+| `runtime` | 11 | query qua Trino trên nền tảng đang chạy | ✅ nếu stack lên |
 | `manual` | 1 | đo thủ công, có ngày và phương pháp | ❌ generator **preserve** |
 
 Metric `manual` duy nhất là `cdc_freshness` — đo bằng
@@ -136,12 +136,12 @@ kiểm chứng.
 
 ---
 
-## 4. Invariant: 21 chặn, 1 cảnh báo
+## 4. Invariant: 22 chặn, 1 cảnh báo
 
-22 invariant, tất cả toán tử `eq`. Phân bố severity có chủ ý:
+23 invariant, tất cả toán tử `eq`. Phân bố severity có chủ ý:
 
 ```text
-error  21   fail → KHÔNG promote canonical
+error  22   fail → KHÔNG promote canonical
 warn    1   fail → vẫn promote, nhưng ghi vào warnings
 ```
 
@@ -280,6 +280,11 @@ Generator sẽ chạy và promote ngay cả khi các tầng ở những ngày kh
 > `bronze.core_txn_account`. Lượt `--collect-only` lộ ra qua một metric khác:
 > `bronze.snapshot_rows.core_customer.rows` 10000 → 0. Không promote; nạp lại 13
 > bảng cho `09-22` rồi mới sinh manifest. Lỗ hổng ghi ở TD-14.
+>
+> **Đã sửa (TD-14):** query `bronze.tables_at_cob_dt` đếm số bảng Bronze batch có
+> đúng `cob_dt`, và invariant `bronze_every_table_at_cob_dt` so nó với số workload
+> trong config. Kiểm ngược trên stack: một dimension ở ngày khác → `16 eq 17 → FAIL`,
+> `missing = 'core_mcc_code'`, trong khi `layers_aligned` vẫn `True`.
 
 Cách kiểm an toàn trước khi promote:
 
@@ -380,8 +385,8 @@ projection phải có `claim` và `location`.
 ```text
 manifest    status verified · 0 error · 0 warning · 0 skipped
             cob_dt 2026-09-22 · scope full · git_dirty false
-metric      24 static · 10 runtime · 1 manual
-invariant   22 (21 error · 1 warn) · toàn bộ operator eq
+metric      24 static · 11 runtime · 1 manual
+invariant   23 (22 error · 1 warn) · toàn bộ operator eq
 binding     18 entry → 22 projection · 22/22 khớp README
 artifact    45 run artifact (không track)
 promote     2026-09-24 · test_functions 776 · collected_pytest_nodes 1572

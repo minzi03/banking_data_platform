@@ -97,6 +97,41 @@ SELECT
 FROM :catalog.bronze.core_account
 WHERE cob_dt = DATE ':cob_dt';
 
+--@id bronze.tables_at_cob_dt
+-- Số bảng Bronze batch có snapshot đúng cob_dt được yêu cầu (TD-14).
+--
+-- bronze_max_cob_dt và bronze_partition_exists chỉ đo core_txn_account. Dimension
+-- Bronze nạp full-snapshot — mỗi lần nạp thay cả bảng — nên một lượt nạp lại cho
+-- ngày cũ để 13 dimension ở ngày khác trong khi mọi invariant vẫn xanh. Đã xảy ra
+-- 2026-09-23. Invariant bronze_every_table_at_cob_dt so con số này với
+-- bronze.batch_tables (đếm từ config), nên một bảng thiếu ngày — hoặc một workload
+-- mới mà quên thêm vào đây — đều làm manifest từ chối promote.
+--
+-- Danh sách bảng phải khớp đích của code_etl/bronze/*/*.yml — test
+-- tests/governance/test_bronze_alignment_query.py giữ điều đó.
+WITH per_table AS (
+  SELECT 'core_account' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_account WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_branch' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_branch WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_card' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_card WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_card_txn' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_card_txn WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_crm_interaction' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_crm_interaction WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_customer' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_customer WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_deposit' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_deposit WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_device' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_device WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_employee' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_employee WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_loan' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_loan WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_loan_payment' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_loan_payment WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_location' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_location WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_mcc_code' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_mcc_code WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_online_transaction' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_online_transaction WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_product' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_product WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_support_ticket' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_support_ticket WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_txn_account' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_txn_account WHERE cob_dt = DATE ':cob_dt'
+)
+SELECT CAST(COUNT_IF(present) AS BIGINT) AS value,
+       COALESCE(array_join(array_agg(table_name) FILTER (WHERE NOT present), ','), '') AS missing
+FROM per_table;
+
 --@id bronze.partitions_present
 -- Số partition đang tồn tại. Đây là con số giải thích vì sao COUNT(*) toàn bảng
 -- từng ra 4.6M trong khi chỉ có ~2.3M giao dịch thật.

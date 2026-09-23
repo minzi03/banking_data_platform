@@ -295,6 +295,10 @@ def _verified_manifest(contract: dict) -> dict:
     m["metrics"]["serving"]["trino"]["mart_customer_360_current_visible"]["value"] = 0
     m["metrics"]["serving"]["objects_present"]["value"] = 13
     m["metrics"]["serving"]["current_snapshot_alignment"]["value"] = 0
+    # TD-14: mọi bảng Bronze batch ở đúng cob_dt.
+    m["metrics"]["bronze"]["tables_at_cob_dt"].update(
+        {"value": m["metrics"]["bronze"]["batch_tables"]["value"], "missing": ""}
+    )
     return m
 
 
@@ -302,6 +306,18 @@ class TestInvariantEvaluation:
     def test_fully_populated_manifest_passes(self, contract):
         errors, _, _ = gen.evaluate_invariants(_verified_manifest(contract))
         assert errors == []
+
+    def test_bronze_dimensions_on_another_date_block_promotion(self, contract):
+        """
+        TD-14, đúng như 2026-09-23: 13 dimension Bronze nạp lại cho ngày cũ, chỉ 4
+        fact ở cob_dt được yêu cầu. snapshot_layers_aligned vẫn True vì nó chỉ đo
+        core_txn_account — invariant mới phải là thứ chặn.
+        """
+        m = _verified_manifest(contract)
+        m["metrics"]["bronze"]["tables_at_cob_dt"].update({"value": 4, "missing": "core_account,core_customer"})
+        assert m["manifest"]["snapshot"]["layers_aligned"] is True
+        errors, _, _ = gen.evaluate_invariants(m)
+        assert [e for e in errors if e.startswith("bronze_every_table_at_cob_dt:")], errors
 
     def test_unmeasured_metric_is_failure_not_pass(self, contract):
         """

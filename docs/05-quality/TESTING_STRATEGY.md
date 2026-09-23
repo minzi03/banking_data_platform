@@ -217,6 +217,16 @@ pytest --collect-only -q tests/            1572   (1433 + 139)
 py -3 -m pytest -q -m "not integration"    1505 passed, 1 skipped, 66 deselected
 ```
 
+Rồi TD-14 (manifest đo `cob_dt` của mọi bảng Bronze) thêm **6 hàm → 6 node**:
+5 trong `tests/governance/test_bronze_alignment_query.py`, 1 trong
+`test_generate_metrics_manifest.py`.
+
+```text
+def test_* count                            782   (776 + 6)
+pytest --collect-only -q tests/            1578   (1572 + 6)
+py -3 -m pytest -q -m "not integration"    1511 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -512,12 +522,12 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1572 node · 776 hàm · 1506 node chạy không cần hạ tầng   (2026-09-24)
-suite       1505 passed · 1 skipped (có chủ ý) · 66 deselected · ~11s
+pytest      1578 node · 782 hàm · 1512 node chạy không cần hạ tầng   (2026-09-24)
+suite       1511 passed · 1 skipped (có chủ ý) · 66 deselected · ~11s
 coverage    76% (75,70%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 776 / 1572 — mọi delta ở §3 giờ nằm trong manifest
+manifest    đã promote 782 / 1578 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
-manifest    22 invariant
+manifest    23 invariant (22 error · 1 warn)
 ```
