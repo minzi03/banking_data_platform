@@ -11,16 +11,22 @@ Lịch chạy (qua Airflow):
   - Daily cho mart/segment
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from spark.spark_session import get_spark_session
+
+# Không dùng zoneinfo: nó chỉ có từ Python 3.9, còn spark-worker chạy 3.8 — import
+# zoneinfo làm job chết trước khi chạy dòng nào. Asia/Ho_Chi_Minh là UTC+7 cố
+# định, không có giờ mùa hè, nên offset cố định cho kết quả giống hệt.
+ICT = timezone(timedelta(hours=7), "ICT")
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -138,9 +144,7 @@ def _run_zorder_after_compaction(spark, table: str) -> None:
 
 
 def expire_snapshots(spark, table: str, retain_days: int = 7, min_snapshots: int = 3) -> None:
-    older_than = (datetime.now(tz=ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(days=retain_days)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    older_than = (datetime.now(tz=ICT) - timedelta(days=retain_days)).strftime("%Y-%m-%d %H:%M:%S")
     logger.info("expire_snapshots: %s (older than %s, keep min %d)", table, older_than, min_snapshots)
     spark.sql(f"""
         CALL lakehouse.system.expire_snapshots(
@@ -152,9 +156,7 @@ def expire_snapshots(spark, table: str, retain_days: int = 7, min_snapshots: int
 
 
 def remove_orphan_files(spark, table: str, older_than_days: int = 3) -> None:
-    older_than = (datetime.now(tz=ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(days=older_than_days)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    older_than = (datetime.now(tz=ICT) - timedelta(days=older_than_days)).strftime("%Y-%m-%d %H:%M:%S")
     logger.info("remove_orphan_files: %s (older than %s)", table, older_than)
     spark.sql(f"""
         CALL lakehouse.system.remove_orphan_files(

@@ -18,6 +18,8 @@ Usage:
     result = detector.detect_statistical_outlier(df, "txn_amount", method="zscore")
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from logging import getLogger
 

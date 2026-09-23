@@ -497,9 +497,20 @@ docs/03-data/DATA_DICTIONARY.md                               mart_branch_monthl
 
 Every check function in `data_quality.py` wraps its body in `try/except` and
 returns `("FAIL", "N/A", f"Error: {e}")` — correct fail-loud behaviour. So the
-missing table produced 2 FAILs, `print_summary` counted them, and `main()`
-called `sys.exit(1)`. The `dq_gold_checks` task in
-`airflow/dags/ops/ops_data_quality_dag.py` therefore failed **every day**.
+missing table *would* produce 2 FAILs, and `main()` would call `sys.exit(1)`.
+
+> **Correction (2026-09-23, from a stack run).** The original entry said
+> `dq_gold_checks` "therefore failed every day" because of this name. That was
+> inferred from code, and the mechanism was wrong. `data_quality.py` never got
+> as far as reading `dq_rules.yml`: `spark-worker-1` runs Python 3.8, and the
+> module crashed on import at `def load_rules(path: str) -> dict[str, Any]`
+> with `TypeError: 'type' object is not subscriptable` — for every layer,
+> since the initial commit. The wrong table name was real but masked by an
+> earlier crash. See TD-10.
+>
+> Nor had anyone seen the DAG fail: the `docker_airflow-logs` volume holds no
+> task log for `ops_data_quality_dag` at all. "Fails every day" was a
+> prediction, not an observation.
 
 ### The typo is not the debt
 
@@ -516,7 +527,7 @@ what the tests proved     the YAML loader works
 what nobody checked       the YAML it loads in production resolves
 ```
 
-So 822 unit tests were green while a production task was red daily. The suite
+So 822 unit tests were green while the production rule file was broken. The suite
 was not weak, it was pointed at the wrong artifact. Same class as the evidence
 manifest binding that only anchored README (`EVIDENCE_MANIFEST.md` §6.4):
 the mechanism existed and did not point at the real thing.
@@ -577,19 +588,29 @@ went red on both with the offending name in the message.
 [x] anti-empty-pass guards so a broken parse cannot pass by checking nothing
 [x] both failure modes negative-tested (wrong table name, wrong check name)
 [x] quarantine_rules.yml source tables covered by the same test
-[ ] dq_gold_checks verified green on a running stack
+[x] Gold DQ verified green on a running stack (2026-09-23, after TD-10)
 ```
 
-The last item needs the Docker stack and is **not** done. The evidence here is
-static: DDL, four agreeing sources, and a test that goes red on the old name.
-Strong, but static — the daily failure is fixed in the file, not yet observed
-fixed in Airflow.
+**Stack verification (2026-09-23).** With the TD-10 fix applied, the Gold layer
+ran against the real `dq_rules.yml` on `spark-worker-1`:
+
+```text
+Running row_count on lakehouse.gold.mart_branch_monthly_summary ...
+  ✅ row_count: PASS — Row count OK: 12800
+DQ SUMMARY: 20 checks executed · PASS: 20 · WARN: 0 · FAIL: 0      exit 0
+```
+
+This is `spark-submit` in the container the DAG uses, not an Airflow run —
+Airflow was not started. Silver and Bronze still exit 1, for reasons unrelated
+to this entry (TD-11).
 
 ### What remains open
 
 ```text
 no DDL creates lakehouse.quarantine.*   write_to_quarantine always throws at
                                         spark.table(target), logs ERROR, returns 0
+                                        (confirmed at runtime 2026-09-23: every
+                                        write → TABLE_OR_VIEW_NOT_FOUND)
 email_on_failure: False                 DQ and quarantine both silent, no callback
 data_quality_log has no reader          write-only, so red looks like green
 ```
@@ -599,3 +620,180 @@ The first is recorded as a deliberate assertion in
 which is the moment to flip it into the opposite check. The other two are why
 this entry existed for as long as it did; they are documented in
 [`DATA_QUALITY.md`](DATA_QUALITY.md) §9 and not fixed here.
+
+---
+
+## TD-10 — Ops and governance jobs could not import on the Spark worker's Python 3.8
+
+**Status:** fixed for syntax (2026-09-23, verified on the stack) · open: runtime decision, pydantic
+
+`banking-spark-worker-1` runs **Python 3.8.10**. Every ops and governance task in
+Airflow runs there: `docker exec banking-spark-worker-1 spark-submit ...` or
+`SparkSubmitOperator`. The rest of the toolchain assumes something newer:
+
+```text
+pyproject.toml     requires-python >=3.10 · ruff target-version py310 · rule UP
+ci.yml  test job   Python 3.11
+spark-worker-1     Python 3.8.10
+```
+
+Ruff's `UP` rules actively rewrite code into 3.9+ forms (`Dict` → `dict`,
+`Optional[X]` → `X | None`). CI runs on 3.11 and is green. On the worker, the
+module dies at import, before `main()`:
+
+```text
+TypeError: 'type' object is not subscriptable                  dict[str, Any]
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'   X | None
+ModuleNotFoundError: No module named 'zoneinfo'                 stdlib 3.9+
+```
+
+### Measured, not inferred
+
+Every worker entry point was imported **inside the container** with `origin/main`
+code (`d64b9c0`):
+
+| Entry point | Before | After |
+|---|---|---|
+| `code_etl/shared/ops/data_quality.py` | `TypeError` (`dict[...]`) | OK |
+| `code_etl/shared/ops/quarantine.py` | `TypeError` (`dict[...]`) | OK |
+| `code_etl/shared/ops/iceberg_maintenance.py` | `No module named 'zoneinfo'` | OK |
+| `code_etl/shared/ops/lineage_tracker.py` | `TypeError` (`\|`) | no pydantic |
+| `governance/schema_drift.py` | `TypeError` (`dict[...]`) | OK |
+| `governance/enforcement.py` | `TypeError` (`\|`) | no pydantic |
+| `governance/anomaly_detection.py` | `TypeError` (`\|`) | OK |
+| `governance/freshness_checks.py` | `TypeError` (`\|`) | OK |
+| `governance/audit.py` | `TypeError` (`\|`) | OK |
+| `governance/lineage.py` | `TypeError` (`\|`) | OK |
+| `governance/rbac.py` | `TypeError` (`dict[...]`) | OK |
+| `governance/contracts_registry.py` | `TypeError` (`\|`) | no pydantic |
+| `code_etl/shared/ops/pii_masking.py` | needs `PII_HASH_SALT` | unchanged (expected) |
+| `scripts/resolve_quarantine.py` | OK | OK |
+
+11 of 14 were dead on arrival, including every job in `ops_data_quality_dag`,
+`ops_quarantine_dag`, `ops_schema_drift_dag`, `ops_maintenance_weekly_dag` and
+`ops_contract_validation_dag`. The syntax is present from the initial commit
+(`d0442ac`). `resolve_quarantine.py` survived only because it still says
+`typing.Dict` — the form ruff's `UP006` flags for "upgrade".
+
+No task log for any of these DAGs exists in the `docker_airflow-logs` volume, so
+none of this was ever seen failing. It was found by running `data_quality.py` by
+hand to verify TD-9.
+
+### Fix
+
+```text
+from __future__ import annotations    12 modules — annotations become lazy strings,
+                                      so dict[...] and X | None are never evaluated
+zoneinfo → timezone(timedelta(hours=7))   iceberg_maintenance.py; Asia/Ho_Chi_Minh
+                                      is a fixed UTC+7 with no DST, so identical output
+```
+
+The scan that chose these 12 files found **no** 3.9+ construct outside
+annotations, which is the only case the future import cannot fix.
+`governance/contracts.py` is deliberately excluded: pydantic evaluates
+annotations when building the model, future import or not.
+
+### What now catches it
+
+`tests/governance/test_worker_python38_compat.py` scans every file under
+`code_etl/` and `governance/` plus `scripts/resolve_quarantine.py`:
+
+```text
+ast.parse(..., feature_version=(3, 8))        syntax the 3.8 parser rejects
+3.9+ annotation without the future import     dict[...] / list[...] / X | Y
+import of zoneinfo / graphlib / tomllib       stdlib that 3.8 does not have
+```
+
+Negative-tested: run against `origin/main`'s versions of the 12 files, it fails
+exactly **13** times — the 12 annotation files plus `zoneinfo` — matching the
+container's own failures one for one.
+
+It is a static approximation. It cannot see `isinstance(x, int | str)` in a file
+that has the future import. The complete fix is below.
+
+### Stack verification (2026-09-23)
+
+`spark-submit` on `spark-worker-1`, fixed code, `--cob_dt 2026-09-22`:
+
+```text
+data_quality --layer gold     20 checks · 20 PASS                 exit 0
+data_quality --layer silver   62 checks · 53 PASS · 1 WARN · 8 FAIL   exit 1   → TD-11
+data_quality --layer bronze    6 checks · 6 FAIL (0 rows)         exit 1   → TD-11
+quarantine   --layer all      18 rules  · 14 PASS · 3 WARN · 1 FAIL  exit 1
+```
+
+Every job now **runs to completion and reports**. Exit 1 on Silver, Bronze and
+quarantine is a finding about the data or the checks, not a crash.
+`iceberg_maintenance.py` was import-tested only — a real run expires snapshots
+and deletes orphan files, which is not something to do for a verification.
+
+### Acceptance
+
+```text
+[x] every worker entry point import-tested in the container, before and after
+[x] no worker module fails on 3.9+ syntax
+[x] zoneinfo removed without changing the timestamps produced
+[x] static regression test, negative-tested against the old code
+[x] data_quality.py and quarantine.py run end to end on the stack
+[ ] decide the runtime: upgrade the Spark image's Python, or add a 3.8 CI job
+[ ] install pydantic on the worker, or stop importing it there
+    (ops_contract_validation_dag cannot run until then)
+```
+
+The first open item is the real fix and is an architecture decision, so it is
+not taken here. Until it is, any new syntax ruff "upgrades" into these files is
+caught by the static test only if it lands in an annotation.
+
+---
+
+## TD-11 — Silver DQ checks count every snapshot, so they fail on healthy data
+
+**Status:** open (recorded 2026-09-23)
+
+Once TD-10 let `data_quality.py` run, Silver reported 8 FAILs. Each one was
+checked against the data. **None is a data defect.**
+
+```text
+check                               reported                  what is actually there
+fact_txn_account     unique txn_id  8,400,000 duplicates      8 cob_dt snapshots · 0 duplicates within any snapshot
+fact_card_txn        unique txn_id  4,200,000                 idem
+fact_online_txn      unique id      3,500,000                 idem
+fact_crm_interaction unique id        350,000                 idem
+fact_support_ticket  unique id        175,000                 idem
+dim_customer (SCD2)  unique id         10,000                 2 versions/key · is_current rows 10,000/10,000 unique
+dim_account  (SCD2)  unique id         30,000                 2 versions/key · is_current rows 30,000/30,000 unique
+dim_card  ref_integrity account_id  "1 orphan"                the orphan is NULL — 2,672 cards have no account_id,
+                                                              and the left-anti join counts NULL as a value
+```
+
+The cause is one design choice: `spark.table(table)` reads the **whole table**.
+Checks take `--cob_dt` but never filter by it, and know nothing about SCD2.
+
+This matters more than it looks. Silver DQ now exits 1 on every run with healthy
+data. A check that is always red teaches people to ignore it — and a *real*
+duplicate would be reported inside an 8,400,000 that is already expected.
+
+### Also seen in the same run
+
+```text
+range_check message    "720270 values out of range <=None"  — bounds text uses
+                       truthiness, so min_value: 0 prints as "<=None"
+                       (data_quality.py:160). The count is right, the text is wrong.
+Bronze CDC             all 6 *_cdc tables have 0 rows — Kafka/Debezium were not
+                       running. Environmental; says nothing about CDC either way.
+quarantine log         "8970 records quarantined" while rows_written = 0 —
+                       the log line reports intent, not the write (TD-9: no DDL).
+```
+
+### Acceptance
+
+```text
+[ ] unique_check and reconciliation scoped to one cob_dt partition where one exists
+[ ] SCD2 dims checked on is_current = 1
+[ ] referential_integrity excludes NULL foreign keys (or declares them per rule)
+[ ] Silver DQ exits 0 on the current data, and a planted duplicate makes it exit 1
+[ ] range_check message prints the bound it checked
+```
+
+Scoping is a design decision about what a check *means* (this snapshot vs. the
+whole history), so it is recorded rather than changed alongside TD-10.

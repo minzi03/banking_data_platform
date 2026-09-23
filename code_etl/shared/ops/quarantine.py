@@ -12,6 +12,8 @@ Usage:
         quarantine.py --cob_dt 2025-01-01 --layer all
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys

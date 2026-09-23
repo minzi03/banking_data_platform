@@ -23,6 +23,8 @@ Usage:
     tracker.flush(spark)
 """
 
+from __future__ import annotations
+
 import os
 import sys
 from logging import getLogger

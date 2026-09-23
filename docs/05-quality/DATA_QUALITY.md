@@ -1,14 +1,18 @@
 # Chất Lượng Dữ Liệu
 
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
+> Cập nhật: 2026-09-23 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
 > Liên quan: [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) · [`EVIDENCE_MANIFEST.md`](EVIDENCE_MANIFEST.md) · [`../04-operations/INCIDENT_RUNBOOK.md`](../04-operations/INCIDENT_RUNBOOK.md)
 
 Mọi con số đo trực tiếp trên repo tại `2026-09-22` bằng cách parse
 `dq_rules.yml`, `quarantine_rules.yml`, các file DAG và `DATA_DICTIONARY.md`.
-Chỗ nào chưa đo được thì nói là chưa đo.
+Kết quả chạy thật trên stack (§6a) đo ngày `2026-09-23`. Chỗ nào chưa đo được
+thì nói là chưa đo.
 
-Không còn lỗi đang sống nào trong đường DQ. §6 giữ lại lỗi vừa sửa cùng cơ chế
-đã dựng để nó không quay lại — đọc mục đó nếu bạn sắp thêm rule mới.
+> **Đọc §6a trước nếu bạn vận hành.** Tới `2026-09-23`, job DQ và quarantine
+> **chưa từng chạy được** trên `spark-worker-1`: worker chạy Python 3.8, còn code
+> dùng cú pháp 3.9+ nên chết ngay lúc import. Mọi mô tả hành vi runtime trong
+> tài liệu này trước ngày đó là suy từ code, không phải quan sát. Đã sửa (TD-10);
+> giờ Silver DQ chạy được và đỏ vì check đếm mọi snapshot (TD-11).
 
 ---
 
@@ -40,7 +44,7 @@ Lấy từ `schedule_interval` của từng DAG (không phải từ
 04:00  Silver
 06:00  Gold            ← guard fail-loud chạy Ở ĐÂY, trong job
 07:00  dbt run         → publish tầng serving
-08:00  DQ check        ← lần đầu có ai soi dữ liệu
+08:00  DQ check        ← lần đầu có ai soi dữ liệu (chạy được từ 2026-09-23, §6a)
 08:00  dbt test        (117 test trên serving)
 09:00  quarantine
 09:00  contract validation
@@ -126,8 +130,8 @@ evidence manifest.
 
 Cả 9 hàm check đều bọc `try/except` và trả `("FAIL", "N/A", f"Error: {e}")`. Một
 check nổ vì bảng không tồn tại, cột sai tên, hay Spark lỗi **không** được tính
-là pass. Đây là quyết định fail-loud đúng, và nó chính là thứ làm lỗi ở §6 nổi
-lên thay vì im lặng.
+là pass. Đây là quyết định fail-loud đúng — nó *sẽ* làm lỗi ở §6 nổi lên thay vì
+im lặng, nếu job chạy được tới đó. Nó chưa bao giờ chạy tới (§6a).
 
 ### Nhưng tên check sai thì fail OPEN
 
@@ -234,7 +238,9 @@ except Exception as e:
 ```
 
 Hàng vi phạm vẫn được **đếm** và vẫn làm job `exit 1` khi có `FAIL`, nhưng không
-được ghi đi đâu. Khoảng hở này được ghi lại bằng một assertion ngược trong
+được ghi đi đâu. Đã xác nhận khi chạy thật ngày `2026-09-23`: mọi lần ghi đều
+`TABLE_OR_VIEW_NOT_FOUND`, trong khi log vẫn in *"8970 records quarantined"*.
+Khoảng hở này được ghi lại bằng một assertion ngược trong
 `test_quarantine_target_tables_have_no_ddl` — test đó đỏ khi ai đó thêm DDL, tức
 đúng lúc cần đảo nó thành "mọi `target_table` phải tồn tại".
 
@@ -253,10 +259,13 @@ dbt/models/gold/_gold_sources.yml:220     - name: mart_branch_monthly_summary
 docs/03-data/DATA_DICTIONARY.md           mart_branch_monthly_summary
 ```
 
-**Hệ quả**: theo §3, exception được tính là FAIL. Mỗi lượt
-`data_quality.py --layer gold` sinh 2 FAIL từ một bảng không tồn tại, `exit 1`,
-nên task `dq_gold_checks` **fail mỗi ngày**. Cộng với §9 (`email_on_failure:
-False`, và không ai đọc `data_quality_log`), không ai được báo.
+**Hệ quả dự đoán**: theo §3, exception được tính là FAIL, nên bảng không tồn tại
+*sẽ* sinh 2 FAIL và `exit 1`.
+
+**Hệ quả thật** (đo ngày `2026-09-23`): không có gì cả, vì job chết từ trước khi
+đọc `dq_rules.yml` — xem §6a. Bản trước của mục này viết task `dq_gold_checks`
+"fail mỗi ngày"; đó là suy luận từ code, và **sai cơ chế**. Cũng không có log
+task nào của DAG DQ trong volume log Airflow, nên chưa ai thấy nó chạy.
 
 ### Cái đáng ghi lại không phải lỗi gõ
 
@@ -264,7 +273,7 @@ Sửa tên là một dòng. Chuyện đáng ghi là **vì sao nó sống đượ
 `tests/ops/test_data_quality.py` — file mang đúng tên module — kiểm loader bằng
 fixture `sample_dq_rules`, một YAML tổng hợp dựng trong `tmp_path`. Nó chứng minh
 loader chạy đúng. **Không test nào nạp `dq_rules.yml` thật.** Nên 822 unit test
-xanh trong khi một task production đỏ hằng ngày.
+xanh trong khi file rule production hỏng.
 
 Cùng lớp lỗ với "binding chỉ neo README" ở
 [`EVIDENCE_MANIFEST.md` §6.4](EVIDENCE_MANIFEST.md): cơ chế kiểm tồn tại và
@@ -303,11 +312,66 @@ Cả hai kiểu hỏng đã được kiểm chứng ngược trước khi viết
 bảng cũ và một `nul_check` gõ sai, bộ test đỏ ở cả hai, thông điệp lỗi nêu đúng
 tên sai và gợi ý ứng viên trong DDL.
 
-**Chưa xác minh trên nền tảng đang chạy** — việc đó cần cả stack Docker. Bằng
-chứng ở đây là tĩnh: DDL, bốn nguồn đồng thuận, và một test đỏ trên tên cũ. Lỗi
-đã sửa trong file; chưa quan sát được `dq_gold_checks` xanh trong Airflow.
+**Đã xác minh trên stack ngày `2026-09-23`** (sau khi sửa §6a): Gold DQ chạy
+với `dq_rules.yml` thật, `mart_branch_monthly_summary` PASS với 12.800 dòng,
+20/20 check PASS, `exit 0`. Đây là `spark-submit` trong đúng container mà DAG
+dùng — chưa phải một lượt Airflow, vì Airflow không được bật.
 
 Ghi lại đầy đủ ở [`technical-debt.md` TD-9](technical-debt.md).
+
+---
+
+## 6a. Job DQ chưa từng chạy được — đã sửa 2026-09-23
+
+Kiểm §6 trên stack thì lộ ra lỗi lớn hơn: `spark-worker-1` chạy **Python
+3.8.10**, còn code ops/governance dùng cú pháp 3.9+ trong annotation. Module chết
+ngay lúc import:
+
+```text
+File "/opt/project/code_etl/shared/ops/data_quality.py", line 60, in <module>
+    def load_rules(path: str) -> dict[str, Any]:
+TypeError: 'type' object is not subscriptable
+```
+
+Không riêng Gold — **cả ba tầng**, và cả quarantine, schema drift, contract
+validation, iceberg maintenance: 11/14 entry point chạy trên worker chết như vậy,
+từ commit đầu tiên. CI chạy Python 3.11 nên không bao giờ thấy; ruff đặt
+`target-version = py310` và rule `UP` còn chủ động đẩy cú pháp mới vào.
+
+Sửa: `from __future__ import annotations` ở 12 module, và thay `zoneinfo` (chỉ có
+từ 3.9) bằng offset UTC+7 cố định trong `iceberg_maintenance.py`.
+`tests/governance/test_worker_python38_compat.py` quét tĩnh để lỗi không quay
+lại. Chi tiết, bảng trước/sau và phần còn mở ở
+[`technical-debt.md` TD-10](technical-debt.md).
+
+### Chạy thật, lần đầu
+
+`spark-submit` trên `spark-worker-1`, `--cob_dt 2026-09-22`:
+
+| Job | Kết quả | `exit` |
+|---|---|:-:|
+| DQ `--layer gold` | 20 check · **20 PASS** | 0 |
+| DQ `--layer silver` | 62 check · 53 PASS · 1 WARN · **8 FAIL** | 1 |
+| DQ `--layer bronze` | 6 check · **6 FAIL** — cả 6 bảng `*_cdc` có 0 dòng | 1 |
+| quarantine `--layer all` | 18 rule · 14 PASS · 3 WARN · 1 FAIL | 1 |
+
+Job giờ **chạy hết và báo cáo** — `exit 1` là kết quả của check, không phải crash.
+
+**8 FAIL của Silver không phải lỗi dữ liệu.** Đã đối chiếu từng cái:
+
+- 5 bảng fact: `unique_check` đếm trên **cả 8 snapshot `cob_dt`**; trong từng
+  snapshot có **0** trùng.
+- `dim_customer`, `dim_account` (SCD2): mỗi khoá có 2 phiên bản; các dòng
+  `is_current = 1` là duy nhất.
+- `dim_card` "1 orphan": orphan đó là `NULL` — 2.672 thẻ không có `account_id`, và
+  left-anti join đếm `NULL` như một giá trị.
+
+Nguyên nhân chung: check đọc **cả bảng**, nhận `--cob_dt` nhưng không lọc theo
+nó, và không biết SCD2. Một check luôn đỏ trên dữ liệu lành sẽ dạy người ta bỏ
+qua nó. Ghi ở [`technical-debt.md` TD-11](technical-debt.md), chưa sửa — phạm vi
+của check (một snapshot hay cả lịch sử) là quyết định thiết kế.
+
+Bronze đỏ vì Kafka/Debezium không chạy trong môi trường này — không nói gì về CDC.
 
 ---
 
@@ -412,7 +476,8 @@ chúng. `streamlit/app.py` chỉ nhắc chuỗi *"5 quarantine tables"* trong ph
 không query bảng nào.
 
 Nên đường duy nhất để biết dữ liệu có vấn đề là **có người tự mở Airflow UI**.
-Chi tiết ở §6 tồn tại được lâu chính vì lý do này.
+§6 và §6a tồn tại được lâu chính vì lý do này — §6a là cả một job không import
+nổi, và không gì báo.
 
 Cách xử lý khi phát hiện: [`../04-operations/INCIDENT_RUNBOOK.md`](../04-operations/INCIDENT_RUNBOOK.md).
 
@@ -480,6 +545,13 @@ Kiểm rule file mà không cần stack — mọi tên bảng và tên check ph�
 py -3 -m pytest tests/governance/test_dq_rules_resolve.py -q
 ```
 
+Kiểm code chạy trên worker có import được bằng Python 3.8 không (§6a) — chạy sau
+khi sửa bất cứ gì trong `code_etl/` hay `governance/`:
+
+```bash
+py -3 -m pytest tests/governance/test_worker_python38_compat.py -q
+```
+
 Đếm nhanh số mục:
 
 ```bash
@@ -495,6 +567,9 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
+| Check theo từng `cob_dt` và `is_current` | §6a — Silver DQ đỏ 8 FAIL trên dữ liệu lành (TD-11) |
+| Quyết định Python của worker | 3.8 trong container, 3.11 trong CI; test tĩnh chỉ bắt được annotation (TD-10) |
+| pydantic trên worker | `ops_contract_validation_dag` không chạy được (TD-10) |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
 | DDL cho `lakehouse.quarantine.*` | §5 — hàng vi phạm được đếm nhưng không ghi được đi đâu |
 | Ai đọc `data_quality_log` | write-only; không dashboard, không dbt model |
@@ -517,7 +592,10 @@ phủ sóng        silver 13/17 · gold 10/14 · bronze 6/22 (chỉ CDC)
 quarantine      18 rule · 4 bảng Silver · 6 FAIL + 10 WARN + 2 INFO
 dbt             117 test (110 generic + 7 singular) trên serving
 guard           2 guard, chỉ ở Gold · 14/14 non_empty · 11/14 snapshots
-lỗi đang sống   0 (§6 đã sửa 2026-09-22, chưa xác minh trên stack đang chạy)
+chạy thật       2026-09-23 · gold 20/20 PASS · silver 8 FAIL (thiết kế check, TD-11)
+                · bronze 6 FAIL (CDC không chạy) · quarantine 1 FAIL, không ghi được
+lỗi đang sống   TD-11 — Silver DQ đỏ trên dữ liệu lành
 hợp đồng tĩnh   test_dq_rules_resolve.py — 150 test trên rule file thật
+                test_worker_python38_compat.py — code worker import được trên 3.8
 thông báo       không có
 ```

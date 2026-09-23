@@ -18,6 +18,8 @@ Usage:
         raise ValueError(f"Contract validation failed: {result.summary()}")
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger

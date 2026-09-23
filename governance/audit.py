@@ -26,6 +26,8 @@ Usage:
     logger.write_to_pg(spark)
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
