@@ -85,10 +85,20 @@ SELECT COUNT(*) FROM lakehouse.gold.campaign_target_current;
 
 
 ### 5. Check Data Quality
-```bash
-docker compose exec trino trino --catalog lakehouse
 
-SELECT * FROM opslakehouse.data_quality_log ORDER BY checked_at DESC LIMIT 10;
+The DQ log lives in **PostgreSQL** (`banking_db`, schema `opslakehouse`), not in
+the lakehouse — so query it with `psql`, not Trino. Trino has no `lakehouse`
+catalog either: Spark calls the Iceberg catalog `lakehouse`, Trino calls it
+`iceberg` (ADR-0002).
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT cob_dt, table_name, check_name, check_status, details FROM opslakehouse.data_quality_log ORDER BY checked_at DESC LIMIT 20"'
+```
+
+Only what did not pass:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT cob_dt, table_name, check_name, check_status, details FROM opslakehouse.data_quality_log WHERE check_status <> '"'"'PASS'"'"' ORDER BY checked_at DESC LIMIT 20"'
 ```
 
 ### 5b. Contract validation
@@ -108,7 +118,7 @@ docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "S
 ```
 
 **Stacks created before 2026-09-23 need two one-time steps.** The log table used
-to be defined only in `docker/init_openmetadata/`, which nothing runs, and the
+to be defined only in `docker/init_openmetadata/` (never run, removed 2026-09-24), and the
 worker had no database credentials:
 
 ```bash
@@ -124,10 +134,25 @@ worker so it picks up `POSTGRES_USER`/`POSTGRES_PASSWORD`; without them the job
 stops with an explicit error instead of falling back to a password in the code.
 
 ### 6. Check Lineage
-```bash
-docker compose exec trino trino --catalog lakehouse
 
-SELECT * FROM opslakehouse.lineage_log ORDER BY created_at DESC LIMIT 10;
+**Expect this table to be empty.** `opslakehouse.lineage_log` exists since
+2026-09-24 (it used to be defined only in an unmounted directory, so it never
+existed at all), but nothing writes to it yet: `ops_lineage_dag` only prints a
+hard-coded edge list, and that list disagrees with the sources the jobs declare
+in YAML. See TD-13 in `docs/05-quality/technical-debt.md`.
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT source_table, target_table, transform_type, dag_id, created_at FROM opslakehouse.lineage_log ORDER BY created_at DESC LIMIT 20"'
+```
+
+For lineage you can trust today, read the generated
+[`docs/03-data/LINEAGE.md`](docs/03-data/LINEAGE.md) — built from the data
+contracts and checked by tests — or OpenMetadata.
+
+**Stacks created before 2026-09-24** need the table once. Idempotent:
+
+```bash
+sed -n '/^-- Table: lineage_log/,/^COMMENT ON TABLE opslakehouse.lineage_log/p' docker/init_postgres/00_extensions.sql | docker exec -i banking-postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d banking_db'
 ```
 
 ### 7. dbt semantic layer (dbt-core + dbt-trino)

@@ -40,7 +40,6 @@ log = getLogger("quarantine")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-QUARANTINE_LOG_TABLE = "opslakehouse.quarantine_log"
 RULES_FILE = os.path.join(_HERE, "quarantine_rules.yml")
 
 

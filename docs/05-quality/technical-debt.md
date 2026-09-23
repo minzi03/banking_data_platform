@@ -1098,28 +1098,67 @@ Airflow itself was not run.
 
 ## TD-13 — `opslakehouse.lineage_log` is written to but never created
 
-**Status:** open (2026-09-23)
+**Status:** partly fixed (2026-09-24) — the table exists, the dead DDL is gone,
+the RUNBOOK queries work. **Open: nothing writes lineage, and the edges the DAG
+knows are wrong.**
 
-`governance/lineage.py` and `ops_lineage_dag` write to `opslakehouse.lineage_log`.
-Its only DDL is in `docker/init_openmetadata/01_create_schemas.sql`, which nothing
-mounts or runs — the same reason `contract_validation_log` was missing (TD-10).
-`audit_log`, also defined there, survives only because `docker/init_postgres/05_security.sql`
-creates it too.
+`governance/lineage.py` and `ops_lineage_dag` name `opslakehouse.lineage_log`.
+Its only DDL was in `docker/init_openmetadata/01_create_schemas.sql`, which
+nothing mounts or runs — the same reason `contract_validation_log` was missing
+(TD-10). `to_regclass` on the running stack returned NULL.
 
-Found while fixing TD-10; not run. Checked statically: no file under
-`docker/init_postgres/` creates `lineage_log`.
+### Fixed (2026-09-24)
+
+- `lineage_log` is created by `docker/init_postgres/00_extensions.sql`, with the
+  columns `LineageTracker.write_to_postgres` writes. Applied to the running stack
+  (9 columns); applying it again only prints "already exists".
+- `docker/init_openmetadata/01_create_schemas.sql` is **deleted**. Everything
+  useful in it now lives where PostgreSQL actually runs DDL (`lineage_log` here,
+  `contract_validation_log` in #46, `audit_log` in `05_security.sql`). It also
+  inserted fabricated rows — a lineage edge, an audit record, and a "PASS"
+  contract check, all `test_run` — into those same audit tables; mounting the
+  directory to "fix" this item would have seeded them with evidence nobody
+  produced. Its `openmetadata` PostgreSQL schema is used by nothing.
+- `tests/governance/test_ops_tables_exist.py`: every `opslakehouse.<table>` named
+  in runtime code must have a `CREATE TABLE` in `docker/init_postgres/`, and
+  `docker/init_openmetadata/` must not come back. Against `main` it fails twice:
+  `lineage_log`, and `quarantine_log` — a constant in `quarantine.py` that
+  nothing used (quarantine's log is the Iceberg table
+  `lakehouse.quarantine.quarantine_log`). The constant is removed.
+- RUNBOOK §5 and §6 queried these PostgreSQL tables through Trino with catalog
+  `lakehouse`, which Trino does not have (ADR-0002). Both now use `psql`, were run
+  verbatim against the stack, and §6 says plainly that the table is empty.
+
+### Still open — who writes lineage, and what
+
+**No job writes `lineage_log`.** `ops_lineage_dag`'s task builds `LineageTracker`
+records and prints them; the code says *"Actual PG write would need SparkSession.
+For now, just log the lineage."* `code_etl/shared/ops/lineage_tracker.py` is not
+called by any ETL job.
+
+**Wiring the writer as-is would persist wrong lineage.** The DAG's edge list is
+hand-written. Compared with the sources the Gold jobs declare in YAML
+(`source.tables`, enforced against their SQL by `test_declared_sources_match_sql.py`):
+
+```text
+hand-written edges into Gold     11
+  of which not declared in YAML   3   e.g. gold.mart_customer_360 → gold.rfm_segment
+declared Gold edges              51
+  of which missing from the DAG  43
+Gold tables absent from the DAG   9 of 14
+```
 
 ### Acceptance
 
 ```text
-[ ] lineage_log created by docker/init_postgres/, and the migration for existing
+[x] lineage_log created by docker/init_postgres/, and the migration for existing
     stacks recorded in RUNBOOK.md
-[ ] ops_lineage_dag run on the stack, rows observed in the table
-[ ] docker/init_openmetadata/01_create_schemas.sql either applied somewhere or removed,
-    so no DDL lives where nothing reads it
-[ ] RUNBOOK.md §5 and §6 query these PostgreSQL log tables through Trino with
-    catalog `lakehouse`, which Trino does not have (ADR-0002) — §6 against a table
-    that does not exist. §5b shows the psql form
+[x] docker/init_openmetadata/01_create_schemas.sql either applied somewhere or removed,
+    so no DDL lives where nothing reads it → removed
+[x] RUNBOOK.md §5 and §6 use psql against PostgreSQL, run verbatim on the stack
+[ ] lineage edges derived from what the jobs declare (source.tables / contracts),
+    not a hand-written list — a test compares them
+[ ] ops_lineage_dag writes those edges, run on the stack, rows observed
 ```
 
 ---
