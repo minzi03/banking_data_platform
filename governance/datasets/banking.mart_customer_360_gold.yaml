@@ -16,7 +16,7 @@ physical_location:
   namespace: gold
   table: mart_customer_360
 
-dag_id: gold_mart360_dag
+dag_id: gold_all_dag
 
 upstream_dataset_ids:
   - banking.dim_customer_silver

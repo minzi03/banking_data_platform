@@ -104,6 +104,7 @@ class TestSelectContracts:
         assert not registry.has_errors, registry.errors
         assert len(cli.select_contracts(registry, "silver")) >= 10
         assert len(cli.select_contracts(registry, "gold")) >= 10
+        assert len(cli.select_contracts(registry, "serving")) >= 9
 
 
 # ---------------------------------------------------------------------------
@@ -203,11 +204,25 @@ class TestCredentials:
 
 
 class TestWiring:
-    def test_dag_runs_this_cli_for_silver_and_gold(self):
+    def test_dag_runs_this_cli_for_every_layer_with_contracts(self):
         dag = (PROJECT_ROOT / "airflow" / "dags" / "ops" / "ops_contract_validation_dag.py").read_text(encoding="utf-8")
         assert '"/opt/project/code_etl/shared/ops/contract_validation.py"' in dag
         assert "governance/enforcement.py" not in dag, "enforcement.py là thư viện, không chạy được như script"
-        assert "--layer silver" in dag and "--layer gold" in dag
+        for layer in ("silver", "gold", "serving"):
+            assert f"--layer {layer}" in dag, f"không task nào kiểm contract tầng {layer}"
+
+    def test_serving_waits_for_dbt_not_for_gold(self):
+        """Serving do dbt publish; kiểm trước khi SERVING_COMPLETE là kiểm snapshot cũ."""
+        dag = (PROJECT_ROOT / "airflow" / "dags" / "ops" / "ops_contract_validation_dag.py").read_text(encoding="utf-8")
+        assert "job_name = 'SERVING_COMPLETE'" in dag
+        assert "wait_serving >> validate_serving_contracts" in dag or (
+            "[start, wait_serving] >> validate_serving_contracts" in dag
+        )
+
+    def test_every_contract_layer_is_a_cli_layer(self):
+        """Contract có layer mà CLI không nhận thì không bao giờ được kiểm."""
+        layers = {c.layer for c in cli.ContractRegistry().get_all_contracts().values()}
+        assert layers <= set(cli.LAYERS), f"layer không có trong CLI: {layers - set(cli.LAYERS)}"
 
     def test_worker_receives_the_database_credentials(self):
         compose = (PROJECT_ROOT / "docker" / "docker-compose.yml").read_text(encoding="utf-8")

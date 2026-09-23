@@ -27,15 +27,14 @@ quality_rules:
     - interaction_id
     - customer_id
     - interaction_date
-    - interaction_type
+    - category
     - channel
-    - agent_id
-    - resolution
+    - assigned_to
   non_null_columns:
     - interaction_id
     - customer_id
     - interaction_date
-    - interaction_type
+    - category
     - channel
   min_row_count: 5000
   unique_check:

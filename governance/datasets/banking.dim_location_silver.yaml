@@ -26,14 +26,12 @@ quality_rules:
   required_columns:
     - location_id
     - merchant_name
-    - category
+    - merchant_category
     - city
-    - district
-    - address
   non_null_columns:
     - location_id
     - merchant_name
-    - category
+    - merchant_category
     - city
   min_row_count: 200
   unique_check:

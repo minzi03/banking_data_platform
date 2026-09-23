@@ -15,7 +15,8 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 |---|---:|
 | bronze | 1 |
 | silver | 13 |
-| gold | 20 |
+| gold | 11 |
+| serving | 9 |
 
 ---
 
@@ -48,25 +49,30 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 | Dataset | Bảng vật lý | Grain | Quality | AI risk | DAG |
 |---|---|---|---|---|---|
 | `banking.aml_monitoring_gold` | `gold.aml_monitoring` | (txn_id, cob_dt) | critical | `high_risk` | `gold_all_dag` |
-| `banking.branch_monthly_summary_gold` | `gold.branch_monthly_summary` | — | important | `minimal_risk` | `gold_mart360_dag` |
-| `banking.campaign_target_current_gold` | `gold.campaign_target_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.campaign_target_gold` | `gold.campaign_target` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.churn_prediction_current_gold` | `gold.churn_prediction_current` | — | important | `high_risk` | `gold_all_dag` |
-| `banking.churn_prediction_gold` | `gold.churn_prediction` | (customer_id, cob_dt) | important | `high_risk` | `gold_mart360_dag` |
-| `banking.cross_sell_segment_current_gold` | `gold.cross_sell_segment_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.cross_sell_segment_gold` | `gold.cross_sell_segment` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.customer_balance_summary_current_gold` | `gold.customer_balance_summary_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.customer_balance_summary_gold` | `gold.customer_balance_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.customer_card_summary_current_gold` | `gold.customer_card_summary_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.customer_card_summary_gold` | `gold.customer_card_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.customer_product_summary_current_gold` | `gold.customer_product_summary_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.customer_product_summary_gold` | `gold.customer_product_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.customer_transaction_summary_current_gold` | `gold.customer_transaction_summary_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.customer_transaction_summary_gold` | `gold.customer_transaction_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
-| `banking.mart_customer_360_current_gold` | `gold.mart_customer_360_current` | — | critical | `high_risk` | `gold_all_dag` |
-| `banking.mart_customer_360_gold` | `gold.mart_customer_360` | (customer_id, cob_dt) | critical | `high_risk` | `gold_mart360_dag` |
-| `banking.rfm_segment_current_gold` | `gold.rfm_segment_current` | — | important | `limited_risk` | `gold_all_dag` |
-| `banking.rfm_segment_gold` | `gold.rfm_segment` | (customer_id, cob_dt) | important | `limited_risk` | `gold_mart360_dag` |
+| `banking.branch_monthly_summary_gold` | `gold.mart_branch_monthly_summary` | — | important | `minimal_risk` | `gold_all_dag` |
+| `banking.campaign_target_gold` | `gold.campaign_target` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.churn_prediction_gold` | `gold.churn_prediction` | (customer_id, cob_dt) | important | `high_risk` | `gold_all_dag` |
+| `banking.cross_sell_segment_gold` | `gold.cross_sell_segment` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.customer_balance_summary_gold` | `gold.customer_balance_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.customer_card_summary_gold` | `gold.customer_card_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.customer_product_summary_gold` | `gold.customer_product_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.customer_transaction_summary_gold` | `gold.customer_transaction_summary` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+| `banking.mart_customer_360_gold` | `gold.mart_customer_360` | (customer_id, cob_dt) | critical | `high_risk` | `gold_all_dag` |
+| `banking.rfm_segment_gold` | `gold.rfm_segment` | (customer_id, cob_dt) | important | `limited_risk` | `gold_all_dag` |
+
+## serving
+
+| Dataset | Bảng vật lý | Grain | Quality | AI risk | DAG |
+|---|---|---|---|---|---|
+| `banking.campaign_target_current_gold` | `serving.campaign_target_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.churn_prediction_current_gold` | `serving.churn_prediction_current` | — | important | `high_risk` | `dbt_serving_publish` |
+| `banking.cross_sell_segment_current_gold` | `serving.cross_sell_segment_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.customer_balance_summary_current_gold` | `serving.customer_balance_summary_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.customer_card_summary_current_gold` | `serving.customer_card_summary_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.customer_product_summary_current_gold` | `serving.customer_product_summary_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.customer_transaction_summary_current_gold` | `serving.customer_transaction_summary_current` | — | important | `limited_risk` | `dbt_serving_publish` |
+| `banking.mart_customer_360_current_gold` | `serving.mart_customer_360_current` | — | critical | `high_risk` | `dbt_serving_publish` |
+| `banking.rfm_segment_current_gold` | `serving.rfm_segment_current` | — | important | `limited_risk` | `dbt_serving_publish` |
 
 ---
 
@@ -76,37 +82,37 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 |---|---:|---:|---:|---:|
 | `banking.core_customer_bronze` | 16 | 3 | 5,000 | 48h |
 | `banking.aml_monitoring_gold` | 17 | 5 | 1,000 | 24h |
-| `banking.branch_monthly_summary_gold` | 7 | 2 | 100 | 24h |
-| `banking.campaign_target_current_gold` | 18 | 4 | 500 | 24h |
+| `banking.branch_monthly_summary_gold` | 8 | 3 | 100 | 24h |
 | `banking.campaign_target_gold` | 18 | 4 | 500 | 24h |
-| `banking.churn_prediction_current_gold` | 10 | 4 | 1,000 | 24h |
 | `banking.churn_prediction_gold` | 10 | 4 | 1,000 | 24h |
-| `banking.cross_sell_segment_current_gold` | 7 | 4 | 1,000 | 24h |
 | `banking.cross_sell_segment_gold` | 7 | 4 | 1,000 | 24h |
-| `banking.customer_balance_summary_current_gold` | 7 | 3 | 5,000 | 24h |
 | `banking.customer_balance_summary_gold` | 7 | 3 | 5,000 | 24h |
-| `banking.customer_card_summary_current_gold` | 8 | 3 | 5,000 | 24h |
 | `banking.customer_card_summary_gold` | 12 | 3 | 5,000 | 24h |
-| `banking.customer_product_summary_current_gold` | 8 | 3 | 5,000 | 24h |
 | `banking.customer_product_summary_gold` | 12 | 3 | 5,000 | 24h |
-| `banking.customer_transaction_summary_current_gold` | 6 | 3 | 5,000 | 24h |
 | `banking.customer_transaction_summary_gold` | 12 | 3 | 5,000 | 24h |
-| `banking.mart_customer_360_current_gold` | 9 | 3 | 5,000 | 24h |
 | `banking.mart_customer_360_gold` | 33 | 3 | 5,000 | 24h |
-| `banking.rfm_segment_current_gold` | 11 | 4 | 1,000 | 24h |
 | `banking.rfm_segment_gold` | 11 | 4 | 1,000 | 24h |
+| `banking.campaign_target_current_gold` | 18 | 4 | 500 | 24h |
+| `banking.churn_prediction_current_gold` | 10 | 4 | 1,000 | 24h |
+| `banking.cross_sell_segment_current_gold` | 7 | 4 | 1,000 | 24h |
+| `banking.customer_balance_summary_current_gold` | 7 | 3 | 5,000 | 24h |
+| `banking.customer_card_summary_current_gold` | 8 | 3 | 5,000 | 24h |
+| `banking.customer_product_summary_current_gold` | 8 | 3 | 5,000 | 24h |
+| `banking.customer_transaction_summary_current_gold` | 6 | 3 | 5,000 | 24h |
+| `banking.mart_customer_360_current_gold` | 9 | 3 | 5,000 | 24h |
+| `banking.rfm_segment_current_gold` | 11 | 4 | 1,000 | 24h |
 | `banking.dim_account_silver` | 12 | 6 | 5,000 | 24h |
 | `banking.dim_branch_silver` | 6 | 4 | 5 | 24h |
 | `banking.dim_card_silver` | 8 | 6 | 1,000 | 24h |
 | `banking.dim_customer_silver` | 18 | 6 | 5,000 | 24h |
-| `banking.dim_device_silver` | 6 | 3 | 500 | 24h |
+| `banking.dim_device_silver` | 4 | 3 | 500 | 24h |
 | `banking.dim_employee_silver` | 6 | 4 | 100 | 24h |
-| `banking.dim_location_silver` | 6 | 4 | 200 | 24h |
-| `banking.dim_product_silver` | 6 | 3 | 10 | 24h |
+| `banking.dim_location_silver` | 4 | 4 | 200 | 24h |
+| `banking.dim_product_silver` | 4 | 3 | 10 | 24h |
 | `banking.fact_card_txn_silver` | 8 | 5 | 10,000 | 24h |
-| `banking.fact_crm_interaction_silver` | 7 | 5 | 5,000 | 24h |
-| `banking.fact_online_transaction_silver` | 8 | 6 | 5,000 | 24h |
-| `banking.fact_support_ticket_silver` | 8 | 6 | 2,000 | 24h |
+| `banking.fact_crm_interaction_silver` | 6 | 5 | 5,000 | 24h |
+| `banking.fact_online_transaction_silver` | 7 | 6 | 5,000 | 24h |
+| `banking.fact_support_ticket_silver` | 7 | 6 | 2,000 | 24h |
 | `banking.fact_txn_account_silver` | 9 | 6 | 10,000 | 24h |
 
 > `required_columns` là **tập con có chủ đích**, không phải bản kiểm kê cột.

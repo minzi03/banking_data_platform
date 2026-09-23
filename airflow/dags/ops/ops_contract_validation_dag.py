@@ -33,7 +33,7 @@ DEFAULT_ARGS = {
 dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
-    description="Contract validation — Silver + Gold layer validation",
+    description="Contract validation — Silver, Gold and serving snapshots of cob_dt",
     schedule_interval="0 9 * * *",  # Daily at 9:00 AM (Production - after DQ)
     catchup=False,
     max_active_tasks=4,
@@ -65,6 +65,25 @@ wait_gold = SqlSensor(
     sql=(
         "SELECT 1 FROM opslakehouse.flag_job_etl "
         "WHERE job_name = 'gold_all_dag' "
+        "  AND status = 'S' "
+        f"  AND cob_dt = '{COB_DT}' "
+        "LIMIT 1"
+    ),
+    poke_interval=120,
+    timeout=7200,
+    mode="reschedule",
+    dag=dag,
+)
+
+# Serving do dbt_serving_publish dựng lúc 07:00 và đánh dấu bằng SERVING_COMPLETE.
+# Chờ đúng cờ đó — không chờ gold_all_dag — nên serving chưa publish thì task
+# serving đợi, còn Silver/Gold vẫn được kiểm đúng giờ.
+wait_serving = SqlSensor(
+    task_id="wait_serving_complete",
+    conn_id=POSTGRES_ETL_CONN_ID,
+    sql=(
+        "SELECT 1 FROM opslakehouse.flag_job_etl "
+        "WHERE job_name = 'SERVING_COMPLETE' "
         "  AND status = 'S' "
         f"  AND cob_dt = '{COB_DT}' "
         "LIMIT 1"
@@ -110,7 +129,21 @@ validate_gold_contracts = BashOperator(
     dag=dag,
 )
 
+validate_serving_contracts = BashOperator(
+    task_id="validate_serving_contracts",
+    bash_command=(
+        "/usr/bin/docker exec banking-spark-worker-1 "
+        "/opt/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client "
+        "--conf spark.driver.memory=512m "
+        "--conf spark.executor.memory=768m "
+        "--conf spark.executor.cores=1 "
+        f"{APPLICATION_PATH} --cob_dt {COB_DT} --layer serving"
+    ),
+    dag=dag,
+)
+
 # ---------------------------------------------------------------------------
 # Task Flow
 # ---------------------------------------------------------------------------
 [wait_silver, wait_gold] >> start >> [validate_silver_contracts, validate_gold_contracts] >> end
+[start, wait_serving] >> validate_serving_contracts >> end

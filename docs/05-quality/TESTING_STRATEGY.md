@@ -203,6 +203,16 @@ pytest --collect-only -q tests/            1433   (1410 + 1 + 22)
 py -3 -m pytest -q -m "not integration"    1366 passed, 1 skipped, 66 deselected
 ```
 
+Rồi TD-12 (contract mô tả đúng bảng thật) thêm **7 hàm → 139 node**:
+`tests/governance/test_contracts_match_tables.py` — 1 guard + 4 kiểm tra × 34
+contract = 137 node — và 2 test nối tầng `serving` vào CLI/DAG.
+
+```text
+def test_* count                            776   (769 + 7)
+pytest --collect-only -q tests/            1572   (1433 + 139)
+py -3 -m pytest -q -m "not integration"    1505 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 

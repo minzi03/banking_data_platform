@@ -13,9 +13,9 @@ layer: gold
 physical_location:
   catalog: lakehouse
   namespace: gold
-  table: branch_monthly_summary
+  table: mart_branch_monthly_summary
 
-dag_id: gold_mart360_dag
+dag_id: gold_all_dag
 
 upstream_dataset_ids:
   - banking.dim_branch_silver
@@ -25,14 +25,16 @@ quality_rules:
   required_columns:
     - branch_code
     - branch_name
-    - month
-    - total_transactions
-    - total_amount
-    - customer_count
-    - avg_transaction_amount
+    - txn_year
+    - txn_month
+    - txn_count
+    - total_txn_amount
+    - active_customers
+    - avg_txn_amount
   non_null_columns:
     - branch_code
-    - month
+    - txn_year
+    - txn_month
   min_row_count: 100
   freshness_sla_hours: 24
 

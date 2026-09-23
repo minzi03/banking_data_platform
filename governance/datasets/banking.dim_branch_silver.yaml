@@ -27,8 +27,8 @@ quality_rules:
     - branch_name
     - region
     - city
-    - manager_id
-    - is_active
+    - manager_name
+    - status
   non_null_columns:
     - branch_code
     - branch_name

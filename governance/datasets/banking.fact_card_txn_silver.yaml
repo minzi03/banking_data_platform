@@ -29,8 +29,8 @@ quality_rules:
     - customer_id
     - txn_date
     - txn_amount
-    - merchant
-    - mcc_code
+    - merchant_name
+    - merchant_category
     - status
   non_null_columns:
     - txn_id
