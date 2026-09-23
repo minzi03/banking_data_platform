@@ -146,13 +146,25 @@ class TestResourcePatternMatching:
 # ---------------------------------------------------------------------------
 
 
+PII_COLUMNS = {"cccd", "full_name", "phone", "email", "address", "date_of_birth"}
+
+
 class TestMaskedColumns:
-    def test_analytics_gets_all_four_pii_masks(self, rbac):
-        masks = rbac.get_masked_columns("analytics_report", "gold", "mart_customer_360")
-        assert set(masks) == {"full_name", "phone", "email", "cccd"}
+    """
+    Mask trước đây trỏ vào gold.mart_customer_360.{full_name,phone,email,cccd} —
+    bốn cột mà DDL Gold không có (Gold chỉ mang full_name_masked). Test cũ khoá
+    đúng những đường dẫn đó nên xanh mà không bảo vệ gì. Giờ mask trỏ vào bảng
+    Silver/Bronze thật sự mang PII; tests/governance/test_trino_access_control.py
+    kiểm mọi cột bị che có trong DDL.
+    """
+
+    def test_analytics_gets_every_pii_mask_on_silver_customer(self, rbac):
+        for table in ("dim_customer", "dim_customer_current"):
+            masks = rbac.get_masked_columns("analytics_report", "silver", table)
+            assert set(masks) == PII_COLUMNS, table
 
     def test_masks_are_non_empty_expressions(self, rbac):
-        masks = rbac.get_masked_columns("analytics_report", "gold", "mart_customer_360")
+        masks = rbac.get_masked_columns("analytics_report", "silver", "dim_customer")
         for col, expr in masks.items():
             assert expr.strip(), f"{col} has an empty mask expression"
 
@@ -162,37 +174,53 @@ class TestMaskedColumns:
         mask expression that returned the column unchanged would be a PII leak
         that no other test would catch.
         """
-        masks = rbac.get_masked_columns("analytics_report", "gold", "mart_customer_360")
-        assert "*" in masks["full_name"]
-        assert "*" in masks["phone"]
-        assert "*" in masks["email"]
-        assert "*" in masks["cccd"]
+        masks = rbac.get_masked_columns("analytics_report", "silver", "dim_customer")
+        for col in ("full_name", "phone", "email", "cccd"):
+            assert "*" in masks[col], col
+        assert "REDACTED" in masks["address"]
+        assert masks["date_of_birth"].startswith("date_trunc('year'")
+
+    def test_no_mask_targets_gold(self, rbac):
+        """Gold không mang PII nguyên bản — mask ở đó là mask vào cột không tồn tại."""
+        for user in ("analytics_report", "data_steward_user", "freshness_exporter"):
+            assert rbac.get_masked_columns(user, "gold", "mart_customer_360") == {}, user
 
     def test_admin_gets_no_masks(self, rbac):
         """admin has no COLUMN permissions — masking is applied per role."""
-        assert rbac.get_masked_columns("trino_admin", "gold", "mart_customer_360") == {}
+        assert rbac.get_masked_columns("trino_admin", "silver", "dim_customer") == {}
 
-    def test_readonly_gets_no_masks(self, rbac):
-        assert rbac.get_masked_columns("readonly_viewer", "gold", "mart_customer_360") == {}
+    def test_etl_gets_no_masks(self, rbac):
+        """Pipeline ghi Silver thì phải thấy giá trị thật."""
+        assert rbac.get_masked_columns("airflow_etl", "silver", "dim_customer") == {}
 
     def test_masks_apply_only_to_the_declared_table(self, rbac):
-        masks = rbac.get_masked_columns("analytics_report", "gold", "rfm_segment")
+        masks = rbac.get_masked_columns("analytics_report", "silver", "dim_account")
         assert masks == {}
 
     def test_masks_apply_only_to_the_declared_schema(self, rbac):
-        masks = rbac.get_masked_columns("analytics_report", "silver", "mart_customer_360")
+        masks = rbac.get_masked_columns("analytics_report", "gold", "dim_customer")
         assert masks == {}
 
-    def test_unknown_user_gets_no_masks(self, rbac):
-        assert rbac.get_masked_columns("no_such_user", "gold", "mart_customer_360") == {}
+    def test_observer_gets_bronze_masks_analytics_does_not(self, rbac):
+        assert set(rbac.get_masked_columns("freshness_exporter", "bronze", "core_customer")) == PII_COLUMNS
+        assert rbac.get_masked_columns("analytics_report", "bronze", "core_customer") == {}
 
-    def test_steward_inherits_no_masks(self, rbac):
+    def test_unknown_user_gets_no_masks(self, rbac):
+        assert rbac.get_masked_columns("no_such_user", "silver", "dim_customer") == {}
+
+    def test_steward_inherits_masks(self, rbac):
         """
-        data_steward's own permissions are schema/table grants, not COLUMN
-        grants, and get_masked_columns does not walk parent_roles. Pinning the
-        current behaviour so a future change to inheritance is deliberate.
+        Thay đổi CÓ CHỦ Ý so với trước. Bản cũ ghim "steward không kế thừa mask"
+        với chú thích để thay đổi về kế thừa là có chủ ý. Lý do đổi: steward kế
+        thừa quyền ĐỌC Silver của analytics (has_access đi theo parent_roles),
+        nên nếu không kế thừa mask thì steward đọc được cccd gốc — và từ khi
+        rules.json được Trino thực thi, đó là lỗ hổng thật chứ không chỉ là lệch
+        trong API Python.
         """
-        assert rbac.get_masked_columns("data_steward_user", "gold", "mart_customer_360") == {}
+        steward = rbac.get_masked_columns("data_steward_user", "silver", "dim_customer")
+        analytics = rbac.get_masked_columns("analytics_report", "silver", "dim_customer")
+        assert steward == analytics
+        assert set(steward) == PII_COLUMNS
 
     def test_matches_column_requires_three_segments(self, rbac):
         assert rbac._matches_column("iceberg.gold.mart_customer_360.phone", "gold", "mart_customer_360")
@@ -243,8 +271,8 @@ class TestConvenienceFunctions:
         assert check_access("readonly_viewer", "gold", "rfm_segment", "write") is False
 
     def test_get_masked_columns_function(self):
-        masks = get_masked_columns("analytics_report", "gold", "mart_customer_360")
-        assert set(masks) == {"full_name", "phone", "email", "cccd"}
+        masks = get_masked_columns("analytics_report", "silver", "dim_customer")
+        assert set(masks) == PII_COLUMNS
 
 
 # ---------------------------------------------------------------------------

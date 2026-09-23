@@ -156,6 +156,63 @@ rotation as a migration, not a config change.
 > and in the task's *Rendered Template* view. To hide it, add `salt` to
 > `[core] sensitive_var_conn_names`.
 
+### 9. Trino access control
+
+Trino enforces file-based access control. Rules live in
+`docker/init_trino/rules.json`, which is **generated** from
+`governance/rbac.py` — never edit it by hand. Decision record:
+[ADR-0015](docs/02-architecture/adr/0015-trino-access-control-generated-from-rbac.md).
+
+**Who connects as whom**
+
+| Client | Trino user | Can do |
+|---|---|---|
+| dbt | `dbt` | read `gold`; create and replace tables in `serving` |
+| Superset, Customer API, Streamlit, ML jobs | `superset` · `customer_api` · `streamlit` · `ml` | read `serving` only |
+| Freshness exporter, metrics manifest | `freshness_exporter` · `manifest_collector` | read every layer, customer PII masked |
+| Operators, CI, `docker exec … trino` | `admin` · `trino` | everything |
+| Analysts | `analytics_report` | read `gold` / `silver` / `sandbox` / `serving`, Silver PII masked |
+
+Any other user name can reach no data at all.
+
+**Query as a specific user** — the CLI defaults to user `trino` (admin):
+
+```bash
+docker compose exec trino trino --user analytics_report \
+  --execute "SELECT cccd FROM iceberg.silver.dim_customer LIMIT 3"
+# → ***********1234   (masked)
+```
+
+**Change a permission or add a user**
+
+```bash
+# 1. Edit ROLES / USERS in governance/rbac.py
+# 2. Regenerate the rules — the drift test fails if you skip this
+py -3 scripts/generate_trino_access_control.py
+# 3. Commit both files. Trino re-reads rules.json every 60s; no restart needed.
+```
+
+**Verify enforcement on the running stack** (also runs in CI):
+
+```bash
+py -3 scripts/verify_trino_access_control.py --container banking-trino
+```
+
+If every "must be denied" check *succeeds*, Trino is not loading the rules — usually
+`access-control.properties` is not mounted at `/etc/trino/access-control.properties`.
+Without it Trino silently falls back to allowing everything.
+
+**What this does not protect**
+
+- **No authentication yet.** Trino trusts the user name the client sends, so anyone
+  who can reach port 8080/8085 can claim to be `admin`. The rules stop *accidental*
+  access and mask PII for well-behaved clients; they are not a defence against a
+  deliberate one.
+- **Spark bypasses Trino.** Spark jobs read and write Iceberg through the REST
+  catalog and MinIO directly. Anyone with MinIO credentials can read the raw files.
+- A symptom worth knowing: `Access Denied: Cannot access catalog iceberg` from a
+  client means it is connecting under a user name that is not in `rbac.py`.
+
 ---
 
 ## 🐛 Troubleshooting

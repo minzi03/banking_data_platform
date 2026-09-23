@@ -73,7 +73,7 @@ def get_connection():
     return connect(
         host="trino",
         port=8085,
-        user="admin",
+        user="streamlit",
         catalog="iceberg"
     )
 

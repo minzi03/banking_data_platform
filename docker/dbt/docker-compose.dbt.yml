@@ -19,7 +19,7 @@ services:
       - DBT_TRINO_PORT=8080
       - DBT_TRINO_CATALOG=lakehouse
       - DBT_TRINO_SCHEMA=staging
-      - DBT_TRINO_USER=admin
+      - DBT_TRINO_USER=dbt
       - DBT_TRINO_PASSWORD=
     volumes:
       - ../dbt:/opt/dbt
@@ -53,7 +53,7 @@ services:
       - DBT_TRINO_PORT=8080
       - DBT_TRINO_CATALOG=lakehouse
       - DBT_TRINO_SCHEMA=staging
-      - DBT_TRINO_USER=admin
+      - DBT_TRINO_USER=dbt
       - DBT_TRINO_PASSWORD=
     volumes:
       - ../dbt:/opt/dbt
@@ -86,7 +86,7 @@ services:
       - DBT_TRINO_PORT=8080
       - DBT_TRINO_CATALOG=lakehouse
       - DBT_TRINO_SCHEMA=staging
-      - DBT_TRINO_USER=admin
+      - DBT_TRINO_USER=dbt
       - DBT_TRINO_PASSWORD=
     volumes:
       - ../dbt:/opt/dbt

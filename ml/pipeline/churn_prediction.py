@@ -10,7 +10,7 @@ import xgboost as xgb
 TRACKING_URI=os.getenv("MLFLOW_TRACKING_URI","http://mlflow:5000")
 FEATURES=["total_accounts","total_cards","total_loans","total_deposit_balance","total_loan_outstanding","aum_total","txn_count_30d","txn_amount_30d","days_since_last_txn","interaction_count_90d","rfm_recency_score","rfm_frequency_score","rfm_monetary_score"]
 def load_features(cob_dt):
-    conn=connect(host="trino",port=8080,catalog="iceberg",schema="serving")
+    conn=connect(host="trino",port=8080,user="ml",catalog="iceberg",schema="serving")
     cols=",".join(FEATURES)
     sql=f"SELECT customer_id,customer_segment,{cols},churn_flag FROM mart_customer_360_current WHERE cob_dt=DATE ''{cob_dt}''"
     df=pd.read_sql(sql,conn)

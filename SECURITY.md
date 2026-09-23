@@ -58,13 +58,13 @@ Cơ chế đang có:
 | Column masking | `ops_pii_masking_daily_dag` → `lakehouse.sandbox.*_masked` | Có — nhưng là bản sao phái sinh, không sửa bản gốc |
 | Masking ở tầng serving | `full_name_masked` trong `mart_customer_360` | Có — che ngay khi ghi Gold |
 | Audit trail | module `governance/audit.py` | Có |
-| RBAC | module `governance/rbac.py` | **Không.** Định nghĩa 5 role và 24 permission, nhưng không file `.py` nào ngoài test import nó, và lakehouse không có lớp thực thi nào |
+| RBAC ở Trino | `governance/rbac.py` → sinh `docker/init_trino/rules.json` | **Có, qua Trino** — mỗi client một user, tầng tiêu thụ chỉ đọc `serving`, PII ở Silver/Bronze bị che với role không phải admin/ETL. **Chưa xác thực**: Trino tin tên user client tự khai. Spark không đi qua Trino. Xem [ADR-0015](docs/02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) |
 
 Kiểm kê đầy đủ — bảng nào, cột nào, tầng nào, ai xem được bản gốc:
 [`docs/06-security-compliance/PII_INVENTORY.md`](docs/06-security-compliance/PII_INVENTORY.md).
 **Chưa có tài liệu**: `RBAC_MATRIX.md`.
 
-Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: masking áp ở tầng Gold/serving, **không** ở Bronze **và cũng không ở Silver** — cả hai giữ giá trị gốc, gồm `cccd`. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng; dự án này chưa có lớp đó, nên hiện tại việc dùng bảng đã che là tự nguyện. Xem `PII_INVENTORY.md` §5 và §7.
+Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: che **lúc ghi** chỉ áp ở tầng Gold/serving. Bronze **và Silver** vẫn *lưu* giá trị gốc, gồm `cccd`; Trino chỉ che chúng **lúc đọc**, với user không phải admin/ETL. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng. Dự án này giờ có lớp đó ở Trino, nhưng chưa có xác thực — nên với ai cố ý khai tên `admin`, hoặc đọc thẳng MinIO, bản gốc vẫn đọc được. Xem `RUNBOOK.md` §9.
 
 ---
 
