@@ -273,6 +273,14 @@ Generator sẽ chạy và promote ngay cả khi các tầng ở những ngày kh
 > "nền tảng hỏng"; việc đúng là kiểm alignment từng tầng trước, rồi chạy lại
 > Gold + dbt.
 
+> **Xảy ra lần nữa, và lần này invariant không bắt** (2026-09-24). Cả 13 bảng
+> dimension Bronze bị nạp lại cho `2026-09-21` — full-snapshot nên mỗi bảng chỉ
+> còn đúng snapshot đó — trong khi fact vẫn ở `09-22`. `snapshot_layers_aligned`
+> vẫn qua, vì `bronze_max_cob_dt` và `bronze_partition_exists` chỉ đo
+> `bronze.core_txn_account`. Lượt `--collect-only` lộ ra qua một metric khác:
+> `bronze.snapshot_rows.core_customer.rows` 10000 → 0. Không promote; nạp lại 13
+> bảng cho `09-22` rồi mới sinh manifest. Lỗ hổng ghi ở TD-14.
+
 Cách kiểm an toàn trước khi promote:
 
 ```bash
@@ -375,5 +383,6 @@ manifest    status verified · 0 error · 0 warning · 0 skipped
 metric      24 static · 10 runtime · 1 manual
 invariant   22 (21 error · 1 warn) · toàn bộ operator eq
 binding     18 entry → 22 projection · 22/22 khớp README
-artifact    42 run artifact (không track)
+artifact    45 run artifact (không track)
+promote     2026-09-24 · test_functions 776 · collected_pytest_nodes 1572
 ```
