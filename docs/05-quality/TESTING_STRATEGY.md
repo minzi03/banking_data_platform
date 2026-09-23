@@ -173,6 +173,23 @@ pytest --collect-only -q tests/            1388   (1385 + 3)
 py -3 -m pytest -q -m "not integration"    1321 passed, 1 skipped, 66 deselected
 ```
 
+Rồi ROADMAP 2.3/2.4 (ground truth `is_fraud` ở hai mart rủi ro, `fraud_reason`
+khớp điều kiện đã mô phỏng) thêm **21 hàm → 22 node**: 14 hàm Gold trong
+`test_aml_geo_velocity.py`, 7 hàm generator trong
+`tests/data_generator/test_fraud_reason.py`.
+
+```text
+def test_* count                            749   (728 + 21)
+pytest --collect-only -q tests/            1410   (1388 + 22)
+py -3 -m pytest -q -m "not integration"    1343 passed, 1 skipped, 66 deselected
+```
+
+Bài học đáng ghi từ lượt này: mọi test Gold ở đây đọc SQL như **văn bản**, và
+chúng đều xanh trong khi cả hai job bị Spark từ chối lúc phân tích
+(`AMBIGUOUS_REFERENCE` — `customer_id` trần sau khi join thêm CTE có cùng cột).
+Chỉ lượt chạy trên stack mới thấy. Hai model này không nằm trong harness
+`test_gold_fanout_regression.py`, nơi SQL được Spark phân tích thật.
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 

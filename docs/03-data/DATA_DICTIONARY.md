@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**85 bảng · 964 cột · 24 bảng có data contract · 31 cột nghi chứa PII**
+**85 bảng · 967 cột · 24 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -16,7 +16,7 @@
 |---|---:|---:|
 | [bronze](#bronze) | 22 | 303 |
 | [silver](#silver) | 17 | 217 |
-| [gold](#gold) | 14 | 219 |
+| [gold](#gold) | 14 | 222 |
 | [meta](#meta) | 1 | 4 |
 | [card_crm](#card_crm) | 3 | 20 |
 | [core_banking](#core_banking) | 14 | 110 |
@@ -1052,6 +1052,8 @@ Daily snapshot of AML typology flags scored at transaction grain. Five typologie
 | `alert_score` | `INT` |  |  |
 | `risk_level` | `INT` |  |  |
 | `alert_generated` | `INT` |  |  |
+| `is_fraud` | `INT` |  |  |
+| `fraud_reason` | `STRING` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
@@ -1305,6 +1307,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `anomaly_flag` | `INT` |  |  |
 | `risk_score` | `INT` |  |  |
 | `risk_level` | `INT` |  |  |
+| `is_fraud` | `INT` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>

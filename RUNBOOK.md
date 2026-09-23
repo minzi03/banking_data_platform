@@ -213,6 +213,42 @@ Without it Trino silently falls back to allowing everything.
 - A symptom worth knowing: `Access Denied: Cannot access catalog iceberg` from a
   client means it is connecting under a user name that is not in `rbac.py`.
 
+### 10. Gold schema migrations
+
+`gold_job.py` writes with `writeTo(...).overwritePartitions()` and does **not**
+evolve schemas. `docker/init_iceberg/03_ddl_gold.sql` only runs
+`CREATE TABLE IF NOT EXISTS`, so a column added to the DDL never reaches a table
+that already exists. The job then computes its result, passes its guards, and
+fails at the write:
+
+```text
+[INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS] Cannot write to
+`lakehouse`.`gold`.`aml_monitoring`, the reason is too many data columns
+```
+
+The write is atomic, so the old partition is left intact. CI never sees this —
+it builds a fresh lakehouse from the DDL.
+
+Every lakehouse created before the change needs the matching `ALTER` once. Each
+entry below is the change that introduced it:
+
+2026-09-23 — ground-truth columns (ROADMAP 2.3). One command per table:
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.gold.aml_monitoring ADD COLUMNS (is_fraud INT, fraud_reason STRING)"
+```
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.gold.fraud_risk_txn ADD COLUMNS (is_fraud INT)"
+```
+
+Keep them separate: `spark-sql -e` stops at the first failing statement, so if
+one table was already migrated, a combined command would never reach the other.
+
+Existing rows read `NULL` for the new columns until the Gold job reruns for
+their `cob_dt`. Running an `ALTER` a second time fails with
+`FIELDS_ALREADY_EXISTS` and leaves schema and data unchanged — verified.
+
 ---
 
 ## 🐛 Troubleshooting

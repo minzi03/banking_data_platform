@@ -137,23 +137,81 @@ Ba thứ thiếu:
 
 - **Size**: M
 
-### 2.3 BỔ SUNG — `is_fraud` làm cột đối chứng trong `fraud_risk_txn`
+### 2.3 ✅ XONG — `is_fraud` làm cột đối chứng trong `fraud_risk_txn` + `aml_monitoring`
 
 **Không phải để huấn luyện** — để **đo rule hiện tại**: precision/recall của các flag rule-based so với ground truth.
 
 Phép đo này hợp lệ vì nhãn của **repo** có tín hiệu thật (lift 7,7× theo location). Nhãn của hai dataset tham khảo thì **không** — xem [`REFERENCE_DATASET_ANALYSIS.md`](REFERENCE_DATASET_ANALYSIS.md) Mục 2.
 
-Kết quả: một con số kiểm chứng được, thay vì "rule đã chạy".
+**Đã làm** — ở cả hai mart, không chỉ `fraud_risk_txn`:
 
-- **Size**: S
+| Mart | Cột thêm | Nguồn |
+|---|---|---|
+| `gold.fraud_risk_txn` | `is_fraud` | `silver.fact_online_transaction` |
+| `gold.aml_monitoring` | `is_fraud`, `fraud_reason` | `silver.fact_online_transaction` |
 
-### 2.4 SỬA — `fraud_reason` trong generator
+Ba quyết định thiết kế, mỗi cái đóng một đường hỏng âm thầm:
 
-Hiện `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, không khớp điều kiện đã kích hoạt. Hệ quả: reason mang tính trang trí, không dùng để kiểm chứng rule được. Đây đúng là điểm yếu của dataset tham khảo mà repo đang lặp lại.
+1. **`LEFT JOIN` chứ không `INNER`** — `INNER` sẽ rơi mọi giao dịch không fraud, bảng chỉ còn ca dương tính, và mọi con số precision đo được đều vô nghĩa mà không có gì đỏ.
+2. **`COALESCE(..., 0)`** — khách không giao dịch online trong ngày là **không** fraud, không phải `NULL`. `NULL` bị loại khỏi mọi phép đếm.
+3. **Join kèm `txn_day`, không chỉ `customer_id`** — thiếu điều kiện ngày, nhãn fraud của MỘT ngày lan sang mọi ngày khác của cùng khách, làm tỷ lệ fraud phồng theo số ngày hoạt động.
 
-**Sửa**: gán theo đúng nhánh đã chạy — `UNUSUAL_LOCATION` khi đổi sang high-risk location, `HIGH_AMOUNT` khi nâng amount.
+`fact_txn_account` không có cột `is_fraud`; tín hiệu chỉ tồn tại ở kênh online, nên ground truth bắt buộc aggregate customer-day (`MAX(is_fraud)`) rồi join ngược về dòng giao dịch — cùng kỹ thuật `geo_agg` ở 2.1.
 
-- **Size**: S
+**Bảo vệ chống hồi quy**: `fact_online_transaction` được thêm vào `require_snapshots` ở cả hai job. Partition vắng mặt sẽ cho `is_fraud = 0` toàn bảng trong khi bảng vẫn đầy đủ dòng — `require_non_empty` không bắt được, chỉ guard snapshot mới bắt được.
+
+Test tĩnh trong `tests/gold/test_aml_geo_velocity.py` khoá các tính chất trên ở cả hai job: nguồn và guard snapshot, grain customer-day của `fraud_agg` (tách CTE theo ngoặc cân bằng, không theo vị trí), `LEFT JOIN` + `COALESCE`, join kèm ngày, và ground truth không lọt vào CTE tính flag hay vào công thức điểm. Mỗi kiểm tra đã được kiểm ngược — phá đúng tính chất đó thì đúng test đó đỏ.
+
+**Test tĩnh không đủ — đã chứng minh.** Bản đầu để `customer_id` trần trong `SELECT` cuối trong khi `fraud_agg` cũng có cột đó, nên Spark từ chối cả hai job ngay lúc phân tích (`AMBIGUOUS_REFERENCE`). Mọi test đọc SQL như văn bản đều xanh. Chỉ lượt chạy thật trên stack mới lộ ra; đã sửa thành `flagged.customer_id`.
+
+**Chạy thật** (2026-09-23, `cob_dt 2026-09-22`, lệnh `spark-submit` của DAG): cả hai job `exit 0`, vẫn 1.200.000 dòng = 1.200.000 `txn_id` (join không nhân dòng), 1.147 dòng `is_fraud = 1`, 0 dòng `NULL`.
+
+**Lakehouse có sẵn phải migrate trước.** `gold_job.py` không bật schema evolution, nên ghi cột mới vào bảng cũ bị từ chối (`TOO_MANY_DATA_COLUMNS`) — đã thấy thật trên stack. CI dựng lakehouse mới nên không gặp. Lệnh ở [`RUNBOOK.md`](../../RUNBOOK.md).
+
+**Con số kiểm chứng được** — mục đích của cả mục này. Tỷ lệ nền 0,096%:
+
+| Flag | Precision | Recall | Lift |
+|---|---:|---:|---:|
+| `geo_velocity_flag` | 1,19% | 0,3% | **12,45×** |
+| `velocity_flag` | 0,11% | 1,4% | 1,13× |
+| `high_value_flag` | 0,09% | 1,0% | 0,96× |
+| `structuring_flag` · `multi_channel_flag` | 0 | 0 | 0 |
+| `alert_generated` (cảnh báo AML cuối) | 0 / 1.358 | 0 | 0 |
+| `fraud_risk_txn`: mọi flag, `risk_level ≥ 2` | ~0,09% | ≤ 5% | 0,90–1,13× · `neg_balance_flag` không bao giờ bật |
+
+Đọc cho đúng: generator chỉ mô phỏng fraud ở **kênh online** (location + amount); các flag này chấm **giao dịch tài khoản**, vốn không có quan hệ nào với fraud trong dữ liệu sinh. Chỉ geo-velocity nối được sang tín hiệu location. Nên đây là phát hiện về **thiết kế dữ liệu tổng hợp** nhiều hơn về chất lượng rule — và trước khi có cột này, không có cách nào biết.
+
+- **Size**: S · **Trạng thái**: ✅ hoàn tất
+
+### 2.4 ✅ XONG — `fraud_reason` trong generator
+
+Trước: `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, không khớp điều kiện đã kích hoạt. Hệ quả: reason mang tính trang trí, không dùng để kiểm chứng rule được. Đây đúng là điểm yếu của dataset tham khảo mà repo đang lặp lại.
+
+**Đã sửa** trong `data_generator/generators/digital_banking.py`: mỗi nhãn khớp ĐÚNG điều kiện đã mô phỏng, nên chỉ còn bốn nhãn:
+
+| Nhãn | Nghĩa |
+|---|---|
+| `HIGH_AMOUNT` | chỉ amount bị đẩy lên |
+| `UNUSUAL_LOCATION` | chỉ location bị đổi sang vùng rủi ro cao |
+| `HIGH_AMOUNT+UNUSUAL_LOCATION` | cả hai |
+| `UNSPECIFIED` | fraud không qua điều kiện nào |
+
+Bản sửa đầu mới đúng một nửa. Đo trên 20.000 dòng fraud:
+
+```text
+                              amount ≥ 60tr   ở location rủi ro cao
+UNUSUAL_LOCATION   (cũ)       25,5%   ← cả hai điều kiện, bốc ngẫu nhiên MỘT nhãn
+"Unusual location" (cũ)        0,5%    5,8%   ← nhãn dự phòng; tỷ lệ nền là 5%
+"Amount exceeds limit" (cũ)    0,6%            ← gán nguyên nhân không xảy ra
+```
+
+~39% fraud rơi vào nhánh dự phòng, nơi 13 nhãn mô tả ("Velocity check failed", "Device fingerprint mismatch"…) nêu nguyên nhân mà generator chưa từng mô phỏng — đúng lỗi 2.4 định sửa. Nay nhánh đó là `UNSPECIFIED`, và cặp điều kiện đồng thời có nhãn ghép thay vì bị bốc ngẫu nhiên.
+
+**Kiểm chứng**: `tests/data_generator/test_fraud_reason.py` (7 test, seed cố định, 20.000 dòng) — chỉ bốn nhãn tồn tại; mọi dòng `HIGH_AMOUNT*` có amount vùng cao; mọi dòng `*UNUSUAL_LOCATION` ở location rủi ro cao; nhãn đơn và `UNSPECIFIED` chỉ mang tỷ lệ nền của điều kiện kia.
+
+Dữ liệu đã seed trước thay đổi này vẫn mang nhãn cũ; nhãn mới chỉ có sau lượt seed kế tiếp. Generator không có seed cố định, nên đổi số lần gọi `random` không phá cam kết tái lập nào.
+
+- **Size**: S · **Trạng thái**: ✅ hoàn tất
 
 ### 2.5 BỔ SUNG — incident runbook + RCA
 
@@ -285,8 +343,8 @@ NGAY        1.1 → 1.2 → 1.3 → 1.4 → 1.5
             (sửa lỗi → regenerate → đóng TD → đổi nhãn → commit)
             Điều kiện: không còn tuyên bố sai nào trong repo
 
-SẮP TỚI     2.1 · 2.2 · 2.3 · 2.4   (đóng vòng lặp tín hiệu + contract)
-            2.5 · 2.6               (tài liệu + package)
+SẮP TỚI     2.1 · 2.2 · 2.5 · 2.6   (đóng vòng lặp tín hiệu + contract)
+            2.3 ✅ · 2.4 ✅          (đã xong: ground truth + fraud_reason)
             Điều kiện: không thêm công nghệ mới
 
 TƯƠNG LAI   3.5 → 3.6 → 3.3 → 3.2 → 3.1 → 3.4

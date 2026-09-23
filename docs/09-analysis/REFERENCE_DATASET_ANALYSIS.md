@@ -118,6 +118,8 @@ BLACKLISTED_MERCHANT mean amount = 25.169,43   n = 7.448
 
 Giao dịch gắn nhãn `HIGH_AMOUNT` có phân phối amount **giống hệt** `UNUSUAL_LOCATION`. Sáu nhóm chia đều ~7.500 mỗi nhóm → `fraud_reason` được gán **ngẫu nhiên**, không phản ánh nguyên nhân thật.
 
+> **2026-09-23**: Phân tích trên áp dụng cho dataset tham khảo — reason gán ngẫu nhiên nên mất giá trị kiểm chứng. Trong repo, ROADMAP item 2.4 đã sửa generator để reason được gán **theo điều kiện đã kích hoạt**, nên `GROUP BY fraud_reason` giờ phân biệt được `HIGH_AMOUNT` (mean amount cao) và `UNUSUAL_LOCATION` (mean amount bình thường).
+
 **Cách dữ liệu được sinh ra**: chọn ngẫu nhiên 1,5% dòng → rút `amount` từ phân phối khác → gán `fraud_reason` ngẫu nhiên.
 
 ### 2.2 `archive (9)` — nhãn là nhiễu thuần
@@ -242,7 +244,7 @@ lift                     ≈ 7,7×
 
 - Tín hiệu location được tạo ra → `dim_location` **không ai đọc** (4.1)
 - Nhãn `is_fraud` được tạo ra → **không model nào dùng** (4.2)
-- `fraud_reason` vẫn `random.choice` → **mang tính trang trí**, giống hệt điểm yếu của dataset tham khảo
+- ~~`fraud_reason` vẫn `random.choice` → mang tính trang trí~~ → **đã sửa (2.4)**: reason suy ra từ điều kiện đã kích hoạt, chỉ fallback ngẫu nhiên khi cả hai điều kiện đều không xảy ra
 
 ### 4.4 Defect: `customer_360` khai báo phụ thuộc thừa
 
@@ -331,7 +333,7 @@ Không phải để huấn luyện — để **đo rule hiện tại**: precisio
 
 **4. Bốn KPI còn thiếu**: credit utilization (Q8) · dormant cards (Q9) · MCC outlier percentile (Q13) · heatmap state × category (Q15).
 
-**5. Sửa `fraud_reason` trong generator** — hiện `random.choice`, nên gán theo đúng điều kiện đã kích hoạt (`HIGH_AMOUNT` khi amount cao, `UNUSUAL_LOCATION` khi đổi sang high-risk location). Nếu không, reason mãi là trang trí và không thể dùng để kiểm chứng rule.
+**5. ✅ ĐÃ SỬA — `fraud_reason` trong generator.** Trước đây `random.choice`, reason không khớp điều kiện nào. Nay reason khớp ĐÚNG điều kiện đã mô phỏng, và chỉ có bốn nhãn: `HIGH_AMOUNT`, `UNUSUAL_LOCATION`, `HIGH_AMOUNT+UNUSUAL_LOCATION` khi cả hai cùng kích hoạt, và `UNSPECIFIED` khi fraud không qua điều kiện nào. Không còn nhãn mô tả nào (velocity, device fingerprint, geo-anomaly…) — generator không mô phỏng các nguyên nhân đó, nên gán chúng chính là lặp lại lỗi của dataset tham khảo. Nhờ vậy `GROUP BY fraud_reason` kiểm chứng được: mọi dòng `HIGH_AMOUNT*` có amount vùng cao, mọi dòng `*UNUSUAL_LOCATION` ở location rủi ro cao — đối lập hoàn toàn với Test 3 của dataset tham khảo. Chi tiết và số đo: [`ROADMAP.md`](ROADMAP.md) §2.4.
 
 **6. Phân phối thực tế hơn** theo Mục 3: lỗi tổ hợp · amount lệch phải (lognormal thay uniform) · refund âm.
 
