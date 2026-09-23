@@ -628,8 +628,9 @@ this entry existed for as long as it did; they are documented in
 **Status:** fixed (2026-09-23, verified on the stack) — runtime decision taken: the Spark
 image moved to Python 3.10 (Ubuntu 22.04, Java 17) and now installs pydantic. See
 [Runtime upgrade](#runtime-upgrade-2026-09-23). CI moved to 3.10 as well, so the suite
-now runs on the worker's Python. Residual: the Airflow image stays on 3.11 (latent, see
-below); `ops_contract_validation_dag` is blocked by two causes that are not about Python.
+now runs on the worker's Python. `ops_contract_validation_dag`, which pydantic alone
+would not have unblocked, now runs through a real CLI (below); what it found is TD-12.
+Residual: the Airflow image stays on 3.11 (latent, see below).
 
 `banking-spark-worker-1` runs **Python 3.8.10**. Every ops and governance task in
 Airflow runs there: `docker exec banking-spark-worker-1 spark-submit ...` or
