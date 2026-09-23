@@ -32,6 +32,7 @@ Chạy: pytest tests/gold/test_aml_geo_velocity.py -v
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,46 @@ ALL_FLAGS = (
     "multi_channel_flag",
     "geo_velocity_flag",
 )
+
+
+BUSINESS_DAY_OF_ONLINE_TXN = "from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh')"
+
+
+def _strip_comments(sql: str) -> str:
+    """
+    Bỏ comment `--`. Comment trong các job này nhắc tên cột (vd. "kiểm chứng
+    trên nhãn is_fraud") và chứa ngoặc chưa cân — để lại thì cả việc tách CTE
+    lẫn việc tìm tên cột đều đọc nhầm văn xuôi thành code.
+    """
+    return re.sub(r"--[^\n]*", "", sql)
+
+
+def _cte_body(sql: str, name: str) -> str:
+    """
+    Thân của CTE `name AS (...)`, tách theo ngoặc cân bằng.
+
+    Không tách theo vị trí CTE kế tiếp: thứ tự CTE đổi được, và trong
+    aml_monitoring `fraud_agg` đứng SAU `flagged` — tách theo "flagged AS ("
+    sẽ lấy cả phần SQL còn lại và mọi assert trên đó đều xanh vô nghĩa.
+    """
+    sql = _strip_comments(sql)
+    marker = f"{name} AS ("
+    assert marker in sql, f"Thiếu CTE {name}"
+    start = sql.index(marker) + len(marker)
+    depth = 1
+    for i in range(start, len(sql)):
+        if sql[i] == "(":
+            depth += 1
+        elif sql[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return sql[start:i]
+    raise AssertionError(f"CTE {name} không đóng ngoặc")
+
+
+def _final_select_list(sql: str) -> str:
+    """Danh sách cột của SELECT cuối cùng (phần trước `FROM flagged`)."""
+    return _strip_comments(sql).rsplit("FROM flagged", 1)[0].rsplit("SELECT", 1)[-1]
 
 
 @pytest.fixture(scope="module")
@@ -262,3 +303,135 @@ class TestDDLAlignment:
     def test_column_is_selected_by_the_job(self, sql: str, column: str):
         final_select = sql.rsplit("FROM flagged", 1)[0].rsplit("SELECT", 1)[-1]
         assert column in final_select, f"{column} có trong DDL nhưng job không SELECT ra"
+
+
+class TestGroundTruthFraudColumn:
+    """
+    `is_fraud` là GROUND TRUTH copy từ fact_online_transaction, không phải feature.
+
+    Mục đích: đo precision/recall của các rule-based flag. Vì thế nó có ba
+    ràng buộc dễ vi phạm âm thầm:
+
+    1. Phải lấy từ fact_online_transaction — fact_txn_account không có cột này.
+    2. Phải là LEFT JOIN — INNER JOIN sẽ làm rơi mọi giao dịch không fraud,
+       biến bảng thành chỉ còn các ca dương tính.
+    3. Phải COALESCE về 0 — khách không giao dịch online trong ngày là
+       không-fraud, không phải NULL.
+    """
+
+    def test_fraud_source_is_declared(self, config: dict):
+        assert "silver.fact_online_transaction" in config["source"]["tables"]
+
+    def test_missing_online_partition_blocks_the_job(self, config: dict):
+        """
+        Partition fact_online_transaction vắng mặt → LEFT JOIN cho is_fraud = 0
+        toàn bảng, bảng vẫn đủ dòng. require_non_empty không bắt được; chỉ guard
+        snapshot bắt được (ADR-0005).
+        """
+        assert "silver.fact_online_transaction" in config["validation"]["require_snapshots"]
+
+    def test_fraud_aggregation_is_customer_day_grain(self, sql: str):
+        body = _cte_body(sql, "fraud_agg")
+        assert "MAX(is_fraud)" in body, "Grain customer-day phải aggregate bằng MAX(is_fraud)"
+        group_by = body.split("GROUP BY", 1)[1]
+        assert "customer_id" in group_by
+        assert BUSINESS_DAY_OF_ONLINE_TXN in group_by, "fraud_agg phải group theo NGÀY nghiệp vụ, không chỉ khách"
+
+    def test_fraud_join_is_left_not_inner(self, sql: str):
+        assert "LEFT JOIN fraud_agg" in sql, (
+            "INNER JOIN fraud_agg sẽ loại mọi dòng không fraud — bảng chỉ còn "
+            "ca dương tính và mọi con số precision đo được đều vô nghĩa."
+        )
+
+    def test_fraud_defaults_to_zero_not_null(self, sql: str):
+        assert "COALESCE(fa.is_fraud_flag, 0) AS is_fraud" in sql, (
+            "Khách không giao dịch online trong ngày là KHÔNG fraud, không phải NULL. "
+            "NULL sẽ bị loại khỏi mọi phép đếm precision/recall."
+        )
+
+    def test_fraud_join_aligns_on_business_day(self, sql: str):
+        """
+        Join theo customer_id là chưa đủ — phải kèm ngày nghiệp vụ.
+
+        Thiếu txn_day, nhãn fraud của MỘT ngày sẽ lan sang mọi ngày khác của
+        cùng khách hàng, làm tỷ lệ fraud phồng lên theo số ngày hoạt động.
+        """
+        join_block = sql.split("LEFT JOIN fraud_agg")[1]
+        assert "txn_day" in join_block, "Join fraud_agg thiếu điều kiện ngày nghiệp vụ"
+
+    @pytest.mark.parametrize("column", ["is_fraud", "fraud_reason"])
+    def test_column_exists_in_gold_ddl(self, column: str):
+        ddl = GOLD_DDL.read_text(encoding="utf-8")
+        aml_block = ddl.split("CREATE TABLE IF NOT EXISTS lakehouse.gold.aml_monitoring")[1]
+        aml_block = aml_block.split(";")[0]
+        assert column in aml_block, f"{column} thiếu trong DDL của gold.aml_monitoring"
+
+    def test_fraud_is_not_used_as_a_scoring_input(self, sql: str):
+        """
+        Ground truth không được lọt vào công thức tính điểm.
+
+        Nếu is_fraud xuất hiện trong alert_score, bảng trở thành tự thoả mãn
+        và mọi phép đo precision/recall sau đó đều là vòng tròn.
+        """
+        flags = _cte_body(sql, "flagged")
+        assert "fraud_agg" not in flags and "is_fraud" not in flags, (
+            "Ground truth lọt vào CTE tính flag — flag sẽ tự khớp với nhãn."
+        )
+
+        # Mọi cột tính điểm (alert_score, risk_level, alert_generated) đứng
+        # TRƯỚC cột ground truth trong SELECT cuối.
+        scoring = _final_select_list(sql).split("COALESCE(fa.is_fraud_flag", 1)[0]
+        assert "alert_score" in scoring and "alert_generated" in scoring
+        assert "is_fraud" not in scoring and "fa." not in scoring, (
+            "is_fraud lọt vào công thức điểm — ground truth không được là feature. "
+            "Mọi phép đo precision/recall sau đó sẽ là vòng tròn."
+        )
+
+
+class TestGroundTruthInFraudRiskTxn:
+    """Cùng cột ground truth, nhưng ở gold.fraud_risk_txn."""
+
+    @staticmethod
+    def _sql() -> str:
+        return yaml.safe_load(
+            (REPO_ROOT / "code_etl" / "gold" / "risk" / "fraud_risk_txn.yml").read_text(encoding="utf-8")
+        )["sql"]
+
+    @staticmethod
+    def _cfg() -> dict:
+        return yaml.safe_load(
+            (REPO_ROOT / "code_etl" / "gold" / "risk" / "fraud_risk_txn.yml").read_text(encoding="utf-8")
+        )
+
+    def test_fraud_source_is_declared(self):
+        cfg = self._cfg()
+        assert "silver.fact_online_transaction" in cfg["source"]["tables"]
+        assert "silver.fact_online_transaction" in cfg["upstream_flags"]
+
+    def test_missing_online_partition_blocks_the_job(self):
+        """Cùng lý do như ở aml_monitoring: thiếu partition → is_fraud = 0 im lặng."""
+        assert "silver.fact_online_transaction" in self._cfg()["validation"]["require_snapshots"]
+
+    def test_left_join_and_coalesce(self):
+        sql = self._sql()
+        assert "LEFT JOIN fraud_agg" in sql
+        assert "COALESCE(fa.is_fraud_flag, 0) AS is_fraud" in sql
+
+    def test_fraud_aggregation_is_customer_day_grain_and_join_uses_it(self):
+        sql = self._sql()
+        body = _cte_body(sql, "fraud_agg")
+        assert "MAX(is_fraud)" in body
+        assert BUSINESS_DAY_OF_ONLINE_TXN in body.split("GROUP BY", 1)[1]
+        assert "txn_day" in sql.split("LEFT JOIN fraud_agg", 1)[1], "Join thiếu điều kiện ngày nghiệp vụ"
+
+    def test_fraud_is_not_used_as_a_scoring_input(self):
+        sql = self._sql()
+        flags = _cte_body(sql, "flagged")
+        assert "fraud_agg" not in flags and "is_fraud" not in flags
+        scoring = _final_select_list(sql).split("COALESCE(fa.is_fraud_flag", 1)[0]
+        assert "risk_score" in scoring and "is_fraud" not in scoring and "fa." not in scoring
+
+    def test_column_exists_in_gold_ddl(self):
+        ddl = GOLD_DDL.read_text(encoding="utf-8")
+        block = ddl.split("CREATE TABLE IF NOT EXISTS lakehouse.gold.fraud_risk_txn")[1].split(";")[0]
+        assert "is_fraud" in block

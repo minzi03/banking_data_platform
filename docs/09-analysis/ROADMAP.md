@@ -17,30 +17,19 @@ main @ b787616   worktree sạch (trừ 6 file docs mới chưa commit)
 29 docker service · 20 DAG file · 10 CI job · 33 data contract · 9 DQ check type
 ```
 
-**Nợ kỹ thuật:**
+**Nợ kỹ thuật:** ✅ TD-1 qua TD-11 đều fixed, disabled có lý do, hoặc deliberate (2026-09-23). TD-10 còn phần dư ghi rõ trong mục của nó: CI và Airflow chạy Python 3.11, worker 3.10; `ops_contract_validation_dag` chưa chạy được vì lý do không liên quan Python.
 
-| | Trạng thái ghi trong doc | Thực tế đã kiểm chứng |
-|---|---|---|
-| TD-1 · TD-3 · TD-4 · TD-7 | fixed | ✅ khớp |
-| TD-2 | disabled with reason | ✅ khớp |
-| TD-6 | deliberate | ✅ khớp |
-| **TD-5** | **open** | ⚠️ **thực chất đã xong** — `ruff \|\| true` đã gỡ, `test_shell_failure_propagation.py` tồn tại và pass (3 test). Các `\|\| true` còn lại đều nằm trên lệnh thu log chẩn đoán |
-
-**Evidence manifest đang lệch:**
-
-```text
-manifest sinh từ : f7ce77e  (branch fix/materialize-risk-marts-and-dbt-tests, 2026-09-19)
-HEAD hiện tại    : b787616  (2026-09-21)        → chênh 2 commit
-test_functions   : 476 (manifest)  vs  598 (thực tế)   → lệch 122
-```
-
-`verify_readme_metrics.py` vẫn báo 22/22 vì nó so **README ↔ manifest**, không so manifest ↔ thực tế. Vòng lặp chỉ khép khi regenerate.
+**Evidence manifest:** ⚠️ **lệch** (2026-09-23). Manifest và README ghi `test_functions` = 655; thực tế là 749. `verify_readme_metrics.py` vẫn báo 22/22 vì nó so README ↔ manifest, không so manifest ↔ thực tế — vòng lặp chỉ khép khi sinh lại, và việc đó cần cả stack. Xem [`EVIDENCE_MANIFEST.md`](../05-quality/EVIDENCE_MANIFEST.md) §6.1.
 
 ---
 
 ## 1. NGAY — dọn nền trước khi xây tiếp
 
 Mục tiêu: không còn tuyên bố nào sai trong repo. Làm hết nhóm này trước khi thêm tính năng.
+
+> ✅ **Nhóm này đã xong (2026-09-22).** 1.1 qua PR #7 · 1.2 regenerate manifest · 1.3 TD-5 đã đóng · 1.4 qua PR #35 · 1.5 qua PR #8 và các PR docs sau đó.
+>
+> Phát sinh thêm khi kiểm tra, đã sửa: `ARCHITECTURE.md` lệch 8 chỉ số so với thực tế (PR #34), và mục cấm `"Superset"` trong `test_docs_no_stale_claims.py` đã lỗi thời — service tồn tại từ commit `664c604`.
 
 ### 1.1 SỬA — `customer_360` phụ thuộc giả
 
@@ -148,43 +137,97 @@ Ba thứ thiếu:
 
 - **Size**: M
 
-### 2.3 BỔ SUNG — `is_fraud` làm cột đối chứng trong `fraud_risk_txn`
+### 2.3 ✅ XONG — `is_fraud` làm cột đối chứng trong `fraud_risk_txn` + `aml_monitoring`
 
 **Không phải để huấn luyện** — để **đo rule hiện tại**: precision/recall của các flag rule-based so với ground truth.
 
 Phép đo này hợp lệ vì nhãn của **repo** có tín hiệu thật (lift 7,7× theo location). Nhãn của hai dataset tham khảo thì **không** — xem [`REFERENCE_DATASET_ANALYSIS.md`](REFERENCE_DATASET_ANALYSIS.md) Mục 2.
 
-Kết quả: một con số kiểm chứng được, thay vì "rule đã chạy".
+**Đã làm** — ở cả hai mart, không chỉ `fraud_risk_txn`:
 
-- **Size**: S
+| Mart | Cột thêm | Nguồn |
+|---|---|---|
+| `gold.fraud_risk_txn` | `is_fraud` | `silver.fact_online_transaction` |
+| `gold.aml_monitoring` | `is_fraud`, `fraud_reason` | `silver.fact_online_transaction` |
 
-### 2.4 SỬA — `fraud_reason` trong generator
+Ba quyết định thiết kế, mỗi cái đóng một đường hỏng âm thầm:
 
-Hiện `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, không khớp điều kiện đã kích hoạt. Hệ quả: reason mang tính trang trí, không dùng để kiểm chứng rule được. Đây đúng là điểm yếu của dataset tham khảo mà repo đang lặp lại.
+1. **`LEFT JOIN` chứ không `INNER`** — `INNER` sẽ rơi mọi giao dịch không fraud, bảng chỉ còn ca dương tính, và mọi con số precision đo được đều vô nghĩa mà không có gì đỏ.
+2. **`COALESCE(..., 0)`** — khách không giao dịch online trong ngày là **không** fraud, không phải `NULL`. `NULL` bị loại khỏi mọi phép đếm.
+3. **Join kèm `txn_day`, không chỉ `customer_id`** — thiếu điều kiện ngày, nhãn fraud của MỘT ngày lan sang mọi ngày khác của cùng khách, làm tỷ lệ fraud phồng theo số ngày hoạt động.
 
-**Sửa**: gán theo đúng nhánh đã chạy — `UNUSUAL_LOCATION` khi đổi sang high-risk location, `HIGH_AMOUNT` khi nâng amount.
+`fact_txn_account` không có cột `is_fraud`; tín hiệu chỉ tồn tại ở kênh online, nên ground truth bắt buộc aggregate customer-day (`MAX(is_fraud)`) rồi join ngược về dòng giao dịch — cùng kỹ thuật `geo_agg` ở 2.1.
 
-- **Size**: S
+**Bảo vệ chống hồi quy**: `fact_online_transaction` được thêm vào `require_snapshots` ở cả hai job. Partition vắng mặt sẽ cho `is_fraud = 0` toàn bảng trong khi bảng vẫn đầy đủ dòng — `require_non_empty` không bắt được, chỉ guard snapshot mới bắt được.
+
+Test tĩnh trong `tests/gold/test_aml_geo_velocity.py` khoá các tính chất trên ở cả hai job: nguồn và guard snapshot, grain customer-day của `fraud_agg` (tách CTE theo ngoặc cân bằng, không theo vị trí), `LEFT JOIN` + `COALESCE`, join kèm ngày, và ground truth không lọt vào CTE tính flag hay vào công thức điểm. Mỗi kiểm tra đã được kiểm ngược — phá đúng tính chất đó thì đúng test đó đỏ.
+
+**Test tĩnh không đủ — đã chứng minh.** Bản đầu để `customer_id` trần trong `SELECT` cuối trong khi `fraud_agg` cũng có cột đó, nên Spark từ chối cả hai job ngay lúc phân tích (`AMBIGUOUS_REFERENCE`). Mọi test đọc SQL như văn bản đều xanh. Chỉ lượt chạy thật trên stack mới lộ ra; đã sửa thành `flagged.customer_id`.
+
+**Chạy thật** (2026-09-23, `cob_dt 2026-09-22`, lệnh `spark-submit` của DAG): cả hai job `exit 0`, vẫn 1.200.000 dòng = 1.200.000 `txn_id` (join không nhân dòng), 1.147 dòng `is_fraud = 1`, 0 dòng `NULL`.
+
+**Lakehouse có sẵn phải migrate trước.** `gold_job.py` không bật schema evolution, nên ghi cột mới vào bảng cũ bị từ chối (`TOO_MANY_DATA_COLUMNS`) — đã thấy thật trên stack. CI dựng lakehouse mới nên không gặp. Lệnh ở [`RUNBOOK.md`](../../RUNBOOK.md).
+
+**Con số kiểm chứng được** — mục đích của cả mục này. Tỷ lệ nền 0,096%:
+
+| Flag | Precision | Recall | Lift |
+|---|---:|---:|---:|
+| `geo_velocity_flag` | 1,19% | 0,3% | **12,45×** |
+| `velocity_flag` | 0,11% | 1,4% | 1,13× |
+| `high_value_flag` | 0,09% | 1,0% | 0,96× |
+| `structuring_flag` · `multi_channel_flag` | 0 | 0 | 0 |
+| `alert_generated` (cảnh báo AML cuối) | 0 / 1.358 | 0 | 0 |
+| `fraud_risk_txn`: mọi flag, `risk_level ≥ 2` | ~0,09% | ≤ 5% | 0,90–1,13× · `neg_balance_flag` không bao giờ bật |
+
+Đọc cho đúng: generator chỉ mô phỏng fraud ở **kênh online** (location + amount); các flag này chấm **giao dịch tài khoản**, vốn không có quan hệ nào với fraud trong dữ liệu sinh. Chỉ geo-velocity nối được sang tín hiệu location. Nên đây là phát hiện về **thiết kế dữ liệu tổng hợp** nhiều hơn về chất lượng rule — và trước khi có cột này, không có cách nào biết.
+
+- **Size**: S · **Trạng thái**: ✅ hoàn tất
+
+### 2.4 ✅ XONG — `fraud_reason` trong generator
+
+Trước: `fraud_reason = random.choice(fraud_reasons)` — gán ngẫu nhiên, không khớp điều kiện đã kích hoạt. Hệ quả: reason mang tính trang trí, không dùng để kiểm chứng rule được. Đây đúng là điểm yếu của dataset tham khảo mà repo đang lặp lại.
+
+**Đã sửa** trong `data_generator/generators/digital_banking.py`: mỗi nhãn khớp ĐÚNG điều kiện đã mô phỏng, nên chỉ còn bốn nhãn:
+
+| Nhãn | Nghĩa |
+|---|---|
+| `HIGH_AMOUNT` | chỉ amount bị đẩy lên |
+| `UNUSUAL_LOCATION` | chỉ location bị đổi sang vùng rủi ro cao |
+| `HIGH_AMOUNT+UNUSUAL_LOCATION` | cả hai |
+| `UNSPECIFIED` | fraud không qua điều kiện nào |
+
+Bản sửa đầu mới đúng một nửa. Đo trên 20.000 dòng fraud:
+
+```text
+                              amount ≥ 60tr   ở location rủi ro cao
+UNUSUAL_LOCATION   (cũ)       25,5%   ← cả hai điều kiện, bốc ngẫu nhiên MỘT nhãn
+"Unusual location" (cũ)        0,5%    5,8%   ← nhãn dự phòng; tỷ lệ nền là 5%
+"Amount exceeds limit" (cũ)    0,6%            ← gán nguyên nhân không xảy ra
+```
+
+~39% fraud rơi vào nhánh dự phòng, nơi 13 nhãn mô tả ("Velocity check failed", "Device fingerprint mismatch"…) nêu nguyên nhân mà generator chưa từng mô phỏng — đúng lỗi 2.4 định sửa. Nay nhánh đó là `UNSPECIFIED`, và cặp điều kiện đồng thời có nhãn ghép thay vì bị bốc ngẫu nhiên.
+
+**Kiểm chứng**: `tests/data_generator/test_fraud_reason.py` (7 test, seed cố định, 20.000 dòng) — chỉ bốn nhãn tồn tại; mọi dòng `HIGH_AMOUNT*` có amount vùng cao; mọi dòng `*UNUSUAL_LOCATION` ở location rủi ro cao; nhãn đơn và `UNSPECIFIED` chỉ mang tỷ lệ nền của điều kiện kia.
+
+Dữ liệu đã seed trước thay đổi này vẫn mang nhãn cũ; nhãn mới chỉ có sau lượt seed kế tiếp. Generator không có seed cố định, nên đổi số lần gọi `random` không phá cam kết tái lập nào.
+
+- **Size**: S · **Trạng thái**: ✅ hoàn tất
 
 ### 2.5 BỔ SUNG — incident runbook + RCA
 
-> **Đính chính (2026-09-21)**: bản đầu của mục này ghi "runbook chưa có" — sai.
-> `RUNBOOK.md` (313 dòng) **đã tồn tại**, nhưng là **runbook vận hành**:
-> start/stop service, chạy ETL, query, xử lý service không lên.
+> ✅ **Đã xong.** `docs/04-operations/INCIDENT_RUNBOOK.md` tồn tại với 8 kịch bản
+> S1–S8, mỗi cái theo cấu trúc triệu chứng → chẩn đoán → xử lý → **xác minh đã khỏi**,
+> cộng mục RCA ở cuối:
 >
-> Cái thiếu là **runbook sự cố dữ liệu** — một loại khác:
-
-| | `RUNBOOK.md` (đã có) | `INCIDENT_RUNBOOK.md` (thiếu) |
-|---|---|---|
-| Câu hỏi | "Chạy cái này thế nào?" | "Nó hỏng rồi, làm gì?" |
-| Nội dung | docker compose, spark-submit, trino CLI | partition nguồn thiếu · DQ fail → quarantine · schema drift → contract vỡ · CDC lag / DLQ đầy · backfill sai ngày |
-| Cấu trúc | theo thao tác | triệu chứng → chẩn đoán → xử lý → **xác minh đã khỏi** |
-
-Viết cho 3 pipeline chính: batch Gold, CDC, serving.
-
-Dùng đúng từ vựng thị trường: `runbook` (37 lần) · `incident response` (23) · `RCA` (64). **Không** dùng `RTO`/`RPO` — 0 lần trong toàn corpus JD.
-
-- **Size**: M · Chi tiết: [`DOCUMENTATION_PLAN.md`](DOCUMENTATION_PLAN.md) §3 nhóm C
+> S1 thiếu snapshot nguồn · S2 Gold không sinh dòng · S3 DQ fail → quarantine ·
+> S4 schema drift · S5 CDC lag · S6 serving lệch snapshot · S7 backfill sai ngày ·
+> S8 `Catalog 'lakehouse' not found`
+>
+> README trước đây không trỏ tới file này; đã thêm liên kết ở PR #35.
+>
+> Từ vựng đo lại trên 17 file JD (2026-09-22): `RCA`/root cause **63** ·
+> `incident response` **23** · `runbook` **9** · `RTO`/`RPO` **0**. Con số `runbook`
+> 37 ghi ở bản trước không tái lập được — dùng bảng đo mới, xem `JD_MARKET_ANALYSIS.md`.
 
 ### 2.6 BỔ SUNG — `dbt_expectations`
 
@@ -300,8 +343,8 @@ NGAY        1.1 → 1.2 → 1.3 → 1.4 → 1.5
             (sửa lỗi → regenerate → đóng TD → đổi nhãn → commit)
             Điều kiện: không còn tuyên bố sai nào trong repo
 
-SẮP TỚI     2.1 · 2.2 · 2.3 · 2.4   (đóng vòng lặp tín hiệu + contract)
-            2.5 · 2.6               (tài liệu + package)
+SẮP TỚI     2.1 · 2.2 · 2.5 · 2.6   (đóng vòng lặp tín hiệu + contract)
+            2.3 ✅ · 2.4 ✅          (đã xong: ground truth + fraud_reason)
             Điều kiện: không thêm công nghệ mới
 
 TƯƠNG LAI   3.5 → 3.6 → 3.3 → 3.2 → 3.1 → 3.4

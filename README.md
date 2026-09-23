@@ -17,7 +17,7 @@
   </a>
   <img
     alt="Python"
-    src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white"
+    src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white"
   >
   <img
     alt="Spark"
@@ -1595,7 +1595,7 @@ Recommended local environment:
 - Docker Desktop
 - 16 GB RAM or more
 - Git
-- Python 3.11+
+- Python 3.10+ (the Spark worker runs 3.10; CI tests on 3.10)
 
 Because the platform runs multiple services locally, sufficient Docker memory allocation is recommended.
 

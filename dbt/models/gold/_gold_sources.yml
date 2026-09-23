@@ -268,6 +268,11 @@ sources:
     - name: high_amount_flag
     - name: neg_balance_flag
     - name: anomaly_flag
+    - name: is_fraud
+      description: >
+        GROUND TRUTH, không phải feature. Copy từ silver.fact_online_transaction
+        ở grain customer-day (MAX). Dùng để đo precision/recall của các
+        rule-based flag. Không đưa vào công thức tính điểm.
     - name: cob_dt
   - name: aml_monitoring
     description: AML monitoring alerts (high-value, structuring, velocity)
@@ -282,4 +287,12 @@ sources:
     - name: velocity_flag
     - name: multi_channel_flag
     - name: alert_generated
+    - name: is_fraud
+      description: >
+        GROUND TRUTH, không phải feature. Tín hiệu fraud chỉ có ở kênh online;
+        aggregate customer-day từ silver.fact_online_transaction. Dùng để đo
+        precision/recall của các flag. COALESCE về 0 khi khách không giao dịch
+        online trong ngày.
+    - name: fraud_reason
+      description: Lý do fraud của giao dịch online đầu tiên trong ngày (nếu có)
     - name: cob_dt
