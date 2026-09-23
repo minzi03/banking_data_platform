@@ -1,3 +1,7 @@
 # Python dependencies for Spark ETL jobs
 pyyaml>=6.0
 jinja2>=3.1
+# governance/contracts.py dựng model pydantic; thiếu nó thì
+# ops_contract_validation_dag không chạy được trên worker (TD-10).
+# Cùng mức sàn với pyproject.toml; chặn v3 vì model viết theo API v2.
+pydantic>=2.9,<3
