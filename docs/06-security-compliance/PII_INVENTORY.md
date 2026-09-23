@@ -25,15 +25,17 @@ ai đó mang mẫu này sang hệ thống có dữ liệu thật — đúng cả
 | Câu hỏi | Trả lời |
 |---|---|
 | Bao nhiêu bảng chứa dữ liệu cá nhân? | **31** (23 trong lakehouse, 8 trong PostgreSQL nguồn) |
-| Bronze có được che? | **Không.** Bronze giữ giá trị gốc |
-| Silver có được che? | **Không.** `silver.dim_customer` giữ `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
+| Bronze có được che? | **Lưu gốc, che lúc đọc qua Trino** — với user không phải admin/ETL (§7) |
+| Silver có được che? | **Lưu gốc, che lúc đọc qua Trino** — `silver.dim_customer` vẫn *lưu* `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
 | Gold có được che? | **Có** — chỉ còn `full_name_masked`, không còn `cccd`/`phone`/`email` |
 | Tầng serving có được che? | **Có**, bằng cách thừa hưởng từ Gold (`select *`) |
-| Lakehouse có kiểm soát truy cập? | **Không** (§7) |
+| Lakehouse có kiểm soát truy cập? | **Có ở Trino, chưa có xác thực** — Spark và MinIO không đi qua lớp này (§7) |
 | Có phân loại dữ liệu ở dạng máy đọc được? | **Không** (§9) |
 
-Câu quan trọng nhất: **che PII ở dự án này là tạo bản sao đã che, không phải bảo
-vệ bản gốc.** Ai đọc được Trino hay Spark thì đọc được `cccd` nguyên bản.
+Câu quan trọng nhất: **bản gốc vẫn được lưu nguyên; lớp bảo vệ là Trino che lúc
+đọc — và Trino tin tên user mà client tự khai.** Client làm đúng không còn thấy
+`cccd` gốc; người cố ý khai tên `admin`, hoặc đọc thẳng MinIO bằng Spark, thì vẫn
+thấy.
 
 ---
 
@@ -118,15 +120,20 @@ hại ở bảng này thành dữ liệu nhạy cảm sau một phép join. Bả
 
 ## 4. Ba cơ chế che, ba quy tắc khác nhau
 
-Cùng một trường `full_name` được che theo **hai** cách khác nhau ở hai chỗ:
+Cùng một trường `full_name` được che theo **ba** cách khác nhau ở ba chỗ:
 
 | Nơi | Biểu thức | Kết quả (minh hoạ trên tên ví dụ) |
 |---|---|---|
 | Gold, `customer_360.yml:225` | `CONCAT(SPLIT(c.full_name,' ')[0], ' **')` | giữ họ, bỏ hết phần còn lại |
 | `pii_masking.py`, `_mask_name_udf()` | tách theo khoảng trắng, giữ họ + chữ cái đầu của tên đệm và tên | giữ họ và hai chữ cái đầu |
+| Trino, lúc đọc (`governance/rbac.py`, §7) | `concat(substr(full_name, 1, 1), '**')` | chỉ giữ chữ cái đầu |
 
-Không quy tắc nào sai. Nhưng chúng **khác nhau**, không tài liệu nào trước đây
-nói là khác, và không test nào so hai bên. Bản Gold che mạnh hơn bản "masking".
+Không quy tắc nào sai. Nhưng chúng **khác nhau**, và không test nào so các bên.
+Bản Trino che mạnh nhất, bản "masking" nhẹ nhất.
+
+Trino cũng che các trường khác theo quy tắc riêng, không trùng `pii_masking.py`:
+`cccd` giữ 4 số cuối (thay vì hash), `date_of_birth` làm tròn về đầu năm (thay vì
+nhóm chục năm), `address` thay bằng `[REDACTED]` (thay vì giữ city + district).
 
 Các quy tắc khác trong `pii_masking.py`:
 
@@ -168,11 +175,14 @@ silver.dim_customer  (cccd, phone, email nguyên bản)
 - bảng `sandbox` là tiện ích cho Marketing/CRM, **không** phải một tầng kiểm soát
 - không có gì buộc ai phải dùng bảng `sandbox` thay vì bảng gốc
 
-Đây là lựa chọn hợp lý **khi** có kiểm soát truy cập theo schema. Dự án này chưa
-có (§7), nên hiện tại bảng `sandbox` là tự nguyện.
+Đây là lựa chọn hợp lý **khi** có kiểm soát truy cập theo schema. Từ PR #39,
+Trino có lớp đó (§7): tầng tiêu thụ chỉ đọc được `serving`, và role phân tích đọc
+Silver thì thấy PII đã che. Nhưng lớp này chưa có xác thực, và không phủ Spark —
+nên bản gốc được bảo vệ trước truy cập *nhầm*, chưa được bảo vệ trước truy cập
+*cố ý*.
 
-`SECURITY.md` đã nói đúng điều này: *"masking hiện áp ở tầng Gold/serving,
-**không** ở Bronze."* Tài liệu này chỉ bổ sung rằng Silver cũng không.
+`SECURITY.md` nói cùng điều này: che **lúc ghi** chỉ áp ở Gold/serving; Bronze và
+Silver vẫn *lưu* giá trị gốc, và chỉ được che **lúc đọc** qua Trino.
 
 DAG: `ops_pii_masking_daily_dag`, 08:00 hằng ngày, chờ `gold_all_dag` thành công
 trước khi chạy.
@@ -240,72 +250,75 @@ Cách đặt salt, và hệ quả khi xoay vòng nó: [`RUNBOOK.md`](../../RUNBO
 
 ---
 
-## 7. Lakehouse không có kiểm soát truy cập
+## 7. Kiểm soát truy cập: có ở Trino, chưa có xác thực
 
-`governance/rbac.py` định nghĩa 5 role, 24 permission, trong đó 4 permission của
-role `analytics` có biểu thức `column_mask`:
+> **Cập nhật 2026-09-23 (PR #39).** Hai bản trước của mục này ghi "lakehouse không
+> có kiểm soát truy cập", rồi đính chính rằng file luật Trino có tồn tại nhưng không
+> có tác dụng. Cả hai đúng tại thời điểm viết. Từ PR #39, Trino thực thi luật thật.
+> Phần "Trước đây" bên dưới giữ lại phát hiện đó ở dạng rút gọn.
 
-```text
-admin         3 permission
-etl_user      6
-analytics    10   ← 4 permission có column_mask
-readonly      3
-data_steward  2   (kế thừa từ analytics)
-```
+### Hiện tại
 
-**Không gì gọi module này.** Đã kiểm: ngoài chính `governance/rbac.py` và các
-test của nó, không file `.py` nào `import` nó. Nó là một **mô hình quyền**, không
-phải một cơ chế thực thi.
+`governance/rbac.py` là nguồn sự thật duy nhất: 8 role, 14 user.
+`scripts/generate_trino_access_control.py` sinh `docker/init_trino/rules.json` từ
+đó; test chặn drift giữa hai file. `access-control.properties` bật plugin `file`
+và được mount vào đúng `/etc/trino/` ở compose, CI compose và Terraform. Quyết
+định: [ADR-0015](../02-architecture/adr/0015-trino-access-control-generated-from-rbac.md).
 
-Và không có lớp thực thi nào khác ở tầng lakehouse:
-
-| Lớp | Có kiểm soát? |
-|---|---|
-| Trino | **Không** — có một file luật trong repo, nhưng Trino không nạp nó (xem dưới) |
-| Spark / Iceberg REST | **Không** |
-| PostgreSQL nguồn | **Có** — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Nhưng nó chỉ phủ DB **nguồn**, không phủ lakehouse |
-
-Nên: bất kỳ ai kết nối được tới Trino đều `SELECT cccd FROM silver.dim_customer`
-được. `column_mask` trong `rbac.py` không chạy ở đâu cả.
-
-### File luật Trino có trong repo nhưng không có tác dụng
-
-> **Đính chính (2026-09-23)**: bản đầu của mục này ghi Trino "không có file cấu
-> hình access-control nào trong repo" — sai. File có tồn tại. Kết luận thì không
-> đổi: Trino không thực thi quyền nào.
-
-`docker/init_trino/access-control.properties` (195 dòng, có từ commit đầu tiên)
-khai luật theo 4 group `admins` · `etl_users` · `analysts` · `readonly_users`: cấm
-`analysts` đọc Bronze, cấm `readonly_users` đọc Silver/Bronze, và che 9 cột PII
-cho `analysts`. Ý định đúng, nhưng file không có hiệu lực. Mỗi lý do 1–3 dưới
-đây tự nó đã đủ để file không chạy. Lý do 4 cho thấy: kể cả khi sửa xong ba lý do
-kia, hơn một nửa số luật che vẫn không che được gì.
-
-| # | Lý do | Căn cứ |
+| Client | User Trino | Đọc được PII nguyên bản? |
 |---|---|---|
-| 1 | **Không được mount.** Service `trino` trong `docker/docker-compose.yml` chỉ mount `./init_trino/catalog` vào `/etc/trino/catalog`. File nằm ở `init_trino/`, ngoài thư mục đó, nên không vào container. Không file nào khác trong repo nhắc tới nó | `git grep "access-control.properties"` ngoài `docs/` → 0 kết quả |
-| 2 | **Sai định dạng.** Trino cần `etc/access-control.properties` với hai khoá bắt buộc: `access-control.name=file` và `security.config-file` trỏ tới một file luật **JSON**. File này không có khoá `access-control.name`. Nó viết luật thẳng thành các cặp `key=value` lặp lại (`catalog=`, `group=`, `mask=`…), mà trong file properties thì khoá trùng sẽ bị giá trị cuối đè | tài liệu Trino 443, *File-based access control* |
-| 3 | **Không có group nào.** Luật theo group chỉ khớp khi có group provider (`etc/group-provider.properties`) và có xác thực người dùng. Repo không cấu hình cả hai, nên không user nào thuộc group nào | tài liệu Trino 443, *File group provider* |
-| 4 | **Che cột không tồn tại.** 5/9 luật `mask` nhắm vào `gold.mart_customer_360` các cột `full_name` · `phone` · `email` · `cccd` · `address`. DDL Gold không có cột nào trong số đó; Gold chỉ có `full_name_masked` (§2). 4 luật nhắm vào `silver.dim_customer` thì trỏ đúng cột có thật | `docker/init_iceberg/03_ddl_gold.sql`, `02_ddl_silver.sql` |
+| dbt | `dbt` | không — đọc `gold`, ghi `serving`; cả hai chỉ mang `full_name_masked` |
+| Superset, API, Streamlit, ML | `superset` · `customer_api` · `streamlit` · `ml` | không — chỉ đọc `serving` |
+| Freshness exporter, metrics manifest | `freshness_exporter` · `manifest_collector` | không — đọc mọi tầng, PII bị che |
+| Phân tích, data steward | `analytics_report` · `data_steward_user` | không — đọc Silver, PII bị che; không đọc Bronze |
+| ETL | `airflow_etl` | **có** — pipeline ghi các tầng thì phải thấy giá trị thật |
+| Vận hành, CI, `docker exec … trino` | `admin` · `trino` · `trino_admin` | **có** |
+| Bất kỳ tên nào khác | — | không đọc được bảng dữ liệu nào |
 
-Khi không có `etc/access-control.properties`, Trino dùng access control
-`default`: mọi thao tác đều được phép, trừ giả danh user (impersonation) và kích
-hoạt graceful shutdown.
+Luật che nằm trên 4 bảng mang PII khách hàng nguyên bản: Silver `dim_customer` và
+`dim_customer_current` (cho role phân tích), cùng Bronze `core_customer` và
+`core_customer_cdc` (thêm cho role quan sát). Mỗi bảng che 6 cột: `cccd`,
+`full_name`, `phone`, `email`, `address`, `date_of_birth`. Quy tắc che: §4.
 
-Kết luận trên dựa vào cấu hình compose và tài liệu Trino. **Chưa kiểm trong
-container đang chạy**: image `trinodb/trino:443` có thể tự mang file cấu hình
-riêng, nên nếu có điều kiện thì kiểm lại bằng lệnh ở §11.
+Bốn lý do khiến file luật cũ không có tác dụng (xem "Trước đây") đều có test
+chặn tái diễn trong `tests/governance/test_trino_access_control.py`.
 
-Ghi chú bên lề: `terraform/services.tf` mount **cả** thư mục `docker/init_trino`
-vào `/etc/trino/catalog`. Khi đó file này bị đặt vào thư mục catalog, nơi Trino
-đọc cấu hình catalog chứ không phải access control, còn `iceberg.properties` thì
-nằm sâu thêm một cấp (`catalog/catalog/`). Đường triển khai Terraform chưa được
-chạy thử ở đây. Đây là vấn đề riêng của Terraform, không phải của mục này.
+**Đã kiểm trên engine thật**: bước CI `Trino access control enforced` chạy
+`scripts/verify_trino_access_control.py` trên Trino 443 với dữ liệu thật: 20/20
+kiểm tra đạt ở PR #39. **Chưa kiểm ở runtime**: mask trên `bronze.core_customer_cdc`
+và `silver.dim_customer_current` — CI không tạo hai bảng này. Kiểm trên stack chính
+bằng lệnh ở §11.
 
-Đây là lý do §5 quan trọng: mô hình "giữ bản gốc, tạo bản đã che" phụ thuộc hoàn
-toàn vào một lớp kiểm soát truy cập chưa tồn tại.
+### Chưa phủ
 
-Ma trận role × dataset × quyền: `RBAC_MATRIX.md` (chưa có).
+| Khoảng trống | Hệ quả |
+|---|---|
+| **Chưa có xác thực** | Trino tin tên user mà client tự khai (`X-Trino-User`). Ai kết nối được cổng 8080/8085 đều khai được `admin` và đọc `cccd` gốc. Luật chặn truy cập *nhầm*, không chặn truy cập *cố ý* |
+| **Spark và MinIO không đi qua Trino** | Job Spark đọc ghi thẳng Iceberg REST + MinIO. Ai có credential MinIO đọc được file Parquet gốc |
+| **Nhóm nhạy cảm "Trung bình" chưa che** | `account_no`, `device_id`, `ip_address`, `latitude`/`longitude` (§3) đọc được nguyên bản bởi mọi role đọc được bảng chứa chúng |
+| PostgreSQL nguồn | Có kiểm soát riêng — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Không liên quan tới luật Trino |
+
+Đây vẫn là lý do §5 quan trọng: mô hình "giữ bản gốc, che lúc đọc" giờ đã có lớp
+thực thi, nhưng lớp đó mới vững bằng mức xác thực của nó.
+
+### Trước đây: file luật có trong repo nhưng không có tác dụng
+
+Trước PR #39, `docker/init_trino/access-control.properties` khai 195 dòng luật
+theo 4 group, nhưng Trino không nạp nó. Mỗi lý do 1–3 tự nó đã đủ:
+
+1. **Không được mount.** Compose chỉ mount `./init_trino/catalog`; file nằm ngoài
+   thư mục đó.
+2. **Sai định dạng.** Không có `access-control.name=file`, và luật viết thành các
+   cặp `key=value` lặp lại thay vì một file luật JSON.
+3. **Không có group.** Không có group provider nào, nên không user nào thuộc group.
+4. **Che cột không tồn tại.** 5/9 luật che nhắm vào cột Gold mà DDL không có.
+
+Không có file cấu hình thì Trino dùng access control `default`: cho phép tất cả.
+`rbac.py` khi đó cũng không được thực thi: không file nào ngoài test `import` nó,
+và nó mắc cùng lỗi che cột Gold không tồn tại.
+
+Ma trận role × dataset × quyền in được bằng lệnh ở §11. Tài liệu `RBAC_MATRIX.md`
+riêng vẫn chưa có.
 
 ---
 
@@ -420,30 +433,22 @@ Kiểm xem contract có khai phân loại chưa:
 py -3 -c "import yaml,glob,collections;k=collections.Counter();[k.update(yaml.safe_load(open(p,encoding='utf-8')).keys()) for p in glob.glob('governance/datasets/*.yaml')];print(dict(k))"
 ```
 
-Kiểm xem `rbac.py` đã được gọi chưa:
+Kiểm luật Trino (§7). Tĩnh, không cần stack:
 
 ```bash
-git grep -l "from governance.rbac\|governance import rbac" -- "*.py"
+py -3 scripts/generate_trino_access_control.py --check     # rules.json khớp rbac.py
+py -3 -m pytest -q tests/governance/test_trino_access_control.py
+py -3 governance/rbac.py                                   # in role, user và ma trận quyền
 ```
 
-Kiểm xem Trino có nạp access control nào không (§7). Tĩnh, không cần stack:
+Khi stack đang chạy — Trino có nạp luật không, mask có chạy đúng kiểu không:
 
 ```bash
-git grep -n "access-control.properties" -- ':!docs'                        # ai trỏ tới file luật
-grep -n -A8 "^  trino:" docker/docker-compose.yml | grep -A1 volumes        # compose mount gì
+py -3 scripts/verify_trino_access_control.py --container banking-trino
 ```
 
-Khi stack đang chạy. Không có file thì Trino dùng access control `default`:
-
-```bash
-docker exec banking-trino sh -c 'ls /etc/trino; cat /etc/trino/access-control.properties'
-```
-
-Xem role và permission hiện khai:
-
-```bash
-py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[print(n,len(r.permissions),r.parent_roles) for n,r in ROLES.items()]"
-```
+Nếu mọi kiểm tra "phải bị chặn" lại *thành công*, Trino không nạp luật — thường vì
+`access-control.properties` không được mount vào `/etc/trino/`.
 
 **Windows**: đặt `PYTHONIOENCODING=utf-8` trước lệnh `py -3`.
 
@@ -453,11 +458,12 @@ py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[p
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Kiểm soát truy cập ở lakehouse | §7 — `cccd` đọc được bởi mọi client Trino |
-| `rbac.py` được thực thi | 24 permission và 4 `column_mask` không chạy ở đâu |
+| Xác thực người dùng Trino | §7 — tên user do client tự khai; ai khai `admin` cũng đọc được `cccd` gốc |
+| Kiểm soát truy cập ở Spark / MinIO | §7 — đường đọc ghi trực tiếp, không qua luật Trino |
+| Che nhóm nhạy cảm "Trung bình" | §7 — `account_no`, `device_id`, `ip_address`, lat/long chưa che |
 | Trường `classification` trong data contract | §9 — thêm cột PII mới không làm gì đỏ |
 | `cccd` trong `PII_HINTS` | §8 — trường nhạy cảm nhất không được từ điển đánh dấu |
-| Test so hai quy tắc che `full_name` | §4 — hai biểu thức khác nhau, không gì so |
+| Test so ba quy tắc che `full_name` | §4 — ba biểu thức khác nhau, không gì so |
 | Lý do cho bất đối xứng `age` vs `age_group_decade` | §4 |
 | Chính sách lưu trữ / xoá dữ liệu cá nhân | §10 — chỉ có cấu hình bảo trì chung |
 | Quy trình xử lý yêu cầu xoá (right to erasure) | không có runbook |
@@ -469,14 +475,14 @@ py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[p
 
 ```text
 bảng có PII      31  (lakehouse 23 · PostgreSQL nguồn 8)
-che ở Bronze     không
-che ở Silver     không
+che ở Bronze     lúc đọc qua Trino, trừ admin/ETL · lưu gốc
+che ở Silver     lúc đọc qua Trino, trừ admin/ETL · lưu gốc
 che ở Gold       có — chỉ full_name_masked, không có cccd/phone/email
 che ở serving    có, thừa hưởng từ Gold qua select *
 bản sao đã che   2 bảng trong lakehouse.sandbox, tạo lại 08:00 hằng ngày
 salt cccd_hash   Airflow Variable, đọc lúc render task, không có giá trị dự phòng
-quy tắc che      2 quy tắc khác nhau cho cùng trường full_name
-kiểm soát        lakehouse: không · PostgreSQL nguồn: có
+quy tắc che      3 quy tắc khác nhau cho cùng trường full_name
+kiểm soát        Trino: có, chưa xác thực · Spark/MinIO: không · PostgreSQL nguồn: có
 phân loại máy đọc  không
 time travel      PII đã xoá còn đọc được ≥ 7 ngày và ≥ 3 snapshot
 ```
