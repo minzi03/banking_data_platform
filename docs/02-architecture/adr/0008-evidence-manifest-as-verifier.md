@@ -56,6 +56,12 @@ README chiếu từ manifest qua 18 `readme_bindings`, kiểm bởi `scripts/ver
 - **Vòng lặp chỉ khép khi regenerate.** `verify_readme_metrics.py` so README ↔ manifest, **không** so manifest ↔ thực tế. Nếu manifest cũ, nó vẫn báo 22/22 xanh. Đây là giới hạn thật, không phải lỗi: hiện `test_functions` ghi 476 trong khi thực tế là 598.
 - Thêm một bước bắt buộc vào mọi thay đổi ảnh hưởng số liệu.
 - `--allow-dirty` tồn tại và **nguy hiểm**: nó khiến manifest ghi `git_dirty: False` không đúng sự thật, tức là chính công cụ kiểm chứng nói dối. Đã từng xảy ra.
+
+  > **Ghi chú bổ sung (2026-09-23)** — mục này không còn đúng với code hiện tại; giữ nguyên văn vì ADR ghi lại trạng thái lúc quyết định.
+  > - `0045922` sửa phần nói dối: `git_dirty` luôn ghi đúng sự thật, cờ chỉ còn là cổng promote.
+  > - [#28](https://github.com/minzi03/banking_data_platform/pull/28) gỡ hẳn cờ: invariant `worktree_clean` (severity `error`) đã chặn cây bẩn trước, nên cờ không đổi hành vi trong trường hợp nào. Cây bẩn giờ chỉ chạy được với `--collect-only` (không promote).
+  >
+  > Chi tiết: [`EVIDENCE_MANIFEST.md` §6.2](../../05-quality/EVIDENCE_MANIFEST.md).
 - Metric `manual` không tự già đi. Một con số đo tháng trước trông y hệt con số đo hôm nay nếu không đọc trường ngày.
 
 ## Evidence
