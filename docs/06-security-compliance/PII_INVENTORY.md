@@ -1,6 +1,6 @@
 # Kiểm Kê Dữ Liệu Cá Nhân
 
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
+> Cập nhật: 2026-09-23 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
 > Liên quan: [`../../SECURITY.md`](../../SECURITY.md) · [`../03-data/DATA_DICTIONARY.md`](../03-data/DATA_DICTIONARY.md) · [`../05-quality/DATA_QUALITY.md`](../05-quality/DATA_QUALITY.md)
 
 Đây là bản kiểm kê mà `DATA_DICTIONARY.md` trỏ tới. Trình sinh từ điển tự khai:
@@ -240,12 +240,46 @@ Và không có lớp thực thi nào khác ở tầng lakehouse:
 
 | Lớp | Có kiểm soát? |
 |---|---|
-| Trino | **Không** — không có file cấu hình access-control nào trong repo |
+| Trino | **Không** — có một file luật trong repo, nhưng Trino không nạp nó (xem dưới) |
 | Spark / Iceberg REST | **Không** |
 | PostgreSQL nguồn | **Có** — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Nhưng nó chỉ phủ DB **nguồn**, không phủ lakehouse |
 
 Nên: bất kỳ ai kết nối được tới Trino đều `SELECT cccd FROM silver.dim_customer`
 được. `column_mask` trong `rbac.py` không chạy ở đâu cả.
+
+### File luật Trino có trong repo nhưng không có tác dụng
+
+> **Đính chính (2026-09-23)**: bản đầu của mục này ghi Trino "không có file cấu
+> hình access-control nào trong repo" — sai. File có tồn tại. Kết luận thì không
+> đổi: Trino không thực thi quyền nào.
+
+`docker/init_trino/access-control.properties` (195 dòng, có từ commit đầu tiên)
+khai luật theo 4 group `admins` · `etl_users` · `analysts` · `readonly_users`: cấm
+`analysts` đọc Bronze, cấm `readonly_users` đọc Silver/Bronze, và che 9 cột PII
+cho `analysts`. Ý định đúng, nhưng file không có hiệu lực. Mỗi lý do 1–3 dưới
+đây tự nó đã đủ để file không chạy. Lý do 4 cho thấy: kể cả khi sửa xong ba lý do
+kia, hơn một nửa số luật che vẫn không che được gì.
+
+| # | Lý do | Căn cứ |
+|---|---|---|
+| 1 | **Không được mount.** Service `trino` trong `docker/docker-compose.yml` chỉ mount `./init_trino/catalog` vào `/etc/trino/catalog`. File nằm ở `init_trino/`, ngoài thư mục đó, nên không vào container. Không file nào khác trong repo nhắc tới nó | `git grep "access-control.properties"` ngoài `docs/` → 0 kết quả |
+| 2 | **Sai định dạng.** Trino cần `etc/access-control.properties` với hai khoá bắt buộc: `access-control.name=file` và `security.config-file` trỏ tới một file luật **JSON**. File này không có khoá `access-control.name`. Nó viết luật thẳng thành các cặp `key=value` lặp lại (`catalog=`, `group=`, `mask=`…), mà trong file properties thì khoá trùng sẽ bị giá trị cuối đè | tài liệu Trino 443, *File-based access control* |
+| 3 | **Không có group nào.** Luật theo group chỉ khớp khi có group provider (`etc/group-provider.properties`) và có xác thực người dùng. Repo không cấu hình cả hai, nên không user nào thuộc group nào | tài liệu Trino 443, *File group provider* |
+| 4 | **Che cột không tồn tại.** 5/9 luật `mask` nhắm vào `gold.mart_customer_360` các cột `full_name` · `phone` · `email` · `cccd` · `address`. DDL Gold không có cột nào trong số đó; Gold chỉ có `full_name_masked` (§2). 4 luật nhắm vào `silver.dim_customer` thì trỏ đúng cột có thật | `docker/init_iceberg/03_ddl_gold.sql`, `02_ddl_silver.sql` |
+
+Khi không có `etc/access-control.properties`, Trino dùng access control
+`default`: mọi thao tác đều được phép, trừ giả danh user (impersonation) và kích
+hoạt graceful shutdown.
+
+Kết luận trên dựa vào cấu hình compose và tài liệu Trino. **Chưa kiểm trong
+container đang chạy**: image `trinodb/trino:443` có thể tự mang file cấu hình
+riêng, nên nếu có điều kiện thì kiểm lại bằng lệnh ở §11.
+
+Ghi chú bên lề: `terraform/services.tf` mount **cả** thư mục `docker/init_trino`
+vào `/etc/trino/catalog`. Khi đó file này bị đặt vào thư mục catalog, nơi Trino
+đọc cấu hình catalog chứ không phải access control, còn `iceberg.properties` thì
+nằm sâu thêm một cấp (`catalog/catalog/`). Đường triển khai Terraform chưa được
+chạy thử ở đây. Đây là vấn đề riêng của Terraform, không phải của mục này.
 
 Đây là lý do §5 quan trọng: mô hình "giữ bản gốc, tạo bản đã che" phụ thuộc hoàn
 toàn vào một lớp kiểm soát truy cập chưa tồn tại.
@@ -369,6 +403,19 @@ Kiểm xem `rbac.py` đã được gọi chưa:
 
 ```bash
 git grep -l "from governance.rbac\|governance import rbac" -- "*.py"
+```
+
+Kiểm xem Trino có nạp access control nào không (§7). Tĩnh, không cần stack:
+
+```bash
+git grep -n "access-control.properties" -- ':!docs'                        # ai trỏ tới file luật
+grep -n -A8 "^  trino:" docker/docker-compose.yml | grep -A1 volumes        # compose mount gì
+```
+
+Khi stack đang chạy. Không có file thì Trino dùng access control `default`:
+
+```bash
+docker exec banking-trino sh -c 'ls /etc/trino; cat /etc/trino/access-control.properties'
 ```
 
 Xem role và permission hiện khai:
