@@ -345,9 +345,10 @@ Một test quét tĩnh để lỗi không quay lại. Chi tiết và bảng trư
 [`technical-debt.md` TD-10](technical-debt.md).
 
 Sau đó image Spark được nâng lên Python 3.10 (Ubuntu 22.04, Java 17), đúng mức
-sàn repo đã khai. Test đổi tên thành `test_worker_python_compat.py` và giờ canh
-bốn nơi khai phiên bản — image, `requires-python`, ruff `target-version`,
-`WORKER_PYTHON` — cùng các API 3.11+ mà CI chấp nhận còn worker thì không.
+sàn repo đã khai, và CI cũng chuyển sang 3.10. Test đổi tên thành
+`test_worker_python_compat.py` và canh năm nơi khai phiên bản — image,
+`requires-python`, ruff `target-version`, `WORKER_PYTHON`, `python-version` của
+mọi workflow CI — cùng các API 3.11+ mà worker không có.
 
 ### Chạy thật, lần đầu
 
@@ -616,7 +617,6 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| CI chạy đúng Python của worker | worker 3.10, CI 3.11; test tĩnh chặn cú pháp, `tomllib` và một danh sách API 3.11+, không phải toàn bộ (TD-10) |
 | `ops_contract_validation_dag` chạy được | pydantic đã có trên worker, nhưng `enforcement.py` chạy như script không thấy package `governance`, và không có CLI để nhận `--layer`/`--validate` (TD-10) |
 | Thông báo khi DQ đỏ | §9 — chỉ biết nếu tự mở Airflow UI |
 | DDL cho `lakehouse.quarantine.*` | §5 — hàng vi phạm được đếm nhưng không ghi được đi đâu |

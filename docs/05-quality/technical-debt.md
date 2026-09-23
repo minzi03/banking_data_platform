@@ -627,8 +627,9 @@ this entry existed for as long as it did; they are documented in
 
 **Status:** fixed (2026-09-23, verified on the stack) — runtime decision taken: the Spark
 image moved to Python 3.10 (Ubuntu 22.04, Java 17) and now installs pydantic. See
-[Runtime upgrade](#runtime-upgrade-2026-09-23). Residual: CI and Airflow still run 3.11;
-`ops_contract_validation_dag` is blocked by two causes that are not about Python.
+[Runtime upgrade](#runtime-upgrade-2026-09-23). CI moved to 3.10 as well, so the suite
+now runs on the worker's Python. Residual: the Airflow image stays on 3.11 (latent, see
+below); `ops_contract_validation_dag` is blocked by two causes that are not about Python.
 
 `banking-spark-worker-1` runs **Python 3.8.10**. Every ops and governance task in
 Airflow runs there: `docker exec banking-spark-worker-1 spark-submit ...` or
@@ -823,18 +824,19 @@ here; fixing the path alone would turn a loud failure into a silent one.
 ```text
 Spark worker     Python 3.10    ← runtime of code_etl/ and governance/
 pyproject        >=3.10 · ruff py310
-CI (all jobs)    Python 3.11
+CI (all jobs)    Python 3.10    ← moved from 3.11 (2026-09-23)
 Airflow image    Python 3.11    ← driver for the two SparkSubmitOperator DAGs
 ```
 
-- **CI one minor ahead of the worker.** Same failure class as this entry, one step
-  smaller: 3.11-only syntax or API is green in CI and dies on the worker.
+- **CI was one minor ahead of the worker — closed.** Same failure class as this
+  entry, one step smaller: 3.11-only syntax or API would be green in CI and die on
+  the worker. Every `python-version` in `.github/workflows/` is now 3.10, and
   `tests/governance/test_worker_python_compat.py` (renamed from
-  `test_worker_python38_compat.py`) now checks that the image's measured Python,
-  `WORKER_PYTHON`, `requires-python` and ruff's target agree, and rejects 3.11+
-  syntax, `tomllib`, and a list of 3.11+ names (`typing.Self`, `datetime.UTC`,
-  `enum.StrEnum`, …). The list is selective, not exhaustive. Running CI on 3.10 is
-  the complete fix.
+  `test_worker_python38_compat.py`) fails if any of the five declarations drifts:
+  the image's measured Python, `WORKER_PYTHON`, `requires-python`, ruff's target,
+  and every workflow's `python-version`. Its static scan for 3.11+ syntax and names
+  (`typing.Self`, `datetime.UTC`, `enum.StrEnum`, …) stays as a cheap second layer
+  for developers running a newer Python locally.
 - **Driver 3.11, executors 3.10** for `ops_maintenance_weekly_dag` and
   `ops_pii_masking_daily_dag`, which launch from the Airflow container. PySpark
   refuses mismatched minors only when it starts a Python worker (UDF, RDD,

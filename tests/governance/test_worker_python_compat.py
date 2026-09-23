@@ -16,21 +16,21 @@ tiên, không test nào thấy.
 Bản sửa là nâng image lên biến thể jammy (Python 3.10). Test này giữ cho lỗi
 đó không quay lại, theo hai hướng:
 
-1. **Bốn nơi khai phiên bản phải khớp nhau.** `WORKER_PYTHON` dưới đây,
+1. **Năm nơi khai phiên bản phải khớp nhau.** `WORKER_PYTHON` dưới đây,
    Python đã đo trong base image của `docker/Dockerfile.spark`,
-   `requires-python` và `target-version` của ruff. Đổi một nơi mà quên nơi
-   khác thì đỏ. Đổi dòng `FROM` sang tag chưa đo thì đỏ — phải đo Python trong
-   image mới rồi thêm vào `MEASURED_BASE_IMAGES`.
+   `requires-python`, `target-version` của ruff, và `python-version` của mọi
+   workflow CI. Đổi một nơi mà quên nơi khác thì đỏ. Đổi dòng `FROM` sang tag
+   chưa đo thì đỏ — phải đo Python trong image mới rồi thêm vào
+   `MEASURED_BASE_IMAGES`.
 
-2. **Code worker không dùng thứ mới hơn `WORKER_PYTHON`.** CI chạy 3.11, nên
-   cú pháp và API của 3.11 vẫn xanh ở CI mà chết trên worker 3.10 — đúng kiểu
-   lỗi của TD-10, chỉ lệch một bậc. Test kiểm tĩnh:
-   cú pháp (`ast.parse(feature_version=...)`), module stdlib, và các tên cụ thể
-   trong `typing`/`datetime`/`enum` mà người viết code 3.11 hay dùng.
+2. **Code worker không dùng thứ mới hơn `WORKER_PYTHON`.** Giờ CI chạy đúng
+   Python của worker nên suite tự bắt được phần lớn. Mục này là lớp thứ hai,
+   rẻ và chạy được ở máy dev có Python mới hơn: cú pháp
+   (`ast.parse(feature_version=...)`), module stdlib, và các tên cụ thể trong
+   `typing`/`datetime`/`enum` mà người viết code 3.11 hay dùng.
 
-Giới hạn: đây là xấp xỉ tĩnh. Nó không thấy `getattr(typing, "Self")`, và bảng
-tên ở dưới là danh sách chọn lọc, không phải toàn bộ API mới của 3.11+. Bảo vệ
-đầy đủ cần CI chạy đúng Python của worker — ghi ở TD-10.
+Giới hạn: mục 2 là xấp xỉ tĩnh. Nó không thấy `getattr(typing, "Self")`, và
+bảng tên ở dưới là danh sách chọn lọc, không phải toàn bộ API mới của 3.11+.
 
 Chạy: pytest tests/governance/test_worker_python_compat.py -v
 """
@@ -188,6 +188,24 @@ def test_ruff_target_is_the_worker_python():
     assert target == WORKER_PYTHON, (
         f"ruff target-version là py{target[0]}{target[1]}, worker chạy {_fmt(WORKER_PYTHON)}."
     )
+
+
+def test_ci_runs_the_worker_python():
+    """
+    CI chạy Python nào thì suite chỉ chứng minh được code chạy trên Python đó.
+    CI đi trước worker một bậc là đúng kiểu lỗi TD-10: cú pháp và API mới xanh ở
+    CI rồi chết trên worker. Test tĩnh ở mục 2 chỉ bắt được một phần — CI chạy
+    đúng Python của worker mới bắt được hết.
+    """
+    workflows = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    found: list[tuple[str, tuple[int, int]]] = []
+    for wf in workflows:
+        for major, minor in re.findall(r"""python-version:\s*["']?(\d+)\.(\d+)""", wf.read_text(encoding="utf-8")):
+            found.append((wf.name, (int(major), int(minor))))
+
+    assert found, "Không tìm thấy python-version nào trong .github/workflows — guard này sẽ xanh vô nghĩa."
+    wrong = [f"{name}: {_fmt(version)}" for name, version in found if version != WORKER_PYTHON]
+    assert not wrong, f"Workflow chạy Python khác worker ({_fmt(WORKER_PYTHON)}): {wrong}"
 
 
 # ---------------------------------------------------------------------------
