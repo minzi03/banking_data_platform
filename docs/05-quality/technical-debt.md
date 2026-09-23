@@ -742,7 +742,8 @@ and deletes orphan files, which is not something to do for a verification.
     → upgrade, 2026-09-23 (below)
 [x] install pydantic on the worker, or stop importing it there
     → installed; every governance module imports on the worker
-[ ] ops_contract_validation_dag runs — NOT unblocked by pydantic, see below
+[x] ops_contract_validation_dag runs — NOT unblocked by pydantic; fixed by a
+    real CLI, 2026-09-23 (below). It found 20 wrong contracts → TD-12
 ```
 
 ### Runtime upgrade (2026-09-23)
@@ -817,6 +818,40 @@ Run as a script, `/opt/project` is not on `sys.path`. And past that, the file ha
 no `__main__` and no argument parser — `--layer silver --validate` would be
 ignored and the job would exit 0 having validated nothing. Both are out of scope
 here; fixing the path alone would turn a loud failure into a silent one.
+
+**Fixed 2026-09-23 with a real CLI**, `code_etl/shared/ops/contract_validation.py`,
+which the DAG now calls. It loads every contract of a layer, reads each table in
+the run's scope with DQ's own `_scoped_table` (TD-11), validates with the unchanged
+`ContractEnforcer`, writes one row per check to `opslakehouse.contract_validation_log`
+and exits 1 on any FAIL. An unreadable table or a crashing check is a FAIL for that
+contract, not a crash of the run; a layer with no contracts is an error, not a pass.
+
+Three things had to change around it, each found by running it:
+
+- **The log table never existed.** Its DDL lived only in `docker/init_openmetadata/`,
+  which nothing mounts. Moved to `docker/init_postgres/00_extensions.sql`;
+  `to_regclass` confirmed the table was absent from the running stack before.
+- **The worker had no database credentials.** `data_quality.py` writes its log only
+  through a password default committed in the code. The CLI requires
+  `POSTGRES_USER`/`POSTGRES_PASSWORD` and `docker-compose.yml` now passes them to
+  `spark-worker-1` from `docker/.env`.
+- **Freshness on a DATE column always passed.** `FreshnessChecker` computed an age
+  only for `datetime`; anything else fell through to `status="PASS"`. All 19 Gold
+  contracts declare `date_column: cob_dt`, so none was ever evaluated. A date now
+  ages from the end of that business day in Vietnam time; a type with no sensible
+  reference is a WARN.
+
+On the stack, `cob_dt 2026-09-22`, the DAG's own `spark-submit`:
+
+```text
+silver   13 contracts ·  3 PASS · 10 FAIL   exit 1
+gold     20 contracts · 10 PASS · 10 FAIL   exit 1
+         freshness "Data is 15.7 hours old (SLA: 24h)" — evaluated, PASS
+log      122 rows; a second Gold run leaves it at 122
+```
+
+**Every FAIL is a wrong contract, not wrong data** — the first time these 33
+contracts were checked against real tables. Recorded as TD-12.
 
 ### What still does not match
 
@@ -968,3 +1003,69 @@ FK      key present only as a non-current version   FAIL  "1 orphan records"
 
 Not verified through Airflow. The stack runs were `spark-submit` in the container
 the DAG uses; Airflow itself was not started.
+
+---
+
+## TD-12 — 20 of 33 data contracts do not describe the tables they govern
+
+**Status:** open (2026-09-23)
+
+The contracts in `governance/datasets/` had never been checked against real tables:
+`ops_contract_validation_dag` could not run (TD-10). The first run of
+`code_etl/shared/ops/contract_validation.py`, `cob_dt 2026-09-22`, found that
+**every failure is in a contract, none in the data**:
+
+```text
+10 Silver   required_columns names columns the table does not have
+            e.g. dim_card wants card_number_masked; the column is card_no_masked
+            4 of them also fail non_null_columns — same columns, "column not found"
+ 9 Gold     *_current_gold point at lakehouse.gold.*_current — the Spark CTAS
+            tables that were retired; manifest invariant legacy_gold_current_retired
+            requires them NOT to exist. Serving now lives in schema `serving` (dbt)
+ 1 Gold     branch_monthly_summary_gold points at gold.branch_monthly_summary;
+            the table is mart_branch_monthly_summary — the same slip as TD-9
+```
+
+The failing rows in `opslakehouse.contract_validation_log` carry each table's real
+column list in `actual_value`.
+
+Why it survived: nothing compares a contract with the DDL. `test_contracts.py`
+checks that contracts parse; the data dictionary generator joins them to DDL but
+does not flag a mismatch.
+
+### Acceptance
+
+```text
+[ ] every contract's table exists in the DDL, and its required / non-null / unique
+    columns exist in that table — enforced by a static test, like test_dq_rules_resolve.py
+[ ] the 9 *_current contracts either point at the dbt serving tables or are removed
+[ ] contract_validation.py exits 0 for silver and gold on a healthy snapshot
+```
+
+---
+
+## TD-13 — `opslakehouse.lineage_log` is written to but never created
+
+**Status:** open (2026-09-23)
+
+`governance/lineage.py` and `ops_lineage_dag` write to `opslakehouse.lineage_log`.
+Its only DDL is in `docker/init_openmetadata/01_create_schemas.sql`, which nothing
+mounts or runs — the same reason `contract_validation_log` was missing (TD-10).
+`audit_log`, also defined there, survives only because `docker/init_postgres/05_security.sql`
+creates it too.
+
+Found while fixing TD-10; not run. Checked statically: no file under
+`docker/init_postgres/` creates `lineage_log`.
+
+### Acceptance
+
+```text
+[ ] lineage_log created by docker/init_postgres/, and the migration for existing
+    stacks recorded in RUNBOOK.md
+[ ] ops_lineage_dag run on the stack, rows observed in the table
+[ ] docker/init_openmetadata/01_create_schemas.sql either applied somewhere or removed,
+    so no DDL lives where nothing reads it
+[ ] RUNBOOK.md §5 and §6 query these PostgreSQL log tables through Trino with
+    catalog `lakehouse`, which Trino does not have (ADR-0002) — §6 against a table
+    that does not exist. §5b shows the psql form
+```

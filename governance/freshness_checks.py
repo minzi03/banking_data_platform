@@ -15,7 +15,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from logging import getLogger
 
 # Lazy import: pyspark may not be available in CI governance checks
@@ -25,6 +25,32 @@ except ImportError:
     F = None  # type: ignore[assignment]
 
 log = getLogger("freshness_checks")
+
+# Ngày nghiệp vụ theo giờ Việt Nam: UTC+7 cố định, không có giờ mùa hè — cùng
+# lựa chọn với iceberg_maintenance.py (TD-10).
+BUSINESS_TZ = timezone(timedelta(hours=7))
+
+
+def _reference_instant(value) -> tuple[datetime, str] | None:
+    """
+    Mốc để tính tuổi dữ liệu, hoặc None nếu không có mốc hợp lý.
+
+    datetime  → chính nó (không có tz thì coi là UTC, như trước)
+    date      → lúc ngày nghiệp vụ đó KẾT THÚC theo giờ Việt Nam
+
+    Với cột ngày như `cob_dt`, câu hỏi freshness là "dữ liệu của ngày D có sẵn
+    trong bao lâu sau khi D khép lại". Lượt chạy 09:00 hôm sau thấy snapshot D
+    mới 9 giờ tuổi — trong SLA 24h. Pipeline trễ quá SLA thì FAIL.
+
+    `datetime` là lớp con của `date`, nên phải kiểm trước.
+    """
+    if isinstance(value, datetime):
+        instant = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        return instant, instant.isoformat()
+    if isinstance(value, date):
+        day_end = datetime.combine(value + timedelta(days=1), time.min, tzinfo=BUSINESS_TZ)
+        return day_end, f"{value.isoformat()} (ngày nghiệp vụ kết thúc {day_end.isoformat()})"
+    return None
 
 
 @dataclass
@@ -96,46 +122,33 @@ class FreshnessChecker:
                     sla_hours=sla_hours,
                 )
 
-            # Calculate age
-            if isinstance(last_updated, datetime):
-                now = datetime.now(timezone.utc)
-                if last_updated.tzinfo is None:
-                    last_updated = last_updated.replace(tzinfo=timezone.utc)
-                age = now - last_updated
-                age_hours = age.total_seconds() / 3600
-                last_updated_str = last_updated.isoformat()
-            else:
-                # If it's a string or other type, try to parse
-                age_hours = None
-                last_updated_str = str(last_updated)
-
-            if age_hours is not None:
-                if age_hours > sla_hours:
-                    return FreshnessResult(
-                        check_name="freshness",
-                        status="FAIL",
-                        details=f"Data is {age_hours:.1f} hours old (SLA: {sla_hours}h)",
-                        last_updated=last_updated_str,
-                        age_hours=age_hours,
-                        sla_hours=sla_hours,
-                    )
-                else:
-                    return FreshnessResult(
-                        check_name="freshness",
-                        status="PASS",
-                        details=f"Data is {age_hours:.1f} hours old (SLA: {sla_hours}h)",
-                        last_updated=last_updated_str,
-                        age_hours=age_hours,
-                        sla_hours=sla_hours,
-                    )
-            else:
+            reference = _reference_instant(last_updated)
+            if reference is None:
+                # Trước đây nhánh này trả PASS ("Latest record: ...") cho mọi kiểu
+                # không phải datetime — gồm cả DATE. Nên 19 contract Gold khai
+                # `date_column: cob_dt` chưa từng được đánh giá freshness, và luôn
+                # báo xanh. Không tính được tuổi thì nói là không tính được.
                 return FreshnessResult(
                     check_name="freshness",
-                    status="PASS",
-                    details=f"Latest record: {last_updated_str}",
-                    last_updated=last_updated_str,
+                    status="WARN",
+                    details=(
+                        f"Không đánh giá được tuổi dữ liệu: '{date_column}' có kiểu "
+                        f"{type(last_updated).__name__}, cần date hoặc timestamp"
+                    ),
+                    last_updated=str(last_updated),
                     sla_hours=sla_hours,
                 )
+
+            instant, last_updated_str = reference
+            age_hours = (datetime.now(timezone.utc) - instant).total_seconds() / 3600
+            return FreshnessResult(
+                check_name="freshness",
+                status="FAIL" if age_hours > sla_hours else "PASS",
+                details=f"Data is {age_hours:.1f} hours old (SLA: {sla_hours}h) · latest {last_updated_str}",
+                last_updated=last_updated_str,
+                age_hours=age_hours,
+                sla_hours=sla_hours,
+            )
 
         except Exception as e:
             return FreshnessResult(

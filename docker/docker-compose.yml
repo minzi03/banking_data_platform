@@ -273,6 +273,11 @@ services:
       SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      # Ops job trên worker ghi log vào Postgres qua JDBC. Trước đây worker
+      # không có hai biến này, nên data_quality.py chỉ ghi được nhờ mật khẩu
+      # mặc định viết cứng trong code; contract_validation.py bắt buộc chúng.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "9091:9091"
     volumes:
