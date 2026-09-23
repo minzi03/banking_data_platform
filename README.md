@@ -256,7 +256,7 @@ counts are ambiguous without them.
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
 | dbt data tests             |            117 | `dbt test --target docker` → PASS=117, ERROR=0                                  |
-| Automated tests            |            782 | Python `def test_*` functions                                                   |
+| Automated tests            |            800 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
@@ -1488,7 +1488,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-782 automated tests
+800 automated tests
 ```
 
 covering areas such as:
