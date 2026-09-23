@@ -181,6 +181,17 @@ class TestDocsAgreeOnArchitecture:
 
         Giờ trích con số NGAY CẠNH cụm "Automated tests" và so từng cái. Một
         claim sai không thể nấp sau một con số trùng khớp ngẫu nhiên nữa.
+
+        Lần sửa thứ hai (2026-09-23): regex cũ chỉ bắt chữ "Automated" viết HOA
+        ở đầu cụm, nên `312 automated tests` (chữ thường, nằm giữa câu prose)
+        lọt qua — cả `README.md` lẫn `architecture.md` đều khai 312 trong khi
+        manifest ghi 655. Node mermaid và bảng metric thì đã đúng, nên chỉ có
+        dạng prose là sai và chỉ có dạng đó không bị bắt. Đây đúng là loại
+        "green test bảo vệ một giả định sai": test khớp CHUỖI CON đúng chỗ nó
+        tình cờ được viết, và mù với mọi cách diễn đạt khác của cùng một claim.
+        Giờ so khớp không phân biệt hoa/thường.
+
+        ⚠ Khi thêm cách diễn đạt mới, mở rộng regex — đừng chỉ sửa con số.
         """
         import yaml
 
@@ -189,10 +200,14 @@ class TestDocsAgreeOnArchitecture:
         )
         expected = str(manifest["metrics"]["platform"]["automated_tests"]["test_functions"]["value"])
 
-        # Bắt cả hai dạng claim đang dùng:
+        # Bắt cả ba dạng claim đang dùng (không phân biệt hoa/thường):
         #   | Automated tests | 655 |          (bảng metric)
         #   655 Automated Tests                (node mermaid)
-        claim_re = re.compile(r"(?:Automated [Tt]ests\D{0,40}?(\d[\d,]*)|(\d[\d,]*)\s+Automated [Tt]ests)")
+        #   655 automated tests                (prose — dạng từng lọt lưới)
+        claim_re = re.compile(
+            r"(?:Automated tests\D{0,40}?(\d[\d,]*)|(\d[\d,]*)\s+Automated tests)",
+            re.IGNORECASE,
+        )
 
         for path in DOCS:
             text = path.read_text(encoding="utf-8")

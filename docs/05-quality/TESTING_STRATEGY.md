@@ -227,6 +227,25 @@ pytest --collect-only -q tests/            1578   (1572 + 6)
 py -3 -m pytest -q -m "not integration"    1511 passed, 1 skipped, 66 deselected
 ```
 
+Rồi TD-13 (lineage_log có bảng và có writer) và RBAC_MATRIX thêm **18 hàm → 110 node**:
+
+| File | Hàm | Node |
+|---|---:|---:|
+| `tests/governance/test_ops_tables_exist.py` | 3 | 10 |
+| `tests/governance/test_rbac_matrix_current.py` | 5 | 89 |
+| `tests/governance/test_lineage_declared_edges.py` | 6 | 6 |
+| `tests/dags/test_ops_lineage_dag.py` | 4 | 4 |
+| `test_docs_links_resolve.py` — tự parametrize thêm `RBAC_MATRIX.md` | 0 | 1 |
+
+Node thứ 110 tìm được bằng cách diff ID các node collect trước và sau, không phải
+bằng cách cộng tay.
+
+```text
+def test_* count                            800   (782 + 18)
+pytest --collect-only -q tests/            1688   (1578 + 110)
+py -3 -m pytest -q -m "not integration"    1621 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -522,10 +541,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1578 node · 782 hàm · 1512 node chạy không cần hạ tầng   (2026-09-24)
-suite       1511 passed · 1 skipped (có chủ ý) · 66 deselected · ~11s
-coverage    76% (75,70%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 782 / 1578 — mọi delta ở §3 giờ nằm trong manifest
+pytest      1688 node · 800 hàm · 1622 node chạy không cần hạ tầng   (2026-09-24)
+suite       1621 passed · 1 skipped (có chủ ý) · 66 deselected · ~12s
+coverage    76% (75,91%) trên governance + code_etl/shared · fail_under 60 đang áp
+manifest    đã promote 800 / 1688 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
