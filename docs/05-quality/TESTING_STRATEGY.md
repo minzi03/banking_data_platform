@@ -146,7 +146,17 @@ pytest --collect-only -q tests/            1245   (1057 + 188)
 py -3 -m pytest -q -m "not integration"    1177 passed, 2 skipped, 66 deselected
 ```
 
-Test mới này có **1 skip có chủ đích**: `governance/contracts.py` được miễn kiểm
+Rồi TD-11 (phạm vi check theo `cob_dt` / `is_current`) thêm **16 hàm → 17 node**:
+14 unit test trong `tests/ops/test_data_quality.py`, 2 hàm (3 node) trong
+`test_dq_rules_resolve.py` ràng `source_scope` với DDL:
+
+```text
+def test_* count                            699   (683 + 16)
+pytest --collect-only -q tests/            1262   (1245 + 17)
+py -3 -m pytest -q -m "not integration"    1194 passed, 2 skipped, 66 deselected
+```
+
+Test Python 3.8 có **1 skip có chủ đích**: `governance/contracts.py` được miễn kiểm
 annotation vì pydantic tự đánh giá annotation (lý do nằm trong `EXEMPT` của
 test). Skip thứ hai trong suite là cái đã nói ở §3.
 

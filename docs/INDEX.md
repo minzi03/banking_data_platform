@@ -125,7 +125,7 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 | [`evidence/p1-cdc-consolidation/README.md`](evidence/p1-cdc-consolidation/README.md) | Bằng chứng runtime: CDC consolidation |
 | [`evidence/p2-observability/README.md`](evidence/p2-observability/README.md) | Bằng chứng runtime: observability |
 
-> Nếu bạn vận hành: tới `2026-09-23`, job DQ và quarantine **chưa từng chạy được** trên spark-worker (Python 3.8, code dùng cú pháp 3.9+). Đã sửa và chạy thật lần đầu — Gold xanh, Silver đỏ vì check đếm mọi snapshot (`DATA_QUALITY.md` §6a, TD-10, TD-11).
+> Nếu bạn vận hành: tới `2026-09-23`, job DQ và quarantine **chưa từng chạy được** trên spark-worker (Python 3.8, code dùng cú pháp 3.9+). Đã sửa và chạy thật lần đầu; check giờ đọc đúng snapshot của ngày và phiên bản hiện hành — Silver và Gold xanh (`DATA_QUALITY.md` §6a, TD-10, TD-11).
 
 ## 6. Quản trị & tuân thủ
 

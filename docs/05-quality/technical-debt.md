@@ -748,7 +748,8 @@ caught by the static test only if it lands in an annotation.
 
 ## TD-11 — Silver DQ checks count every snapshot, so they fail on healthy data
 
-**Status:** open (recorded 2026-09-23)
+**Status:** fixed (2026-09-23, verified on the stack) — decision taken: a daily
+check means **the snapshot of the day being checked, current versions only**
 
 Once TD-10 let `data_quality.py` run, Silver reported 8 FAILs. Each one was
 checked against the data. **None is a data defect.**
@@ -779,21 +780,94 @@ duplicate would be reported inside an 8,400,000 that is already expected.
 range_check message    "720270 values out of range <=None"  — bounds text uses
                        truthiness, so min_value: 0 prints as "<=None"
                        (data_quality.py:160). The count is right, the text is wrong.
+                       Fixed below.
 Bronze CDC             all 6 *_cdc tables have 0 rows — Kafka/Debezium were not
                        running. Environmental; says nothing about CDC either way.
 quarantine log         "8970 records quarantined" while rows_written = 0 —
                        the log line reports intent, not the write (TD-9: no DDL).
 ```
 
+### Fix
+
+`run_checks_for_table` passes the run's `cob_dt` down in a copy of the rule, and
+every data-reading check goes through one helper, `_scoped_table`:
+
+```text
+table has a cob_dt column      → cob_dt = DATE '<run cob_dt>'
+table has an is_current column → CAST(is_current AS INT) = 1
+neither (SCD1 dims, CDC)       → whole table, as before
+```
+
+The decision is on columns present **at runtime**, not a table list. Applied to
+`row_count`, `null_check`, `unique_check`, `range_check`, `referential_integrity`
+(both sides) and `reconciliation` (both sides). `freshness_check`,
+`anomaly_detection` and `schema_drift` are untouched — they are about the whole
+table by nature. Calling a check directly, without the key, keeps the old
+whole-table behaviour. `cob_dt` goes through `date.fromisoformat` before it
+reaches SQL.
+
+Also:
+
+```text
+referential_integrity   NULL foreign keys are excluded — a required FK is a null_check
+range_check             bounds label uses `is not None`, so min_value: 0 prints ">=0"
+details                 every scoped result says what it read: [cob_dt=2026-09-22] / [is_current]
+```
+
+**Intended consequence:** `row_count` on a `cob_dt` table now FAILs when *that
+day's* snapshot is missing. Before, it passed as long as any old snapshot existed.
+
+### One rule needs the whole table, declared explicitly
+
+Scoping made one reconciliation go red for a new reason. `dim_customer` reconciles
+against `lakehouse.bronze.core_customer`, which has one partition only
+(`2026-09-21`) — so filtering it to the run date gives 0 rows. This is not a
+missing load. `01_ddl_bronze.sql` does **not** partition `core_customer` or
+`core_account` (unlike `core_txn_account`, `PARTITIONED BY (cob_dt)`), and the
+Iceberg history shows every load replacing all 10,000 rows. These tables only
+ever hold the latest load; their `cob_dt` is the date of that load.
+
+The rule now says so: `source_scope: whole_table`, with the reason in a YAML
+comment. `test_reconciliation_source_scope_matches_partitioning` ties the option
+to the DDL in both directions: an unpartitioned source must declare it, and a
+`PARTITIONED BY (cob_dt)` source must not. Negative-tested both ways.
+
+### Verification (2026-09-23)
+
+`spark-submit` on `spark-worker-1`, `--cob_dt 2026-09-22`:
+
+```text
+silver   62 checks · 61 PASS · 1 WARN · 0 FAIL      exit 0     (was 8 FAIL)
+gold     20 checks · 20 PASS                        exit 0
+bronze    6 checks ·  6 FAIL (CDC tables empty)     exit 1     unchanged, environmental
+```
+
+The WARN is real and now readable: `89994 values out of range >=0
+[cob_dt=2026-09-22]` on `fact_txn_account.txn_amount`, i.e. negative amounts in one
+snapshot. It was 720,270 across all eight.
+
+Planted defects, run through the real `run_checks_for_table` on Spark temp views
+(the lakehouse was not touched):
+
+```text
+fact    txn repeated across snapshots only          PASS
+fact    txn duplicated INSIDE the 09-22 snapshot    FAIL  "txn_id: 1 duplicates [cob_dt=2026-09-22]"
+SCD2    key with an old + a current version         PASS
+SCD2    key with two current rows                   FAIL  "customer_id: 1 duplicates [is_current]"
+FK      NULL foreign key                            PASS
+FK      key present only as a non-current version   FAIL  "1 orphan records"
+```
+
 ### Acceptance
 
 ```text
-[ ] unique_check and reconciliation scoped to one cob_dt partition where one exists
-[ ] SCD2 dims checked on is_current = 1
-[ ] referential_integrity excludes NULL foreign keys (or declares them per rule)
-[ ] Silver DQ exits 0 on the current data, and a planted duplicate makes it exit 1
-[ ] range_check message prints the bound it checked
+[x] unique_check and reconciliation scoped to one cob_dt partition where one exists
+[x] SCD2 dims checked on is_current = 1
+[x] referential_integrity excludes NULL foreign keys
+[x] Silver DQ exits 0 on the current data, and a planted duplicate makes it FAIL
+[x] range_check message prints the bound it checked
+[x] reconciliation against an unpartitioned Bronze source declared, and tied to DDL by a test
 ```
 
-Scoping is a design decision about what a check *means* (this snapshot vs. the
-whole history), so it is recorded rather than changed alongside TD-10.
+Not verified through Airflow. The stack runs were `spark-submit` in the container
+the DAG uses; Airflow itself was not started.

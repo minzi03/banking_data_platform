@@ -38,6 +38,7 @@ Chạy: pytest tests/governance/test_dq_rules_resolve.py -v
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -331,3 +332,67 @@ def test_quarantine_target_tables_have_no_ddl():
         f"Bảng quarantine đã có DDL: {with_ddl}. Khoảng hở mà test này ghi lại đã được "
         "lấp — hãy thay test này bằng assertion 'mọi target_table phải tồn tại trong DDL'."
     )
+
+
+# ---------------------------------------------------------------------------
+# dq_rules.yml — phạm vi của nguồn reconciliation (TD-11)
+# ---------------------------------------------------------------------------
+# data_quality.py lọc mọi bảng có cột cob_dt về đúng snapshot của lượt DQ. Đúng
+# cho bảng PARTITIONED BY (cob_dt) — mỗi ngày một snapshot. SAI cho bảng Bronze
+# không partition: mỗi lần nạp ghi đè cả bảng, cột cob_dt chỉ là ngày của lần
+# nạp gần nhất, và lọc theo ngày lượt DQ cho 0 dòng → FAIL giả. Rule phải khai
+# `source_scope: whole_table` cho đúng những nguồn đó — và chỉ những nguồn đó.
+_CREATE_WITH_TAIL = re.compile(
+    r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.]+)\s*\((.*?);",
+    re.IGNORECASE | re.DOTALL,
+)
+_PARTITIONED_BY_COB_DT = re.compile(r"PARTITIONED\s+BY\s*\([^)]*\bcob_dt\b", re.IGNORECASE)
+
+
+def _partitioned_by_cob_dt() -> dict[str, bool]:
+    gen = _load_dictionary_generator()
+    out: dict[str, bool] = {}
+    for path in sorted(ICEBERG_DDL_DIR.glob("*.sql")):
+        if path.name in gen.SKIP_DDL:
+            continue
+        for fqn, body in _CREATE_WITH_TAIL.findall(path.read_text(encoding="utf-8", errors="replace")):
+            out[fqn] = bool(_PARTITIONED_BY_COB_DT.search(body))
+    return out
+
+
+PARTITIONED_BY_COB_DT = _partitioned_by_cob_dt()
+RECONCILIATIONS = [(t, c) for t, _, c in DQ_CHECKS if c.get("name") == "reconciliation"]
+
+
+def test_partitioning_is_parsed():
+    """Guard: phải thấy cả bảng partition lẫn không partition, nếu không regex đã hỏng."""
+    assert any(PARTITIONED_BY_COB_DT.values()), "Không bảng nào PARTITIONED BY cob_dt — regex hỏng?"
+    assert not all(PARTITIONED_BY_COB_DT.values()), "Mọi bảng đều partition — regex hỏng?"
+    assert len(RECONCILIATIONS) >= 2, f"Chỉ thấy {len(RECONCILIATIONS)} rule reconciliation."
+
+
+@pytest.mark.parametrize(
+    ("table", "check"),
+    RECONCILIATIONS,
+    ids=[f"{t}-{c.get('source_table')}" for t, c in RECONCILIATIONS],
+)
+def test_reconciliation_source_scope_matches_partitioning(table: str, check: dict):
+    """`source_scope: whole_table` ⇔ nguồn KHÔNG PARTITIONED BY (cob_dt) trong DDL."""
+    source = check["source_table"]
+    declared = check.get("source_scope")
+    assert declared in (None, "whole_table"), (
+        f"dq_rules.yml: reconciliation trên `{table}` khai source_scope={declared!r}; "
+        "chỉ nhận 'whole_table' hoặc bỏ trống. Giá trị lạ bị data_quality.py bỏ qua."
+    )
+    partitioned = PARTITIONED_BY_COB_DT[source]
+    if partitioned:
+        assert declared is None, (
+            f"`{source}` PARTITIONED BY (cob_dt) — mỗi ngày một snapshot, nên phải lọc theo "
+            f"cob_dt. Bỏ `source_scope: whole_table` khỏi reconciliation trên `{table}`."
+        )
+    else:
+        assert declared == "whole_table", (
+            f"`{source}` KHÔNG partition theo cob_dt: mỗi lần nạp ghi đè cả bảng, chỉ giữ lần "
+            f"nạp mới nhất. Lọc theo cob_dt của lượt DQ sẽ ra 0 dòng và FAIL giả. "
+            f"Thêm `source_scope: whole_table` cho reconciliation trên `{table}`."
+        )
