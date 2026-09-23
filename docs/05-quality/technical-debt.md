@@ -1121,3 +1121,37 @@ Found while fixing TD-10; not run. Checked statically: no file under
     catalog `lakehouse`, which Trino does not have (ADR-0002) — §6 against a table
     that does not exist. §5b shows the psql form
 ```
+
+---
+
+## TD-14 — Bronze alignment is measured on one fact table, so dimensions can drift unseen
+
+**Status:** open (2026-09-24)
+
+`snapshot.bronze_max_cob_dt` and `snapshot.bronze_partition_exists` in
+`docs/evidence/metrics-manifest.sql` both read `bronze.core_txn_account` only.
+Bronze dimensions are loaded as full snapshots: each load replaces the table, so
+a dimension holds exactly one `cob_dt` — whichever was loaded last.
+
+Found while regenerating the manifest for `cob_dt 2026-09-22`: all 13 Bronze
+dimensions held only `2026-09-21` (an Iceberg `overwrite` on 2026-09-23 09:31),
+while the four facts still had `2026-09-22`. Every invariant passed, including
+`snapshot_layers_aligned`. It surfaced only because an unrelated metric,
+`bronze.snapshot_rows.core_customer.rows`, went from 10000 to 0 in a
+`--collect-only` run.
+
+Not promoted. The 13 dimensions were reloaded for `2026-09-22` with the Bronze
+DAG's own `spark-submit` and checked through Trino (every table at `2026-09-22`,
+`core_customer` 10000 rows, `core_account` 30000) before the manifest was
+regenerated.
+
+### Acceptance
+
+```text
+[ ] every Bronze dimension's cob_dt is measured, not only core_txn_account's
+[ ] an error invariant fails when any Bronze table lacks the requested cob_dt
+    (all invariants use `eq`, so e.g. "count of Bronze tables at cob_dt" eq
+    "count of Bronze tables" needs no new operator)
+[ ] negative-tested: reload one dimension for another date, the manifest refuses
+    to promote
+```

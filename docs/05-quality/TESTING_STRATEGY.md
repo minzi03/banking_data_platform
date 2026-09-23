@@ -119,6 +119,10 @@ vì nó không biết collector loại trừ gì. Collector là định nghĩa �
 
 ### Delta chưa vào manifest
 
+> **Đã vào manifest (2026-09-24).** Manifest được sinh lại ở `cob_dt 2026-09-22`,
+> `verified`: `test_functions` 776, `collected_pytest_nodes` 1572 — khớp dòng cuối
+> của chuỗi delta dưới đây. Giữ các mục để thấy mỗi con số đến từ đâu.
+
 Mọi con số ở trên là giá trị đã promote trong `metrics-manifest.yaml`. Sau lần
 đo đó, `tests/governance/test_dq_rules_resolve.py` thêm **10 hàm → 150 node**
 (parametrize theo 29 mục `dq_rules.yml`, 88 check, 18 tham chiếu chéo và 5 nhóm
@@ -508,9 +512,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      888 node · 655 hàm · 822 node chạy không cần hạ tầng
-suite       821 passed · 1 skipped (có chủ ý) · 66 deselected · 14s
-coverage    74% trên governance + code_etl/shared · fail_under 60 đang áp
+pytest      1572 node · 776 hàm · 1506 node chạy không cần hạ tầng   (2026-09-24)
+suite       1505 passed · 1 skipped (có chủ ý) · 66 deselected · ~11s
+coverage    76% (75,70%) trên governance + code_etl/shared · fail_under 60 đang áp
+manifest    đã promote 776 / 1572 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)

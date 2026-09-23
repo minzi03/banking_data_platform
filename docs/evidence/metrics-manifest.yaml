@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 90203a1515bf0f82d0c137e10b4f50fb5142986b
-    git_branch: chore/reseed-and-regenerate-manifest
+    git_commit: 100ca4b111c29551e44e3823216f0ab09b0f59e0
+    git_branch: chore/refresh-evidence-manifest
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-22T03:17:28Z'
+    generated_at_utc: '2026-09-23T17:28:28Z'
     requested_cob_dt: '2026-09-22'
     verification_scope: full
   environment:
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 9
+      value: 10
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
@@ -536,13 +536,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 655
-        declared: 655
+        value: 776
+        declared: 776
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 886
+        value: 1572
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -756,9 +756,9 @@ invariants:
     expected: false
     severity: error
     rationale: 'Canonical verified manifest chỉ promote khi worktree sạch, nếu không
-      git_commit không mô tả đúng code đã sinh ra số liệu. Không có cờ nào bỏ qua được
-      invariant này; muốn chạy trên cây bẩn thì dùng --collect-only (chỉ ghi run artifact,
-      không promote).
+      git_commit không mô tả đúng code đã sinh ra số liệu. Không có cờ nào bỏ qua
+      được invariant này; muốn chạy trên cây bẩn thì dùng --collect-only (chỉ ghi
+      run artifact, không promote).
 
       '
   legacy_spark_view_retired:
@@ -846,7 +846,7 @@ readme_bindings:
     claim: '| Trino integration tests    |             34 |'
   - location: executive_summary
     claim: 34 Trino-backed integration tests
-- readme_claim: '| Automated tests            |            655 |'
+- readme_claim: '| Automated tests            |            776 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             29 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value
