@@ -1,6 +1,6 @@
 # Kiểm Kê Dữ Liệu Cá Nhân
 
-> Cập nhật: 2026-09-22 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
+> Cập nhật: 2026-09-23 · Bản đồ tài liệu: [`../INDEX.md`](../INDEX.md)
 > Liên quan: [`../../SECURITY.md`](../../SECURITY.md) · [`../03-data/DATA_DICTIONARY.md`](../03-data/DATA_DICTIONARY.md) · [`../05-quality/DATA_QUALITY.md`](../05-quality/DATA_QUALITY.md)
 
 Đây là bản kiểm kê mà `DATA_DICTIONARY.md` trỏ tới. Trình sinh từ điển tự khai:
@@ -25,15 +25,17 @@ ai đó mang mẫu này sang hệ thống có dữ liệu thật — đúng cả
 | Câu hỏi | Trả lời |
 |---|---|
 | Bao nhiêu bảng chứa dữ liệu cá nhân? | **31** (23 trong lakehouse, 8 trong PostgreSQL nguồn) |
-| Bronze có được che? | **Không.** Bronze giữ giá trị gốc |
-| Silver có được che? | **Không.** `silver.dim_customer` giữ `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
+| Bronze có được che? | **Lưu gốc, che lúc đọc qua Trino** — với user không phải admin/ETL (§7) |
+| Silver có được che? | **Lưu gốc, che lúc đọc qua Trino** — `silver.dim_customer` vẫn *lưu* `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
 | Gold có được che? | **Có** — chỉ còn `full_name_masked`, không còn `cccd`/`phone`/`email` |
 | Tầng serving có được che? | **Có**, bằng cách thừa hưởng từ Gold (`select *`) |
-| Lakehouse có kiểm soát truy cập? | **Không** (§7) |
+| Lakehouse có kiểm soát truy cập? | **Có ở Trino, chưa có xác thực** — Spark và MinIO không đi qua lớp này (§7) |
 | Có phân loại dữ liệu ở dạng máy đọc được? | **Không** (§9) |
 
-Câu quan trọng nhất: **che PII ở dự án này là tạo bản sao đã che, không phải bảo
-vệ bản gốc.** Ai đọc được Trino hay Spark thì đọc được `cccd` nguyên bản.
+Câu quan trọng nhất: **bản gốc vẫn được lưu nguyên; lớp bảo vệ là Trino che lúc
+đọc — và Trino tin tên user mà client tự khai.** Client làm đúng không còn thấy
+`cccd` gốc; người cố ý khai tên `admin`, hoặc đọc thẳng MinIO bằng Spark, thì vẫn
+thấy.
 
 ---
 
@@ -108,7 +110,7 @@ như Bronze tương ứng, vì Bronze là bản sao trung thực của nguồn.
 | **Trung bình** | `device_id` · `ip_address` | Dấu vết thiết bị — định danh gián tiếp, dùng để lần theo hành vi |
 | **Trung bình** | `latitude` · `longitude` | Ở `dim_location` là địa lý **chi nhánh/địa điểm**, không phải vị trí khách hàng. Nhưng khi join với `fact_online_transaction` thì thành dấu vết di chuyển của người — và `aml_monitoring` làm đúng việc đó để tính `geo_velocity_flag` |
 | **Thấp** | `manager_name` · `full_name` của nhân viên | Dữ liệu nhân sự, không phải dữ liệu khách hàng |
-| **Giả danh hoá** | `cccd_hash` | SHA-256 có salt. Xem §6 — mức bảo vệ thật phụ thuộc salt |
+| **Giả danh hoá** | `cccd_hash` | SHA-256 có salt. Mức bảo vệ thật phụ thuộc salt được giữ bí mật — xem §6 |
 
 `latitude`/`longitude` là ví dụ vì sao kiểm kê theo cột là chưa đủ: một cột vô
 hại ở bảng này thành dữ liệu nhạy cảm sau một phép join. Bản kiểm kê ghi cột;
@@ -118,15 +120,20 @@ hại ở bảng này thành dữ liệu nhạy cảm sau một phép join. Bả
 
 ## 4. Ba cơ chế che, ba quy tắc khác nhau
 
-Cùng một trường `full_name` được che theo **hai** cách khác nhau ở hai chỗ:
+Cùng một trường `full_name` được che theo **ba** cách khác nhau ở ba chỗ:
 
 | Nơi | Biểu thức | Kết quả (minh hoạ trên tên ví dụ) |
 |---|---|---|
 | Gold, `customer_360.yml:225` | `CONCAT(SPLIT(c.full_name,' ')[0], ' **')` | giữ họ, bỏ hết phần còn lại |
 | `pii_masking.py`, `_mask_name_udf()` | tách theo khoảng trắng, giữ họ + chữ cái đầu của tên đệm và tên | giữ họ và hai chữ cái đầu |
+| Trino, lúc đọc (`governance/rbac.py`, §7) | `concat(substr(full_name, 1, 1), '**')` | chỉ giữ chữ cái đầu |
 
-Không quy tắc nào sai. Nhưng chúng **khác nhau**, không tài liệu nào trước đây
-nói là khác, và không test nào so hai bên. Bản Gold che mạnh hơn bản "masking".
+Không quy tắc nào sai. Nhưng chúng **khác nhau**, và không test nào so các bên.
+Bản Trino che mạnh nhất, bản "masking" nhẹ nhất.
+
+Trino cũng che các trường khác theo quy tắc riêng, không trùng `pii_masking.py`:
+`cccd` giữ 4 số cuối (thay vì hash), `date_of_birth` làm tròn về đầu năm (thay vì
+nhóm chục năm), `address` thay bằng `[REDACTED]` (thay vì giữ city + district).
 
 Các quy tắc khác trong `pii_masking.py`:
 
@@ -168,89 +175,150 @@ silver.dim_customer  (cccd, phone, email nguyên bản)
 - bảng `sandbox` là tiện ích cho Marketing/CRM, **không** phải một tầng kiểm soát
 - không có gì buộc ai phải dùng bảng `sandbox` thay vì bảng gốc
 
-Đây là lựa chọn hợp lý **khi** có kiểm soát truy cập theo schema. Dự án này chưa
-có (§7), nên hiện tại bảng `sandbox` là tự nguyện.
+Đây là lựa chọn hợp lý **khi** có kiểm soát truy cập theo schema. Từ PR #39,
+Trino có lớp đó (§7): tầng tiêu thụ chỉ đọc được `serving`, và role phân tích đọc
+Silver thì thấy PII đã che. Nhưng lớp này chưa có xác thực, và không phủ Spark —
+nên bản gốc được bảo vệ trước truy cập *nhầm*, chưa được bảo vệ trước truy cập
+*cố ý*.
 
-`SECURITY.md` đã nói đúng điều này: *"masking hiện áp ở tầng Gold/serving,
-**không** ở Bronze."* Tài liệu này chỉ bổ sung rằng Silver cũng không.
+`SECURITY.md` nói cùng điều này: che **lúc ghi** chỉ áp ở Gold/serving; Bronze và
+Silver vẫn *lưu* giá trị gốc, và chỉ được che **lúc đọc** qua Trino.
 
 DAG: `ops_pii_masking_daily_dag`, 08:00 hằng ngày, chờ `gold_all_dag` thành công
 trước khi chạy.
 
 ---
 
-## 6. ⚠ Salt dự phòng nằm trong repo công khai
+## 6. Salt của `cccd_hash`: không còn giá trị dự phòng
 
-`code_etl/shared/ops/pii_masking.py` fail-loud đúng khi thiếu salt:
+> **Đã khắc phục** 2026-09-22 ở PR #33. Bản đầu của mục này mô tả một lỗ hổng
+> đang sống; phần "Trước đây" dưới đây giữ lại để người đọc hiểu vì sao cơ chế
+> hiện tại có hình dạng như vậy.
 
-```python
-_pii_salt_raw = os.environ.get("PII_HASH_SALT")
-if not _pii_salt_raw:
-    raise OSError("PII_HASH_SALT environment variable is required but not set")
-```
+### Trước đây
 
-Nhưng DAG gọi nó lại **luôn** cung cấp một giá trị:
+`code_etl/shared/ops/pii_masking.py` fail-loud khi thiếu salt, nhưng DAG gọi nó
+lại **luôn** cung cấp một giá trị: `Variable.get("pii_hash_salt", default_var=...)`
+với một chuỗi cố định nằm trong file đã commit của repo công khai. Guard kiểm
+**sự hiện diện** của salt, không kiểm **chất lượng**, nên `default_var` lấp đúng
+cái lỗ mà guard định chặn: Variable chưa đặt thì job vẫn chạy, với salt ai đọc
+repo cũng biết.
 
-```python
-# airflow/dags/ops/ops_pii_masking_daily_dag.py:36
-PII_ENV = {"PII_HASH_SALT": Variable.get("pii_hash_salt", default_var="...")}
-```
+Vì sao điều đó nghiêm trọng: `cccd_hash = sha2(cccd || salt)` là hash tất định.
+CCCD Việt Nam là 12 chữ số, và không gian thực tế nhỏ hơn 10¹² nhiều vì ba số đầu
+là mã tỉnh và có thành phần ngày sinh. Với salt đã biết, đây là phép liệt kê,
+không phải phá mã — giả danh hoá trên danh nghĩa.
 
-`default_var` là một chuỗi ký tự cố định **nằm trong file đã commit của repo
-công khai**. Nếu Airflow Variable `pii_hash_salt` chưa được đặt, job vẫn chạy —
-với salt mà bất kỳ ai đọc repo cũng biết.
+### Hiện tại
 
-Guard kiểm **sự hiện diện** của salt, không kiểm **chất lượng**. Đường mà guard
-định chặn thì bị `default_var` lấp lại.
+`airflow/dags/ops/ops_pii_masking_daily_dag.py` không còn `default_var`. Salt
+được đọc từ Airflow Variable `pii_hash_salt` **lúc render task**, qua hàm
+`resolve_pii_hash_salt` đăng ký làm Jinja macro (`user_defined_macros`):
 
-Hệ quả cụ thể: `cccd_hash = sha2(cccd || salt)`. CCCD Việt Nam là 12 chữ số, tức
-không gian tối đa 10¹² và thực tế nhỏ hơn nhiều vì ba số đầu là mã tỉnh và có
-thành phần ngày sinh. Với salt đã biết, đây là phép liệt kê, không phải phá mã.
-**Hash tất định với salt công khai là giả danh hoá trên danh nghĩa.**
+| Tình huống | Hành vi |
+|---|---|
+| Variable đã đặt | task chạy với salt đó |
+| Variable chưa đặt, hoặc rỗng | **task** fail, thông báo nêu tên Variable và lệnh đặt nó |
+| Parse DAG | không đọc Variable — DAG vẫn import được, không truy vấn metadata DB mỗi lượt parse |
 
-Hai chi tiết nữa của cùng dòng code:
+Đọc lúc render chứ không lúc parse là có chủ ý: đọc Variable không default ở
+module level sẽ làm DAG **lỗi import** và biến mất khỏi UI thay vì hiện đỏ.
+`tests/dags/test_ops_pii_masking_daily_dag.py` khoá các hành vi trên, gồm cả việc
+không có `default_var=` nào trong file DAG.
 
-- `Variable.get()` được gọi ở **thời điểm parse DAG**, không phải lúc chạy task.
-  Nên mỗi lượt Airflow parse file đều truy vấn metadata DB, và đổi Variable chỉ
-  có hiệu lực sau khi DAG được parse lại.
-- `docker/.env` cũng đặt `PII_HASH_SALT`, nhưng file đó **được gitignore và không
-  được track** (`.gitignore:6`) — đã kiểm. Rủi ro nằm ở `default_var`, không ở
-  `.env`. TD-3 đã đóng và không phủ trường hợp này.
+Cách đặt salt, và hệ quả khi xoay vòng nó: [`RUNBOOK.md`](../../RUNBOOK.md) §8.
+
+### Còn lại
+
+- **Xoay vòng salt làm vô hiệu mọi `cccd_hash` đã publish.** Hash tất định nên
+  salt mới cho hash khác trên cùng một người: phải dựng lại cả hai bảng
+  `sandbox.*_masked`, và mọi join downstream trên `cccd_hash` sẽ trả 0 dòng qua
+  mốc xoay vòng thay vì báo lỗi. Không có đường re-hash cho bên đã giữ hash cũ.
+- **Airflow không che giá trị Variable này trên UI** — `pii_hash_salt` không khớp
+  mẫu tên nhạy cảm nào của Airflow, nên giá trị đọc được ở *Admin → Variables* và
+  ở tab *Rendered Template*. Muốn che thì thêm `salt` vào
+  `[core] sensitive_var_conn_names`.
+- Guard trong `pii_masking.py` vẫn chỉ kiểm sự hiện diện: một salt yếu hay ngắn
+  vẫn được chấp nhận. Chặn nay nằm ở đầu DAG, không nằm ở job.
+- `docker/.env` cũng đặt `PII_HASH_SALT`, nhưng file đó được gitignore và không
+  được track (`.gitignore:6`); `.env.example` chỉ có `CHANGE_ME`. Chạy
+  `pii_masking.py` trực tiếp ngoài DAG thì salt đến từ môi trường, không từ
+  Variable.
+- Salt cũ vẫn còn trong **lịch sử git** của repo công khai. Nó không còn được
+  dùng, nhưng mọi `cccd_hash` từng sinh bằng salt đó vẫn liệt kê được — cần dựng
+  lại bảng `sandbox` bằng salt mới nếu môi trường nào từng chạy với nó.
 
 ---
 
-## 7. Lakehouse không có kiểm soát truy cập
+## 7. Kiểm soát truy cập: có ở Trino, chưa có xác thực
 
-`governance/rbac.py` định nghĩa 5 role, 24 permission, trong đó 4 permission của
-role `analytics` có biểu thức `column_mask`:
+> **Cập nhật 2026-09-23 (PR #39).** Hai bản trước của mục này ghi "lakehouse không
+> có kiểm soát truy cập", rồi đính chính rằng file luật Trino có tồn tại nhưng không
+> có tác dụng. Cả hai đúng tại thời điểm viết. Từ PR #39, Trino thực thi luật thật.
+> Phần "Trước đây" bên dưới giữ lại phát hiện đó ở dạng rút gọn.
 
-```text
-admin         3 permission
-etl_user      6
-analytics    10   ← 4 permission có column_mask
-readonly      3
-data_steward  2   (kế thừa từ analytics)
-```
+### Hiện tại
 
-**Không gì gọi module này.** Đã kiểm: ngoài chính `governance/rbac.py` và các
-test của nó, không file `.py` nào `import` nó. Nó là một **mô hình quyền**, không
-phải một cơ chế thực thi.
+`governance/rbac.py` là nguồn sự thật duy nhất: 8 role, 14 user.
+`scripts/generate_trino_access_control.py` sinh `docker/init_trino/rules.json` từ
+đó; test chặn drift giữa hai file. `access-control.properties` bật plugin `file`
+và được mount vào đúng `/etc/trino/` ở compose, CI compose và Terraform. Quyết
+định: [ADR-0015](../02-architecture/adr/0015-trino-access-control-generated-from-rbac.md).
 
-Và không có lớp thực thi nào khác ở tầng lakehouse:
+| Client | User Trino | Đọc được PII nguyên bản? |
+|---|---|---|
+| dbt | `dbt` | không — đọc `gold`, ghi `serving`; cả hai chỉ mang `full_name_masked` |
+| Superset, API, Streamlit, ML | `superset` · `customer_api` · `streamlit` · `ml` | không — chỉ đọc `serving` |
+| Freshness exporter, metrics manifest | `freshness_exporter` · `manifest_collector` | không — đọc mọi tầng, PII bị che |
+| Phân tích, data steward | `analytics_report` · `data_steward_user` | không — đọc Silver, PII bị che; không đọc Bronze |
+| ETL | `airflow_etl` | **có** — pipeline ghi các tầng thì phải thấy giá trị thật |
+| Vận hành, CI, `docker exec … trino` | `admin` · `trino` · `trino_admin` | **có** |
+| Bất kỳ tên nào khác | — | không đọc được bảng dữ liệu nào |
 
-| Lớp | Có kiểm soát? |
+Luật che nằm trên 4 bảng mang PII khách hàng nguyên bản: Silver `dim_customer` và
+`dim_customer_current` (cho role phân tích), cùng Bronze `core_customer` và
+`core_customer_cdc` (thêm cho role quan sát). Mỗi bảng che 6 cột: `cccd`,
+`full_name`, `phone`, `email`, `address`, `date_of_birth`. Quy tắc che: §4.
+
+Bốn lý do khiến file luật cũ không có tác dụng (xem "Trước đây") đều có test
+chặn tái diễn trong `tests/governance/test_trino_access_control.py`.
+
+**Đã kiểm trên engine thật**: bước CI `Trino access control enforced` chạy
+`scripts/verify_trino_access_control.py` trên Trino 443 với dữ liệu thật: 20/20
+kiểm tra đạt ở PR #39. **Chưa kiểm ở runtime**: mask trên `bronze.core_customer_cdc`
+và `silver.dim_customer_current` — CI không tạo hai bảng này. Kiểm trên stack chính
+bằng lệnh ở §11.
+
+### Chưa phủ
+
+| Khoảng trống | Hệ quả |
 |---|---|
-| Trino | **Không** — không có file cấu hình access-control nào trong repo |
-| Spark / Iceberg REST | **Không** |
-| PostgreSQL nguồn | **Có** — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Nhưng nó chỉ phủ DB **nguồn**, không phủ lakehouse |
+| **Chưa có xác thực** | Trino tin tên user mà client tự khai (`X-Trino-User`). Ai kết nối được cổng 8080/8085 đều khai được `admin` và đọc `cccd` gốc. Luật chặn truy cập *nhầm*, không chặn truy cập *cố ý* |
+| **Spark và MinIO không đi qua Trino** | Job Spark đọc ghi thẳng Iceberg REST + MinIO. Ai có credential MinIO đọc được file Parquet gốc |
+| **Nhóm nhạy cảm "Trung bình" chưa che** | `account_no`, `device_id`, `ip_address`, `latitude`/`longitude` (§3) đọc được nguyên bản bởi mọi role đọc được bảng chứa chúng |
+| PostgreSQL nguồn | Có kiểm soát riêng — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Không liên quan tới luật Trino |
 
-Nên: bất kỳ ai kết nối được tới Trino đều `SELECT cccd FROM silver.dim_customer`
-được. `column_mask` trong `rbac.py` không chạy ở đâu cả.
+Đây vẫn là lý do §5 quan trọng: mô hình "giữ bản gốc, che lúc đọc" giờ đã có lớp
+thực thi, nhưng lớp đó mới vững bằng mức xác thực của nó.
 
-Đây là lý do §5 quan trọng: mô hình "giữ bản gốc, tạo bản đã che" phụ thuộc hoàn
-toàn vào một lớp kiểm soát truy cập chưa tồn tại.
+### Trước đây: file luật có trong repo nhưng không có tác dụng
 
-Ma trận role × dataset × quyền: `RBAC_MATRIX.md` (chưa có).
+Trước PR #39, `docker/init_trino/access-control.properties` khai 195 dòng luật
+theo 4 group, nhưng Trino không nạp nó. Mỗi lý do 1–3 tự nó đã đủ:
+
+1. **Không được mount.** Compose chỉ mount `./init_trino/catalog`; file nằm ngoài
+   thư mục đó.
+2. **Sai định dạng.** Không có `access-control.name=file`, và luật viết thành các
+   cặp `key=value` lặp lại thay vì một file luật JSON.
+3. **Không có group.** Không có group provider nào, nên không user nào thuộc group.
+4. **Che cột không tồn tại.** 5/9 luật che nhắm vào cột Gold mà DDL không có.
+
+Không có file cấu hình thì Trino dùng access control `default`: cho phép tất cả.
+`rbac.py` khi đó cũng không được thực thi: không file nào ngoài test `import` nó,
+và nó mắc cùng lỗi che cột Gold không tồn tại.
+
+Ma trận role × dataset × quyền in được bằng lệnh ở §11. Tài liệu `RBAC_MATRIX.md`
+riêng vẫn chưa có.
 
 ---
 
@@ -365,17 +433,22 @@ Kiểm xem contract có khai phân loại chưa:
 py -3 -c "import yaml,glob,collections;k=collections.Counter();[k.update(yaml.safe_load(open(p,encoding='utf-8')).keys()) for p in glob.glob('governance/datasets/*.yaml')];print(dict(k))"
 ```
 
-Kiểm xem `rbac.py` đã được gọi chưa:
+Kiểm luật Trino (§7). Tĩnh, không cần stack:
 
 ```bash
-git grep -l "from governance.rbac\|governance import rbac" -- "*.py"
+py -3 scripts/generate_trino_access_control.py --check     # rules.json khớp rbac.py
+py -3 -m pytest -q tests/governance/test_trino_access_control.py
+py -3 governance/rbac.py                                   # in role, user và ma trận quyền
 ```
 
-Xem role và permission hiện khai:
+Khi stack đang chạy — Trino có nạp luật không, mask có chạy đúng kiểu không:
 
 ```bash
-py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[print(n,len(r.permissions),r.parent_roles) for n,r in ROLES.items()]"
+py -3 scripts/verify_trino_access_control.py --container banking-trino
 ```
+
+Nếu mọi kiểm tra "phải bị chặn" lại *thành công*, Trino không nạp luật — thường vì
+`access-control.properties` không được mount vào `/etc/trino/`.
 
 **Windows**: đặt `PYTHONIOENCODING=utf-8` trước lệnh `py -3`.
 
@@ -385,15 +458,15 @@ py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[p
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Kiểm soát truy cập ở lakehouse | §7 — `cccd` đọc được bởi mọi client Trino |
-| `rbac.py` được thực thi | 24 permission và 4 `column_mask` không chạy ở đâu |
+| Xác thực người dùng Trino | §7 — tên user do client tự khai; ai khai `admin` cũng đọc được `cccd` gốc |
+| Kiểm soát truy cập ở Spark / MinIO | §7 — đường đọc ghi trực tiếp, không qua luật Trino |
+| Che nhóm nhạy cảm "Trung bình" | §7 — `account_no`, `device_id`, `ip_address`, lat/long chưa che |
 | Trường `classification` trong data contract | §9 — thêm cột PII mới không làm gì đỏ |
 | `cccd` trong `PII_HINTS` | §8 — trường nhạy cảm nhất không được từ điển đánh dấu |
-| Test so hai quy tắc che `full_name` | §4 — hai biểu thức khác nhau, không gì so |
+| Test so ba quy tắc che `full_name` | §4 — ba biểu thức khác nhau, không gì so |
 | Lý do cho bất đối xứng `age` vs `age_group_decade` | §4 |
 | Chính sách lưu trữ / xoá dữ liệu cá nhân | §10 — chỉ có cấu hình bảo trì chung |
 | Quy trình xử lý yêu cầu xoá (right to erasure) | không có runbook |
-| `default_var` của salt bị loại bỏ | §6 — salt dự phòng nằm trong repo công khai |
 | `RBAC_MATRIX.md` · `AUDIT_TRAIL.md` · `REGULATORY_MAPPING.md` | ba tài liệu còn lại của nhóm này |
 
 ---
@@ -402,13 +475,14 @@ py -3 -c "import sys;sys.path.insert(0,'.');from governance.rbac import ROLES;[p
 
 ```text
 bảng có PII      31  (lakehouse 23 · PostgreSQL nguồn 8)
-che ở Bronze     không
-che ở Silver     không
+che ở Bronze     lúc đọc qua Trino, trừ admin/ETL · lưu gốc
+che ở Silver     lúc đọc qua Trino, trừ admin/ETL · lưu gốc
 che ở Gold       có — chỉ full_name_masked, không có cccd/phone/email
 che ở serving    có, thừa hưởng từ Gold qua select *
 bản sao đã che   2 bảng trong lakehouse.sandbox, tạo lại 08:00 hằng ngày
-quy tắc che      2 quy tắc khác nhau cho cùng trường full_name
-kiểm soát        lakehouse: không · PostgreSQL nguồn: có
+salt cccd_hash   Airflow Variable, đọc lúc render task, không có giá trị dự phòng
+quy tắc che      3 quy tắc khác nhau cho cùng trường full_name
+kiểm soát        Trino: có, chưa xác thực · Spark/MinIO: không · PostgreSQL nguồn: có
 phân loại máy đọc  không
 time travel      PII đã xoá còn đọc được ≥ 7 ngày và ≥ 3 snapshot
 ```
