@@ -284,6 +284,12 @@ PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- 13. FRAUD_RISK_TXN (grain: txn_id)
+-- Cột is_fraud: GROUND TRUTH copy từ Silver, KHÔNG dùng làm feature.
+-- Mục đích: đo precision/recall của rule-based fraud flags so với ground truth.
+-- is_fraud chỉ có ở kênh online; fact_txn_account không có cột fraud.
+-- LEFT JOIN đảm bảo mọi dòng fact_txn_account đều giữ lại, is_fraud = 0 khi
+-- không có online transaction nào trong cùng customer-day.
+-- Xem docs/09-analysis/REFERENCE_DATASET_ANALYSIS.md mục 3.
 CREATE TABLE IF NOT EXISTS lakehouse.gold.fraud_risk_txn (
     txn_id              BIGINT,
     account_id          BIGINT,
@@ -303,6 +309,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.fraud_risk_txn (
     anomaly_flag        INT,
     risk_score          INT,
     risk_level          INT,
+    is_fraud            INT,
     cob_dt              DATE
 )
 USING iceberg
@@ -310,6 +317,9 @@ PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- 14. AML_MONITORING (grain: txn_id)
+-- Cột is_fraud / fraud_reason: GROUND TRUTH copy từ Silver, KHÔNG dùng làm
+-- feature. Mục đích duy nhất là đo precision/recall của các rule-based flag
+-- bên dưới. Xem docs/09-analysis/REFERENCE_DATASET_ANALYSIS.md mục 3.
 CREATE TABLE IF NOT EXISTS lakehouse.gold.aml_monitoring (
     txn_id              BIGINT,
     account_id          BIGINT,
@@ -333,6 +343,8 @@ CREATE TABLE IF NOT EXISTS lakehouse.gold.aml_monitoring (
     alert_score         INT,
     risk_level          INT,
     alert_generated     INT,
+    is_fraud            INT,
+    fraud_reason        STRING,
     cob_dt              DATE
 )
 USING iceberg

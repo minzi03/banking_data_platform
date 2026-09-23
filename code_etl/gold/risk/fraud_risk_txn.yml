@@ -1,15 +1,19 @@
 job:
   type: risk
 source:
-  tables: [silver.fact_txn_account, silver.dim_customer]
+  tables: [silver.fact_txn_account, silver.dim_customer, silver.fact_online_transaction]
 target:
   catalog: lakehouse
   schema: gold
   table: fraud_risk_txn
-upstream_flags: [silver.fact_txn_account, silver.dim_customer]
+upstream_flags: [silver.fact_txn_account, silver.dim_customer, silver.fact_online_transaction]
 validation:
   require_non_empty: true
-  require_snapshots: [silver.fact_txn_account]
+  # fact_online_transaction là ràng buộc CHẶN, không phải tuỳ chọn.
+  # Cột is_fraud suy ra từ nó bằng LEFT JOIN: partition thiếu thì mọi dòng
+  # nhận is_fraud = 0, bảng vẫn đầy đủ dòng, không check nào đỏ — đúng kịch
+  # bản silent corruption của ADR-0005. require_non_empty không bắt được.
+  require_snapshots: [silver.fact_txn_account, silver.fact_online_transaction]
 sql: |
   WITH txn AS (
     SELECT t.txn_id, t.account_id, t.customer_id, t.txn_date,
@@ -24,6 +28,21 @@ sql: |
     SELECT customer_id, AVG(txn_amount) AS avg_amt, STDDEV(txn_amount) AS std_amt
     FROM txn GROUP BY customer_id
   ),
+  -- Ground truth fraud flag từ fact_online_transaction.
+  -- fact_txn_account KHÔNG có is_fraud; tín hiệu chỉ có ở kênh online.
+  -- Aggregate customer-day: is_fraud_flag = 1 nếu khách có ÍT NHẤT MỘT
+  -- giao dịch online fraud trong ngày đó.
+  fraud_agg AS (
+    SELECT
+      customer_id,
+      CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
+      MAX(is_fraud) AS is_fraud_flag
+    FROM lakehouse.silver.fact_online_transaction
+    WHERE cob_dt = DATE '{{ cob_dt }}'
+      AND status = 'SUCCESS'
+    GROUP BY customer_id,
+      CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
+  ),
   flagged AS (
     SELECT t.*, s.avg_amt, s.std_amt,
       CASE WHEN HOUR(t.txn_date)<6 OR HOUR(t.txn_date)>22 THEN 1 ELSE 0 END AS night_flag,
@@ -32,7 +51,8 @@ sql: |
       CASE WHEN s.avg_amt>0 AND t.txn_amount>s.avg_amt+3*COALESCE(s.std_amt,0) THEN 1 ELSE 0 END AS anomaly_flag
     FROM txn t LEFT JOIN stats s ON t.customer_id=s.customer_id
   )
-  SELECT txn_id, account_id, customer_id, customer_segment,
+  -- customer_id PHẢI ghi rõ `flagged.`: fraud_agg cũng có cột này (AMBIGUOUS_REFERENCE).
+  SELECT txn_id, account_id, flagged.customer_id, customer_segment,
     txn_amount, txn_type, debit_credit, balance_after,
     channel, description, counter_account, txn_date,
     night_flag, high_amount_flag, neg_balance_flag, anomaly_flag,
@@ -41,5 +61,9 @@ sql: |
       WHEN (night_flag+high_amount_flag+neg_balance_flag+anomaly_flag)>=2 THEN 2
       WHEN (night_flag+high_amount_flag+neg_balance_flag+anomaly_flag)>=1 THEN 1
       ELSE 0 END AS risk_level,
+    COALESCE(fa.is_fraud_flag, 0) AS is_fraud,
     DATE '{{ cob_dt }}' AS cob_dt
   FROM flagged
+  LEFT JOIN fraud_agg fa
+    ON flagged.customer_id = fa.customer_id
+    AND CAST(from_utc_timestamp(flagged.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = fa.txn_day

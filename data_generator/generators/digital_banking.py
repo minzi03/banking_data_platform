@@ -144,15 +144,22 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
     statuses = list(status_dist.keys())
     s_weights = list(status_dist.values())
 
-    # Enriched fraud reasons (inspired by archive 10 dataset)
-    fraud_reasons = [
-        "Unusual location", "Velocity check failed", "Amount exceeds limit",
-        "Known fraud pattern", "Device fingerprint mismatch",
-        "Geo-anomaly detected", "Device change detected",
-        "Amount anomaly", "IP blacklist match",
-        "Multiple failed attempts", "Suspicious merchant pattern",
-        "Cross-border anomaly", "Time-of-day anomaly",
-    ]
+    # fraud_reason phải khớp ĐÚNG điều kiện generator đã mô phỏng, không hơn
+    # (ROADMAP 2.4). Chỉ hai điều kiện được mô phỏng: đổi sang location rủi ro
+    # cao, và đẩy amount lên vùng cao. Nên chỉ có bốn nhãn:
+    #
+    #   HIGH_AMOUNT                    chỉ amount bị đẩy lên
+    #   UNUSUAL_LOCATION               chỉ location bị đổi
+    #   HIGH_AMOUNT+UNUSUAL_LOCATION   cả hai
+    #   UNSPECIFIED                    fraud không qua điều kiện nào
+    #
+    # Trước đây fraud không kích hoạt điều kiện nào (~39%) nhận một nhãn mô tả
+    # chọn ngẫu nhiên — "Unusual location", "Amount exceeds limit",
+    # "Velocity check failed"… — tức gán nguyên nhân KHÔNG hề xảy ra. Đo trên
+    # 20.000 dòng: "Unusual location" chỉ 5,8% ở location rủi ro cao (tỷ lệ
+    # nền 5%). Và khi cả hai điều kiện cùng kích hoạt, chọn ngẫu nhiên MỘT nhãn
+    # làm 25,5% dòng UNUSUAL_LOCATION mang amount đã bị đẩy lên. Cả hai làm
+    # `GROUP BY fraud_reason` không còn kiểm chứng được gì.
 
     for i in range(1, count + 1):
         cust_id = random.choice(customer_ids)
@@ -168,13 +175,16 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
         fraud_reason = None
         if random.random() < fraud_rate:
             is_fraud = 1
+            triggered_reasons = []
             # Correlate fraud with high-risk locations
             if high_risk_location_ids and random.random() < 0.35:
                 location_id = random.choice(high_risk_location_ids)
+                triggered_reasons.append("UNUSUAL_LOCATION")
             # Fraud tends to be higher amounts
             if random.random() < 0.4:
                 amount = round(random.uniform(amount_range[1] * 0.6, amount_range[1]), 2)
-            fraud_reason = random.choice(fraud_reasons)
+                triggered_reasons.append("HIGH_AMOUNT")
+            fraud_reason = "+".join(sorted(triggered_reasons)) or "UNSPECIFIED"
 
         # Use seasonal datetime
         txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")

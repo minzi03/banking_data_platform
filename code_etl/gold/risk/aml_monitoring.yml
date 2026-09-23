@@ -125,8 +125,27 @@ sql: |
     LEFT JOIN geo_agg ga
       ON t.customer_id = ga.customer_id
       AND CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = ga.txn_day
+  ),
+  -- Ground truth fraud flag từ fact_online_transaction, aggregate customer-day.
+  -- fact_txn_account KHÔNG có is_fraud; tín hiệu chỉ có ở kênh online.
+  -- is_fraud_flag = 1 nghĩa là KHÁCH HÀNG này có ÍT NHẤT MỘT giao dịch online
+  -- fraud trong ngày đó. Dùng làm ground truth cho rule-based flags, KHÔNG làm feature.
+  fraud_agg AS (
+    SELECT
+      customer_id,
+      CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
+      MAX(is_fraud) AS is_fraud_flag,
+      MAX(CASE WHEN is_fraud = 1 THEN fraud_reason ELSE NULL END) AS fraud_reason
+    FROM lakehouse.silver.fact_online_transaction
+    WHERE cob_dt = DATE '{{ cob_dt }}'
+      AND status = 'SUCCESS'
+    GROUP BY customer_id,
+      CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
   )
-  SELECT txn_id, account_id, customer_id, customer_segment, branch_code,
+  -- customer_id PHẢI ghi rõ `flagged.`: fraud_agg cũng có cột này, và bản đầu
+  -- để trần nên Spark từ chối ngay lúc phân tích (AMBIGUOUS_REFERENCE) — job
+  -- chưa từng chạy được mà không test tĩnh nào thấy.
+  SELECT txn_id, account_id, flagged.customer_id, customer_segment, branch_code,
     txn_amount, txn_type, debit_credit, channel, description, counter_account, txn_date,
     distinct_states, high_risk_locations,
     high_value_flag, structuring_flag, velocity_flag, multi_channel_flag, geo_velocity_flag,
@@ -142,5 +161,10 @@ sql: |
       WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=1 THEN 1
       ELSE 0 END AS risk_level,
     CASE WHEN (high_value_flag+structuring_flag+velocity_flag+multi_channel_flag+geo_velocity_flag)>=2 THEN 1 ELSE 0 END AS alert_generated,
+    COALESCE(fa.is_fraud_flag, 0) AS is_fraud,
+    fa.fraud_reason,
     DATE '{{ cob_dt }}' AS cob_dt
   FROM flagged
+  LEFT JOIN fraud_agg fa
+    ON flagged.customer_id = fa.customer_id
+    AND CAST(from_utc_timestamp(flagged.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = fa.txn_day
