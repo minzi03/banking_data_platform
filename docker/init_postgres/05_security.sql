@@ -98,24 +98,11 @@ GRANT SELECT ON TABLE opslakehouse.audit_log TO analytics_user;
 GRANT SELECT ON TABLE opslakehouse.audit_log TO readonly_user;
 
 -- =============================================================================
--- 3. CREATE DATA LINEAGE TABLE
+-- 3. DATA LINEAGE — không tạo ở đây
 -- =============================================================================
-
-CREATE TABLE IF NOT EXISTS opslakehouse.data_lineage (
-    id BIGSERIAL PRIMARY KEY,
-    source_table VARCHAR(200) NOT NULL,
-    target_table VARCHAR(200) NOT NULL,
-    transformation_type VARCHAR(50),
-    dag_id VARCHAR(100),
-    column_mappings JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_lineage_source ON opslakehouse.data_lineage(source_table);
-CREATE INDEX IF NOT EXISTS idx_lineage_target ON opslakehouse.data_lineage(target_table);
-
-GRANT ALL PRIVILEGES ON TABLE opslakehouse.data_lineage TO etl_user;
-GRANT SELECT ON TABLE opslakehouse.data_lineage TO analytics_user;
+-- Bảng opslakehouse.data_lineage từng được tạo ở đây và không job nào ghi vào.
+-- Lineage cấp bảng nằm ở opslakehouse.lineage_log (00_extensions.sql), do
+-- ops_lineage_dag ghi. Đã gỡ để không ai truy vấn nhầm bảng rỗng (TD-13).
 
 -- =============================================================================
 -- 4. CREATE DATA QUALITY RESULTS TABLE

@@ -113,7 +113,10 @@ CREATE TABLE IF NOT EXISTS opslakehouse.regulatory_rule (
 COMMENT ON TABLE opslakehouse.regulatory_rule IS 'Regulatory reporting rule configuration';
 
 -- ── Data Lineage Audit ──────────────────────────────────────────────────────
--- Tracks data lineage for regulatory audit trail
+-- Lineage cấp CỘT, có record_count và checksum — dạng audit mà BCBS 239 cần,
+-- khác opslakehouse.lineage_log (cấp bảng, ops_lineage_dag ghi).
+-- ⚠ CHƯA CÓ WRITER: không job nào ghi vào bảng này. Giữ lại tới khi
+-- REGULATORY_MAPPING.md quyết định yêu cầu nào cần nó (TD-13).
 CREATE TABLE IF NOT EXISTS opslakehouse.data_lineage_audit (
     audit_id            BIGINT PRIMARY KEY,
     source_table        VARCHAR(200) NOT NULL,
@@ -128,7 +131,7 @@ CREATE TABLE IF NOT EXISTS opslakehouse.data_lineage_audit (
     checksum            VARCHAR(100)  -- Data checksum for integrity verification
 );
 
-COMMENT ON TABLE opslakehouse.data_lineage_audit IS 'Data lineage audit trail for regulatory compliance';
+COMMENT ON TABLE opslakehouse.data_lineage_audit IS 'Column-level lineage audit for regulatory compliance — no writer yet, see TD-13';
 
 -- ── Indexes ────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_regulatory_report_type ON opslakehouse.regulatory_report(report_type);
