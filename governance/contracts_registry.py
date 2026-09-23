@@ -5,6 +5,8 @@ Loads and validates all YAML dataset contracts from the datasets/ directory.
 Provides lookup by dataset_id and validation of contract schema.
 """
 
+from __future__ import annotations
+
 import os
 from logging import getLogger
 from pathlib import Path

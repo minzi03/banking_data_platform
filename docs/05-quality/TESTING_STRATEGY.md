@@ -135,6 +135,21 @@ Nên lượt promote kế tiếp sẽ thấy `test_functions` 655 → 665 và
 trước đó — và 1039 ≠ 888 + 150 vì bản thân §2 đã lệch 1 node từ trước: mỗi file
 markdown mới được track lại thêm một node cho `test_docs_links_resolve.py`.
 
+Tiếp theo, `tests/governance/test_worker_python38_compat.py` thêm **5 hàm → 188
+node** (parametrize theo từng file Python chạy trên spark-worker — xem
+[`DATA_QUALITY.md` §6a](DATA_QUALITY.md)). Đo lại ngày `2026-09-23`, sau cả các
+PR khác đã merge giữa hai lần:
+
+```text
+def test_* count                            683   (678 trước PR này + 5)
+pytest --collect-only -q tests/            1245   (1057 + 188)
+py -3 -m pytest -q -m "not integration"    1177 passed, 2 skipped, 66 deselected
+```
+
+Test mới này có **1 skip có chủ đích**: `governance/contracts.py` được miễn kiểm
+annotation vì pydantic tự đánh giá annotation (lý do nằm trong `EXEMPT` của
+test). Skip thứ hai trong suite là cái đã nói ở §3.
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 

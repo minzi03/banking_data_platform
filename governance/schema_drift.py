@@ -12,6 +12,8 @@ Usage:
                                    expected_columns=["customer_id", "full_name", ...])
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from logging import getLogger
 

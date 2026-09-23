@@ -12,6 +12,8 @@ Usage:
                                      sla_hours=24, date_column="_ingested_at")
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from logging import getLogger
