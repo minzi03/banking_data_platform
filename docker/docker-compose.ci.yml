@@ -39,7 +39,7 @@ services:
     # quay.io/minio không còn công khai (API 401, manifest biến mất) và tag này
     # không có trên Docker Hub — CI không pull được nữa. Image được đẩy từ bản
     # cache còn trên máy dev, không build lại. Xem TD-15.
-    image: ghcr.io/minzi03/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ghcr.io/minzi03/minio:RELEASE.2025-09-07T16-13-09Z@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
     container_name: ci-minio
     hostname: minio
     environment:
@@ -60,7 +60,7 @@ services:
   # MinIO Client — create bucket
   mc:
     # Mirror trên GHCR của quay.io/minio/mc cùng tag — cùng lý do với minio ở trên (TD-15).
-    image: ghcr.io/minzi03/mc:RELEASE.2025-08-13T08-35-41Z
+    image: ghcr.io/minzi03/mc:RELEASE.2025-08-13T08-35-41Z@sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780
     container_name: ci-mc
     depends_on:
       minio:

@@ -1311,7 +1311,15 @@ integration tests, the PR-blocking gate — stopped running, for every PR.
 The exact images were still in a local Docker cache (same image IDs
 `14cea493d9a3` / `a7fe349ef4bd`). They were re-tagged and pushed unchanged to
 `ghcr.io/minzi03/minio` and `ghcr.io/minzi03/mc`, same tags, and both compose
-files point there. No rebuild, so no behaviour change.
+files point there, pinned by digest. No rebuild, so no behaviour change.
+
+```text
+ghcr.io/minzi03/minio  sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
+ghcr.io/minzi03/mc     sha256:eb4ea9884b77704230e2423e9004d2fa738dc272876b9cc41a297d29443b8780
+```
+
+The digests differ from quay.io's (`14cea493…`, `a7fe349e…`) because those named
+multi-arch indexes; only the cached `linux/amd64` manifest could be pushed.
 
 ### Still open
 
