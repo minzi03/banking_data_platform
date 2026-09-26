@@ -63,7 +63,9 @@ def test_edges_are_exactly_the_declared_sources(edges):
 def test_gold_edges_include_the_ones_the_old_list_missed(edges):
     """Hai cạnh cụ thể mà danh sách viết tay sai: một thiếu, một bịa."""
     pairs = {(s, t) for s, t, _ in edges}
-    assert ("lakehouse.silver.fact_loan_payment", "lakehouse.gold.mart_customer_360") in pairs
+    assert ("lakehouse.silver.fact_crm_interaction", "lakehouse.gold.mart_customer_360") in pairs
+    # customer_360 không đọc fact_loan_payment — CTE đọc nó là code chết, đã gỡ
+    assert ("lakehouse.silver.fact_loan_payment", "lakehouse.gold.mart_customer_360") not in pairs
     assert ("lakehouse.gold.mart_customer_360", "lakehouse.gold.rfm_segment") not in pairs
 
 

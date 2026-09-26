@@ -20,7 +20,13 @@ sql: |
       COUNT(DISTINCT CASE WHEN loan_status='ACTIVE' THEN loan_id END) AS active_loans,
       COUNT(DISTINCT CASE WHEN loan_status='OVERDUE' THEN loan_id END) AS overdue_loans,
       COALESCE(SUM(loan_amount),0) AS total_amount,
-      COALESCE(SUM(outstanding_balance),0) AS total_outstanding
+      COALESCE(SUM(outstanding_balance),0) AS total_outstanding,
+      -- Dư nợ xấu XẤP XỈ: nguồn không có số ngày quá hạn theo khoản vay, nên
+      -- không phân được nhóm nợ 3–5 như quy định. Dùng trạng thái thay thế:
+      -- OVERDUE (đang quá hạn) + WRITTEN_OFF (đã xoá nợ). Trước đây cột này
+      -- bằng đúng total_outstanding — thừa, và đọc như dư nợ xấu thì sai.
+      -- Tỷ lệ NPL = npl_proxy / total_outstanding.
+      COALESCE(SUM(CASE WHEN loan_status IN ('OVERDUE','WRITTEN_OFF') THEN outstanding_balance END),0) AS npl_outstanding
     FROM l GROUP BY branch_code, product_code
   ), pm AS (
     SELECT l.branch_code, l.product_code,
@@ -36,7 +42,7 @@ sql: |
     ROUND(a.total_amount,2) AS total_amount,
     ROUND(a.total_outstanding,2) AS total_outstanding,
     ROUND(CASE WHEN a.total_loans=0 THEN 0 ELSE CAST(a.overdue_loans AS DOUBLE)/a.total_loans END,4) AS overdue_rate,
-    ROUND(CASE WHEN a.total_outstanding=0 THEN 0 ELSE a.total_outstanding END,2) AS npl_proxy,
+    ROUND(a.npl_outstanding,2) AS npl_proxy,
     COALESCE(pm.pmt_count,0) AS payment_count,
     COALESCE(pm.late_count,0) AS late_payment_count,
     ROUND(CASE WHEN COALESCE(pm.pmt_count,0)=0 THEN 0 ELSE CAST(pm.late_count AS DOUBLE)/pm.pmt_count END,4) AS late_payment_rate,

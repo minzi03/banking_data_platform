@@ -173,7 +173,7 @@ mart chi nhánh tính theo chi nhánh.
 
 ### 5.1 Khách hàng 360 — "khách này là ai với ngân hàng?"
 
-`mart_customer_360` gộp **9 nguồn Silver** thành một hồ sơ ~40 cột:
+`mart_customer_360` gộp **8 nguồn Silver** thành một hồ sơ ~40 cột:
 
 | Nhóm | Chỉ số |
 |---|---|
@@ -258,8 +258,11 @@ Có từ 2 cờ trở lên thì **sinh cảnh báo** (`alert_generated`).
 hoặc sau 22h), số tiền > 100 triệu, số dư âm, và **bất thường** (vượt trung bình + 3 độ lệch chuẩn
 của chính khách đó).
 
-**Danh mục cho vay** (`loan_portfolio_risk`) — theo chi nhánh: số khoản vay đang hoạt động / quá
-hạn, **tỷ lệ quá hạn**, tỷ lệ trả trễ.
+**Danh mục cho vay** (`loan_portfolio_risk`) — theo chi nhánh × sản phẩm: số khoản vay đang hoạt
+động / quá hạn, **tỷ lệ quá hạn**, tỷ lệ trả trễ, và **`npl_proxy`** — dư nợ của các khoản OVERDUE
+và WRITTEN_OFF. Đây là **xấp xỉ** nợ xấu: nguồn không có số ngày quá hạn theo khoản vay nên không
+phân được nhóm nợ 3–5 như quy định. Tỷ lệ NPL = `npl_proxy / total_outstanding` — khoảng **20,8%**
+trên snapshot 2026-09-22, cao vì generator cho 15% khoản vay ở hai trạng thái đó.
 
 **Cả hai mart AML và gian lận có cột `is_fraud` làm đáp án** (từ nhãn giao dịch online) — để **đo**
 các quy tắc, không phải để huấn luyện. Kết quả đo (ROADMAP 2.3), trên tỷ lệ gian lận nền 0,096%:
@@ -284,14 +287,25 @@ trên đúng kênh có tín hiệu.
 tính lại mart này **bằng Trino** và so với kết quả **của Spark**: hai engine độc lập phải ra cùng
 số, lệch là lỗi (`branch_monthly_cross_engine_reconciles`).
 
-### 5.5 Lỗi nghiệp vụ đã biết trong Gold
+### 5.5 Lỗi nghiệp vụ trong Gold
 
-| Mart | Vấn đề | Hệ quả |
+**Đã sửa (2026-09-26):**
+
+| Mart | Vấn đề | Sửa |
 |---|---|---|
-| `aml_monitoring` | so `debit_credit` với `'CREDIT'` / `'DEBIT'`, trong khi nguồn chỉ có `'D'` / `'C'` (CHECK ở `01_ddl_core_banking.sql`). `branch_monthly_summary` dùng đúng `'C'` / `'D'` | `total_credit` và `total_debit` luôn bằng **0**. Năm cờ AML không dùng hai cột này nên không bị ảnh hưởng |
-| `loan_portfolio_risk` | cột `npl_proxy` là **tổng dư nợ**, không phải nợ xấu | Tên gây hiểu nhầm — đừng đọc nó là tỷ lệ NPL |
+| `aml_monitoring` | CTE `customer_stats` so `debit_credit` với `'CREDIT'` / `'DEBIT'` trong khi nguồn chỉ có `'D'` / `'C'` — và không cột nào của nó ra tới output | Gỡ CTE. Output **không đổi**: 1,2M dòng, 1.358 cảnh báo, 423 cờ structuring, trước và sau |
+| `loan_portfolio_risk` | `npl_proxy` bằng đúng `total_outstanding` | Định nghĩa lại như trên. Đo lại: khớp tới đồng với tổng dư nợ OVERDUE + WRITTEN_OFF trong `dim_loan` |
+| `mart_customer_360` | CTE `pmt` (hành vi trả nợ 30 ngày) tính xong nhưng không được join; `fact_loan_payment` vẫn nằm trong `require_snapshots` — job dừng vì thiếu partition của một bảng output không dùng | Gỡ CTE và khai báo nguồn. Lineage còn **74** quan hệ |
 
-Phát hiện khi viết tài liệu này (2026-09-24), chưa sửa.
+`tests/gold/test_risk_mart_semantics.py` chặn tái phát: literal `debit_credit` chỉ được là `'D'` /
+`'C'`, không CTE nào được khai mà không đọc, `npl_proxy` không tính từ `total_outstanding`.
+
+**Còn mở:**
+
+| Vấn đề | Hệ quả |
+|---|---|
+| Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng: KPI 30 ngày của Customer 360 bằng 0 cho cả 10.000 khách, không khách nào ở mức churn "Active" |
+| `gold_job.py` chạy `OPTIMIZE … ZORDER BY` — cú pháp Delta Lake, Iceberg không có | Bước tối ưu thất bại ở mọi job Gold, bị bắt thành WARNING; dữ liệu vẫn ghi đúng |
 
 ---
 
@@ -339,7 +353,7 @@ Ai thấy bản gốc ở bảng nào: [`RBAC_MATRIX.md`](../06-security-complia
 | **Quarantine** | tách dòng vi phạm quy tắc nghiệp vụ | cách ly |
 | **Evidence manifest** — 23 invariant | grain, SCD2, đối chiếu chéo mart, đồng bộ ngày | chặn công bố số liệu sai |
 | **34 test tích hợp Trino** | pipeline chạy thật trên dữ liệu thật | chặn merge PR |
-| **Lineage** — 75 quan hệ | bảng nào sinh từ bảng nào, lấy từ cấu hình job | tra cứu ([`LINEAGE.md`](LINEAGE.md)) |
+| **Lineage** — 74 quan hệ | bảng nào sinh từ bảng nào, lấy từ cấu hình job | tra cứu ([`LINEAGE.md`](LINEAGE.md)) |
 
 Mọi con số công bố trong README đều là **hình chiếu** của manifest: sửa tay một con số trong
 README mà không đo lại thì CI đỏ ([`EVIDENCE_MANIFEST.md`](../05-quality/EVIDENCE_MANIFEST.md)).

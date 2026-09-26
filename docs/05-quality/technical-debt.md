@@ -1148,8 +1148,9 @@ Gold tables absent from the DAG   9 of 14
 Now:
 
 - `governance.lineage.declared_edges(code_etl/)` reads `source.tables`, `target`
-  and `job.type` from every Silver/Gold job YAML: **75 edges** (51 into Gold, 24
-  into Silver) over 30 target tables. An unknown `job.type` raises instead of
+  and `job.type` from every Silver/Gold job YAML: **75 edges** at the time (51 into Gold, 24
+  into Silver) over 30 target tables — 74 since 2026-09-26, when `customer_360`'s
+  dead `fact_loan_payment` source was removed. An unknown `job.type` raises instead of
   guessing a transform type.
 - `emit_lineage` writes them through `PostgresHook("postgres-etl")` — the
   connection every DAG already uses — deleting the same `dag_run_id` first, in

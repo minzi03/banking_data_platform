@@ -35,19 +35,12 @@ sql: |
     LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND a.is_current=1
     WHERE t.cob_dt = DATE '{{ cob_dt }}'
   ),
-  -- Grain toàn partition. CHỈ dùng cho tổng credit/debit, KHÔNG dùng cho flag.
-  --
-  -- Một partition cob_dt chứa giao dịch trải 432 ngày nghiệp vụ đo được
-  -- (2025-05-30 → 2026-08-04 trên snapshot 2026-09-20), vì cob_dt là ngày NẠP
-  -- chứ không phải ngày giao dịch. Mọi typology AML đều nói về hành vi trong
-  -- MỘT ngày, nên tính chúng ở đây là sai grain.
-  customer_stats AS (
-    SELECT customer_id,
-      SUM(CASE WHEN debit_credit='CREDIT' THEN txn_amount ELSE 0 END) AS total_credit,
-      SUM(CASE WHEN debit_credit='DEBIT' THEN txn_amount ELSE 0 END) AS total_debit,
-      COUNT(txn_id) AS txn_count
-    FROM txn GROUP BY customer_id
-  ),
+  -- Từng có CTE `customer_stats` ở đây, tính total_credit / total_debit / txn_count
+  -- theo khách trên toàn partition. Không cột nào của nó ra tới SELECT cuối, và
+  -- nó so debit_credit với 'CREDIT'/'DEBIT' trong khi nguồn chỉ có 'D'/'C'
+  -- (CHECK ở docker/init_postgres/01_ddl_core_banking.sql) — tức là tính sai một
+  -- thứ không ai dùng. Đã gỡ; tests/gold/test_risk_mart_semantics.py chặn cả
+  -- literal debit_credit sai lẫn CTE không được tham chiếu.
   daily_agg AS (
     SELECT customer_id,
       CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
@@ -86,7 +79,7 @@ sql: |
       CAST(from_utc_timestamp(ot.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
   ),
   flagged AS (
-    SELECT t.*, cs.total_credit, cs.total_debit, cs.txn_count,
+    SELECT t.*,
       da.daily_txn_count, da.daily_total_amount, da.structured_count,
       da.daily_channel_count AS channel_count,
       COALESCE(ga.distinct_states, 0) AS distinct_states,
@@ -118,7 +111,6 @@ sql: |
       -- fraud 2,0% so với 0,8% ở nhóm không gắn cờ — lift 2,5×.
       CASE WHEN COALESCE(ga.distinct_states, 0) >= 3 THEN 1 ELSE 0 END AS geo_velocity_flag
     FROM txn t
-    LEFT JOIN customer_stats cs ON t.customer_id=cs.customer_id
     LEFT JOIN daily_agg da
       ON t.customer_id = da.customer_id
       AND CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE) = da.txn_day
