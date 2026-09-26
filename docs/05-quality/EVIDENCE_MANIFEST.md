@@ -389,5 +389,5 @@ metric      24 static · 11 runtime · 1 manual
 invariant   23 (22 error · 1 warn) · toàn bộ operator eq
 binding     18 entry → 22 projection · 22/22 khớp README
 artifact    52 run artifact (không track)
-promote     2026-09-24 · test_functions 801 · collected_pytest_nodes 1689
+promote     2026-09-27 · test_functions 810 · collected_pytest_nodes 1699
 ```
