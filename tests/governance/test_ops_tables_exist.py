@@ -72,6 +72,22 @@ def test_referenced_table_is_created_at_stack_init(table: str):
     )
 
 
+# Bảng lineage được phép tạo, kèm lý do. Từng có ba bảng cho cùng một việc và
+# chỉ một bảng có writer — người đọc truy vấn nhầm bảng rỗng (TD-13).
+LINEAGE_TABLES = {
+    "lineage_log": "cấp bảng — ops_lineage_dag ghi",
+    "data_lineage_audit": "cấp cột cho audit regulatory — CHƯA có writer, chờ REGULATORY_MAPPING.md",
+}
+
+
+def test_lineage_tables_are_the_declared_ones():
+    created = {t for t in CREATED if "lineage" in t}
+    assert created == set(LINEAGE_TABLES), (
+        f"Bảng lineage được tạo: {sorted(created)}. Thêm bảng lineage mới thì khai nó vào "
+        "LINEAGE_TABLES kèm lý do — và ai ghi vào nó."
+    )
+
+
 def test_no_ddl_outside_the_directory_postgres_runs():
     """Thư mục DDL không ai chạy là nơi bảng biến mất mà không ai hay (TD-13)."""
     assert not (REPO_ROOT / "docker" / "init_openmetadata").exists(), (
