@@ -1277,3 +1277,61 @@ core_mcc_code reloaded for 09-22     restored, 109 rows at 09-22 (checked throug
 Unit test `test_bronze_dimensions_on_another_date_block_promotion` pins the same
 case without a stack: 4 of 17 tables at `cob_dt`, `layers_aligned` still `True`,
 the new invariant errors.
+
+---
+
+## TD-15 — MinIO images vanished from their registry, and every CI run went red
+
+**Status:** mitigated (2026-09-26) — images mirrored to GHCR from a local cache.
+**Open: the mirror is a frozen copy with no upstream.**
+
+On 2026-09-26 the `🧪 Trino Integration` job failed at **Pull images** on `main`
+and on every PR:
+
+```text
+mc    Error unauthorized: access to the requested resource is not authorized
+minio Error unauthorized: access to the requested resource is not authorized
+```
+
+Checked from a workstation the same day:
+
+```text
+quay.io/api/v1/repository/minio/minio            HTTP 401
+quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z  no such manifest
+quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z     no such manifest
+minio/minio (Docker Hub), same tag                 denied
+```
+
+The same tags pulled fine in CI on 2026-09-23 (#54). Nothing in the repo changed;
+the upstream registry did. Every test that needs the stack — the 34 Trino
+integration tests, the PR-blocking gate — stopped running, for every PR.
+
+### Mitigation
+
+The exact images were still in a local Docker cache (same image IDs
+`14cea493d9a3` / `a7fe349ef4bd`). They were re-tagged and pushed unchanged to
+`ghcr.io/minzi03/minio` and `ghcr.io/minzi03/mc`, same tags, and both compose
+files point there. No rebuild, so no behaviour change.
+
+### Still open
+
+- **Frozen copy.** No security updates will arrive at this mirror. MinIO is
+  AGPL-3.0; redistributing the unmodified image is permitted, and the source
+  remains at github.com/minio/minio.
+- **Single architecture.** The cached images are `linux/amd64` only; the
+  multi-arch index from quay.io was not preserved. Apple-silicon hosts run them
+  under emulation.
+- **Same failure mode elsewhere.** Every other image is pulled from a third-party
+  registry by tag. A test that lists compose images without a digest, or a
+  scheduled pull check, would turn the next disappearance into a named failure
+  instead of a red gate on an unrelated PR.
+
+### Acceptance
+
+```text
+[x] CI pulls MinIO / mc from a registry this project controls
+[x] Trino Integration green again on a PR using the mirror
+[ ] decide the long-term object store: stay on the frozen MinIO, move to a
+    maintained image, or replace MinIO (SeaweedFS, Garage…)
+[ ] guard against the next upstream image disappearing
+```
