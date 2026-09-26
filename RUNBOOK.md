@@ -143,7 +143,7 @@ declare in their YAML (`source.tables` → `target`), written by `ops_lineage_da
 docker exec banking-airflow-webserver airflow tasks test ops_lineage_dag emit_lineage 2026-09-22
 ```
 
-Expect 75 rows per run: 51 into Gold, 24 into Silver. `row_count` is NULL — the
+Expect 74 rows per run: 50 into Gold, 24 into Silver. `row_count` is NULL — the
 DAG does not measure it. Source → Bronze, CDC and dbt edges are not included.
 See TD-13 in `docs/05-quality/technical-debt.md`.
 

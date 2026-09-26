@@ -181,7 +181,7 @@ Tổng tài sản khách hàng gửi tại ngân hàng. Trong `mart_customer_360
 
 ### `NPL` — Non-Performing Loan
 
-Khoản vay quá hạn trả nợ vượt ngưỡng (thường 90 ngày). **NPL ratio** = dư nợ xấu / tổng dư nợ, là chỉ số rủi ro tín dụng cốt lõi. Có trong `loan_portfolio_risk`.
+Khoản vay quá hạn trả nợ vượt ngưỡng (thường 90 ngày). **NPL ratio** = dư nợ xấu / tổng dư nợ, là chỉ số rủi ro tín dụng cốt lõi. `loan_portfolio_risk.npl_proxy` là **xấp xỉ** dư nợ xấu (khoản vay OVERDUE + WRITTEN_OFF — nguồn không có số ngày quá hạn); tỷ lệ = `npl_proxy / total_outstanding`.
 
 ### Delinquency
 

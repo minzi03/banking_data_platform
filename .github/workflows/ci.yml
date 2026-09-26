@@ -327,13 +327,15 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: |
           echo "=== Gold Spark regression — fan-out, snapshot, business-date ==="
-          # 23 fan-out/snapshot + 9 business-date semantics = 32 test.
+          # 23 fan-out/snapshot + 9 business-date semantics + 2 risk-mart
+          # semantics (npl_proxy, AML chạy được sau khi gỡ CTE chết) = 34 test.
           # Nhóm business-date canh thay đổi kiến trúc lớn nhất của v1.1 (engine
           # chạy UTC, business date derive tường minh sang ICT) và chỉ cần
           # pyspark — job này đã có sẵn, nên đưa vào đây thay vì dựng job mới.
           python -m pytest \
             tests/gold/test_gold_fanout_regression.py \
             tests/gold/test_business_date_semantics.py \
+            tests/gold/test_risk_mart_semantics.py \
             -v --tb=short -m integration \
             --junitxml=gold-regression-results.xml
 

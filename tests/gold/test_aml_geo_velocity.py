@@ -227,16 +227,20 @@ class TestTypologyGrain:
             "Ở grain partition nó đếm kênh trên ~432 ngày và gắn cờ 99,9%."
         )
 
-    def test_customer_stats_does_not_compute_channel_count(self, sql: str):
+    def test_channel_count_only_in_daily_agg(self, sql: str):
         """
-        `customer_stats` gom toàn partition — chỉ hợp cho tổng credit/debit.
+        `COUNT(DISTINCT channel)` chỉ được nằm trong `daily_agg` (grain customer-day).
 
-        Nếu `COUNT(DISTINCT channel)` quay lại đây, flag sẽ âm thầm trở lại
+        Từng có CTE `customer_stats` gom toàn partition; nó đã bị gỡ vì là code
+        chết (test_risk_mart_semantics.py). Test này không dựa vào tên CTE nào
+        khác: đếm kênh ở bất kỳ đâu ngoài `daily_agg` là flag âm thầm trở lại
         99,9% mà không test nào khác đỏ.
         """
-        cs_block = sql.split("customer_stats AS (")[1].split("),")[0]
-        assert "COUNT(DISTINCT channel)" not in cs_block, (
-            "COUNT(DISTINCT channel) nằm trong customer_stats (grain partition). Nó thuộc về daily_agg."
+        body = _strip_comments(sql)
+        total = body.count("COUNT(DISTINCT channel)")
+        in_daily = _cte_body(sql, "daily_agg").count("COUNT(DISTINCT channel)")
+        assert total == in_daily == 1, (
+            f"COUNT(DISTINCT channel) xuất hiện {total} lần, {in_daily} lần trong daily_agg. Nó chỉ thuộc về daily_agg."
         )
 
     def test_multi_channel_reads_the_daily_column(self, sql: str):

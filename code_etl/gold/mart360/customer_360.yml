@@ -28,7 +28,6 @@ source:
     - silver.dim_account
     - silver.dim_card
     - silver.dim_loan
-    - silver.fact_loan_payment
     - silver.fact_txn_account
     - silver.fact_card_txn
     - silver.fact_crm_interaction
@@ -44,7 +43,6 @@ upstream_flags:
   - silver.dim_account
   - silver.dim_card
   - silver.dim_loan
-  - silver.fact_loan_payment
   - silver.fact_txn_account
   - silver.fact_card_txn
   - silver.fact_crm_interaction
@@ -62,7 +60,6 @@ validation:
     - silver.fact_card_txn
     - silver.fact_crm_interaction
     - silver.fact_online_transaction
-    - silver.fact_loan_payment
 
 sql: |
   WITH
@@ -174,19 +171,11 @@ sql: |
       FROM lakehouse.silver.dim_loan
       GROUP BY customer_id
   ),
-  -- Payment behavior 30d
-  pmt AS (
-      SELECT
-          customer_id,
-          COUNT(DISTINCT payment_id) AS payment_count_30d,
-          COUNT(DISTINCT CASE WHEN payment_status = 'LATE' OR late_payment_flag = 1 THEN payment_id END) AS late_payment_count_30d,
-          COUNT(DISTINCT CASE WHEN payment_status = 'MISSED' THEN payment_id END) AS missed_payment_count_30d
-      FROM lakehouse.silver.fact_loan_payment
-      WHERE cob_dt = DATE '{{ cob_dt }}'
-        AND payment_date >= DATE_ADD(DATE '{{ cob_dt }}', -30)
-        AND payment_date <= DATE '{{ cob_dt }}'
-      GROUP BY customer_id
-  ),
+  -- Từng có CTE `pmt` (hành vi trả nợ 30 ngày) ở đây: tính xong nhưng không
+  -- được join, DDL không có cột nào của nó, còn silver.fact_loan_payment thì
+  -- nằm trong require_snapshots — job dừng vì thiếu partition của một bảng mà
+  -- output không dùng. Đã gỡ cả CTE lẫn khai báo nguồn. Muốn đưa hành vi trả nợ
+  -- vào 360 thì thêm cột vào DDL + contract rồi mới join.
   -- CRM 90d
   crm_agg AS (
       SELECT
