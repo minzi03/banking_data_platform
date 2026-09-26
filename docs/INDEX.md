@@ -32,7 +32,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | **Người đánh giá dự án** (tuyển dụng, review) | [`README.md`](../README.md) → [`ARCHITECTURE.md`](../ARCHITECTURE.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
 | **Dev mới vào dự án** | [`README.md`](../README.md) → [`CONTRIBUTING.md`](../CONTRIBUTING.md) → [`RUNBOOK.md`](../RUNBOOK.md) → [`data-input-documentation.md`](03-data/data-input-documentation.md) |
 | **Người vận hành / on-call** | [`RUNBOOK.md`](../RUNBOOK.md) → [`observability-design.md`](02-architecture/observability-design.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
-| **Analyst / người dùng dữ liệu** | [`data-output-documentation.md`](03-data/data-output-documentation.md) → [`DBT_DEPLOYMENT.md`](04-operations/DBT_DEPLOYMENT.md) → [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) |
+| **Analyst / người dùng dữ liệu** | [`BUSINESS_DOMAIN.md`](03-data/BUSINESS_DOMAIN.md) → [`data-output-documentation.md`](03-data/data-output-documentation.md) → [`DBT_DEPLOYMENT.md`](04-operations/DBT_DEPLOYMENT.md) → [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) |
 | **Kiểm toán / tuân thủ** | [`AI_GOVERNANCE_FRAMEWORK.md`](06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md) → [`DATA_VAULT_MAPPING.md`](03-data/DATA_VAULT_MAPPING.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
 | **Muốn hiểu hướng đi của dự án** | [`ROADMAP.md`](09-analysis/ROADMAP.md) → [`JD_MARKET_ANALYSIS.md`](09-analysis/JD_MARKET_ANALYSIS.md) |
 
@@ -87,6 +87,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [`data-input-documentation.md`](03-data/data-input-documentation.md) | 17 nguồn: schema, khối lượng, cách sinh |
 | [`data-output-documentation.md`](03-data/data-output-documentation.md) | Gold + serving: bảng, cột, ý nghĩa nghiệp vụ |
 | [`DATA_INPUT_BASE_REPORT.md`](03-data/DATA_INPUT_BASE_REPORT.md) | Báo cáo hồ sơ dữ liệu nguồn |
+| [`BUSINESS_DOMAIN.md`](03-data/BUSINESS_DOMAIN.md) | **Đọc trước tiên nếu chưa biết nghiệp vụ**: ngân hàng được mô phỏng, `cob_dt`, SCD2, câu hỏi và quy tắc của từng mart Gold, quy tắc AML/gian lận đo được tốt tới đâu, hành trình v1.0 → nay |
 | [`DATA_DICTIONARY.md`](03-data/DATA_DICTIONARY.md) | **Sinh tự động** — 85 bảng, 961 cột, kiểu dữ liệu, cờ PII, metadata contract |
 | [`GLOSSARY.md`](03-data/GLOSSARY.md) | Thuật ngữ: `cob_dt`, SCD, AUM, NPL, RFM, structuring, BCBS 239… |
 | [`DATA_CONTRACTS.md`](03-data/DATA_CONTRACTS.md) | **Sinh tự động** — 33 contract: grain, quality class, AI risk tier, DAG |
