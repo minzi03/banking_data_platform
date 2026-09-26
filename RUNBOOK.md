@@ -161,6 +161,27 @@ contracts and checked by tests — or OpenMetadata.
 sed -n '/^-- Table: lineage_log/,/^COMMENT ON TABLE opslakehouse.lineage_log/p' docker/init_postgres/00_extensions.sql | docker exec -i banking-postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d banking_db'
 ```
 
+**Stacks created before `opslakehouse.data_lineage` was removed** still have that
+table: an older, empty duplicate that no code writes. Drop it. The guard stops
+the command if the table has any rows, so nothing is lost silently:
+
+```bash
+docker exec -i banking-postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d banking_db' <<'SQL'
+DO $$ BEGIN
+  IF to_regclass('opslakehouse.data_lineage') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM opslakehouse.data_lineage) THEN
+      RAISE EXCEPTION 'opslakehouse.data_lineage has rows: inspect them before dropping';
+    END IF;
+  END IF;
+END $$;
+DROP TABLE IF EXISTS opslakehouse.data_lineage;
+SQL
+```
+
+`opslakehouse.data_lineage_audit` is also empty but is kept on purpose: it is
+column-level lineage with checksums, for regulatory audit. Nothing writes it
+yet (TD-13).
+
 ### 7. dbt semantic layer (dbt-core + dbt-trino)
 
 ```bash

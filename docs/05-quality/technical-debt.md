@@ -1100,8 +1100,8 @@ Airflow itself was not run.
 
 **Status:** fixed for Silver/Gold edges (2026-09-24) — the table exists, the dead
 DDL is gone, the RUNBOOK queries work, and `ops_lineage_dag` writes the edges the
-jobs declare. **Open: the DAG is manual-trigger only, and two more lineage tables
-nobody writes (below).**
+jobs declare. **Open: the DAG is manual-trigger only, and `data_lineage_audit` has
+no writer (below).**
 
 `governance/lineage.py` and `ops_lineage_dag` name `opslakehouse.lineage_log`.
 Its only DDL was in `docker/init_openmetadata/01_create_schemas.sql`, which
@@ -1175,10 +1175,16 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
   triggers it). The table fills only when someone runs it.
 - **Not covered:** source → Bronze, CDC, dbt serving. Bronze YAMLs do not declare
   source tables the same way.
-- **Two more lineage tables, both without a writer:** `opslakehouse.data_lineage`
-  (`05_security.sql`) and `opslakehouse.data_lineage_audit`
-  (`09_ddl_regulatory.sql`). README §OpenMetadata points at `data_lineage`.
-  Three tables for one fact invite readers to query the empty one.
+- **`opslakehouse.data_lineage_audit` has no writer** (`09_ddl_regulatory.sql`).
+  It is kept on purpose: column-level lineage with `record_count` and `checksum`
+  is the shape a BCBS 239 audit trail needs, and `lineage_log` does not cover
+  it. Decide keep-or-drop when `REGULATORY_MAPPING.md` states which requirement
+  needs it. The DDL comment and `test_ops_tables_exist.py::LINEAGE_TABLES` say so.
+- ~~`opslakehouse.data_lineage`~~ **removed (2026-09-24).** It was a table-level
+  duplicate of `lineage_log`, and nothing read or wrote it (0 rows on the stack).
+  README §OpenMetadata used to point readers at it. RUNBOOK §6 has a guarded
+  `DROP` for existing stacks. `test_lineage_tables_are_the_declared_ones` fails
+  if an undeclared lineage table is created again.
 
 ### Acceptance
 
@@ -1192,7 +1198,8 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
     not a hand-written list — a test compares them
 [x] ops_lineage_dag writes those edges, run on the stack, rows observed
 [ ] ops_lineage_dag triggered after gold_all_dag, or its manual status documented
-[ ] one lineage table: data_lineage / data_lineage_audit removed or given a writer
+[x] data_lineage removed (duplicate of lineage_log, no reader or writer)
+[ ] data_lineage_audit given a writer, or removed — decided with REGULATORY_MAPPING.md
 ```
 
 ---

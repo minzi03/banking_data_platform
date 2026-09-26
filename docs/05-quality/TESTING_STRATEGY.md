@@ -246,6 +246,15 @@ pytest --collect-only -q tests/            1688   (1578 + 110)
 py -3 -m pytest -q -m "not integration"    1621 passed, 1 skipped, 66 deselected
 ```
 
+Rồi gỡ `opslakehouse.data_lineage` thêm **1 hàm → 1 node**:
+`test_ops_tables_exist.py::test_lineage_tables_are_the_declared_ones`.
+
+```text
+def test_* count                            801   (800 + 1)
+pytest --collect-only -q tests/            1689   (1688 + 1)
+py -3 -m pytest -q -m "not integration"    1622 passed, 1 skipped, 66 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -541,10 +550,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1688 node · 800 hàm · 1622 node chạy không cần hạ tầng   (2026-09-24)
-suite       1621 passed · 1 skipped (có chủ ý) · 66 deselected · ~12s
+pytest      1689 node · 801 hàm · 1623 node chạy không cần hạ tầng   (2026-09-24)
+suite       1622 passed · 1 skipped (có chủ ý) · 66 deselected · ~12s
 coverage    76% (75,91%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 800 / 1688 — mọi delta ở §3 giờ nằm trong manifest
+manifest    đã promote 801 / 1689 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
