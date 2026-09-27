@@ -58,13 +58,13 @@ Cơ chế đang có:
 | Column masking | `ops_pii_masking_daily_dag` → `lakehouse.sandbox.*_masked` | Có — nhưng là bản sao phái sinh, không sửa bản gốc |
 | Masking ở tầng serving | `full_name_masked` trong `mart_customer_360` | Có — che ngay khi ghi Gold |
 | Audit trail | module `governance/audit.py` | Có |
-| RBAC ở Trino | `governance/rbac.py` → sinh `docker/init_trino/rules.json` | **Có, qua Trino** — mỗi client một user, tầng tiêu thụ chỉ đọc `serving`, PII ở Silver/Bronze bị che với role không phải admin/ETL. **Chưa xác thực**: Trino tin tên user client tự khai. Spark không đi qua Trino. Xem [ADR-0015](docs/02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) |
+| RBAC ở Trino | `governance/rbac.py` → sinh `docker/init_trino/rules.json` | **Có, qua Trino** — mỗi client một user, tầng tiêu thụ chỉ đọc `serving`, PII ở Silver/Bronze bị che với role không phải admin/ETL. **Có xác thực mật khẩu** qua HTTPS, mỗi client một mật khẩu, cấm mạo danh ([ADR-0016](docs/02-architecture/adr/0016-trino-password-authentication.md)). Spark không đi qua Trino. Xem [ADR-0015](docs/02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) |
 
 Kiểm kê đầy đủ — bảng nào, cột nào, tầng nào, ai xem được bản gốc:
 [`docs/06-security-compliance/PII_INVENTORY.md`](docs/06-security-compliance/PII_INVENTORY.md).
 Ma trận role × schema × quyền và ai thấy PII gốc: [`docs/06-security-compliance/RBAC_MATRIX.md`](docs/06-security-compliance/RBAC_MATRIX.md) — sinh từ `rbac.py`, CI chặn drift.
 
-Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: che **lúc ghi** chỉ áp ở tầng Gold/serving. Bronze **và Silver** vẫn *lưu* giá trị gốc, gồm `cccd`; Trino chỉ che chúng **lúc đọc**, với user không phải admin/ETL. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng. Dự án này giờ có lớp đó ở Trino, nhưng chưa có xác thực — nên với ai cố ý khai tên `admin`, hoặc đọc thẳng MinIO, bản gốc vẫn đọc được. Xem `RUNBOOK.md` §9.
+Nếu bạn mang mẫu code từ đây sang hệ thống có dữ liệu thật: che **lúc ghi** chỉ áp ở tầng Gold/serving. Bronze **và Silver** vẫn *lưu* giá trị gốc, gồm `cccd`; Trino chỉ che chúng **lúc đọc**, với user không phải admin/ETL. Đó là lựa chọn hợp lý cho một lakehouse **có** kiểm soát truy cập theo tầng. Dự án này giờ có lớp đó ở Trino, có xác thực mật khẩu (ADR-0016) — nhưng ai đọc thẳng MinIO, hoặc đọc được `docker/secrets/trino/` trên máy dev, vẫn tới được bản gốc. Xem `RUNBOOK.md` §9.
 
 ---
 

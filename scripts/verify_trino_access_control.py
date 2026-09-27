@@ -13,14 +13,22 @@ ngữ nghĩa. Script này kiểm hai điều chỉ engine thật trả lời đ�
   2. Mask CHẠY được: Trino chỉ kiểm kiểu của biểu thức mask lúc có người query
      bảng, nên mask lệch kiểu cột là lỗi runtime, không phải lỗi khởi động.
 
-Chạy bằng `docker exec <container> trino --user <user>`: user do client tự khai
-(chưa có xác thực), nên script đóng vai từng client.
+Và từ ADR-0016, điều thứ ba:
+
+  3. Trino CÓ đòi mật khẩu: HTTP trả 403, sai mật khẩu bị từ chối, một user đã
+     đăng nhập không mạo danh được admin.
+
+Chạy bằng `docker exec -e TRINO_PASSWORD <container> trino --user <user>`: mỗi
+user dùng mật khẩu CỦA NÓ, đọc từ docker/secrets/trino/passwords.env (sinh bởi
+scripts/bootstrap_trino_auth.py). Mật khẩu đi qua biến môi trường, không qua argv.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -34,16 +42,43 @@ ADMIN = "admin"
 REQUIRED_MASKED_TABLES = {("silver", "dim_customer"), ("bronze", "core_customer")}
 
 
-class Trino:
-    def __init__(self, container: str):
-        self.container = container
+PASSWORDS_PATH = REPO_ROOT / "docker" / "secrets" / "trino" / "passwords.env"
 
-    def run(self, user: str, sql: str) -> subprocess.CompletedProcess:
+
+def load_passwords(path: Path = PASSWORDS_PATH) -> dict[str, str]:
+    """user → mật khẩu, từ passwords.env của bootstrap_trino_auth.py."""
+    if not path.exists():
+        return {}
+    out = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, _, value = line.partition("=")
+        if key.startswith("TRINO_PASSWORD_"):
+            out[key.removeprefix("TRINO_PASSWORD_").lower()] = value
+    return out
+
+
+class Trino:
+    def __init__(self, container: str, passwords: dict[str, str] | None = None):
+        self.container = container
+        self.passwords = passwords or {}
+
+    def run(self, user: str, sql: str, *extra: str, password: str | None = None) -> subprocess.CompletedProcess:
+        # User không có mật khẩu (vd. "nobody") nhận một mật khẩu ngẫu nhiên: CLI
+        # không bao giờ dừng lại hỏi, và Trino từ chối ở bước xác thực.
+        pw = password if password is not None else self.passwords.get(user) or secrets.token_urlsafe(16)
         return subprocess.run(
-            ["docker", "exec", self.container, "trino", "--user", user,
+            ["docker", "exec", "-e", "TRINO_PASSWORD", self.container, "trino", "--user", user, *extra,
              "--output-format", "CSV_UNQUOTED", "--execute", sql],
-            capture_output=True, text=True, encoding="utf-8",
+            capture_output=True, text=True, encoding="utf-8", env={**os.environ, "TRINO_PASSWORD": pw}, check=False,
         )
+
+    def http_status(self) -> str:
+        """Mã HTTP khi một client gửi truy vấn qua cổng HTTP, khai là admin."""
+        return subprocess.run(
+            ["docker", "exec", self.container, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+             "-H", "X-Trino-User: admin", "--data", "SELECT 1", "http://localhost:8080/v1/statement"],
+            capture_output=True, text=True, encoding="utf-8", check=False,
+        ).stdout.strip()
 
 
 class Checker:
@@ -67,8 +102,8 @@ class Checker:
         self._record(ok, f"{user}: {label}", result.stderr.strip()[-400:])
         return result.stdout if ok else None
 
-    def denied(self, user: str, sql: str, label: str) -> None:
-        result = self.trino.run(user, sql)
+    def denied(self, user: str, sql: str, label: str, password: str | None = None) -> None:
+        result = self.trino.run(user, sql, password=password)
         # Phải là "Access Denied" — một lỗi khác (bảng không tồn tại, cú pháp)
         # cũng làm lệnh fail nhưng không chứng minh gì về quyền.
         ok = result.returncode != 0 and "Access Denied" in result.stderr
@@ -92,9 +127,20 @@ def verify(trino: Trino) -> Checker:
     c = Checker(trino)
     rules = json.loads(RULES_PATH.read_text(encoding="utf-8"))
 
+    print("=== Xác thực (ADR-0016) ===")
+    status = trino.http_status()
+    c.check(status == "403", "HTTP 8080 từ chối truy vấn client khai là admin", f"nhận HTTP {status}")
+    c.denied(ADMIN, "SELECT 1", "sai mật khẩu", password="not-the-password")
+    c.denied("nobody", "SELECT 1 FROM iceberg.gold.mart_customer_360 LIMIT 1", "user lạ không có mật khẩu")
+    imp = trino.run("superset", "SELECT current_user", "--session-user", ADMIN)
+    c.check(
+        imp.returncode != 0 and "cannot impersonate" in imp.stderr,
+        "superset đã đăng nhập không mạo danh được admin",
+        "lệnh THÀNH CÔNG" if imp.returncode == 0 else imp.stderr.strip()[-300:],
+    )
+
     print("=== Luật có được nạp ===")
     c.denied("analytics_report", "SELECT 1 FROM iceberg.bronze.core_customer LIMIT 1", "analytics đọc Bronze")
-    c.denied("nobody", "SELECT 1 FROM iceberg.gold.mart_customer_360 LIMIT 1", "user lạ đọc Gold")
     c.denied("customer_api", "SELECT 1 FROM iceberg.silver.dim_customer LIMIT 1", "client serving đọc Silver")
 
     print("=== Mask chạy được, đúng kiểu, trên mọi bảng có mask ===")
@@ -144,7 +190,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
 
-    checker = verify(Trino(args.container))
+    passwords = load_passwords()
+    if not passwords:
+        print(f"::error::không có {PASSWORDS_PATH.relative_to(REPO_ROOT)} — chạy scripts/bootstrap_trino_auth.py")
+        return 1
+    checker = verify(Trino(args.container, passwords))
     print(f"\n{checker.passed} đạt, {len(checker.failures)} không đạt")
     for failure in checker.failures:
         print(f"::error::{failure}")

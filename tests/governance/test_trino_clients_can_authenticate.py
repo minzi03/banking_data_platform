@@ -72,16 +72,24 @@ def test_manifest_client_uses_https_and_basic_auth_only_with_a_password():
     assert "Authorization" not in plain.headers
 
     auth = gen.TrinoClient(password="pw", ca_cert=None)
-    assert auth.url == "https://localhost:8443/v1/statement"
+    assert auth.url == "https://localhost:8453/v1/statement"
     assert auth.headers["Authorization"] == "Basic " + base64.b64encode(b"manifest_collector:pw").decode()
     assert auth.ssl_context is not None
 
 
-def test_manifest_does_not_pick_up_a_password_implicitly(monkeypatch):
-    """PR-A không được tự đọc docker/.env: máy đã bootstrap sẽ gãy với Trino chưa bật auth."""
+def test_manifest_reads_its_own_password_from_passwords_env(monkeypatch, tmp_path):
+    """Trino đòi mật khẩu: generator đọc mật khẩu CỦA manifest_collector, không của ai khác."""
     gen = _load("scripts/generate_metrics_manifest.py", "gmm_env")
+    secrets_dir = tmp_path / "docker" / "secrets" / "trino"
+    secrets_dir.mkdir(parents=True)
+    (secrets_dir / "passwords.env").write_text(
+        "TRINO_PASSWORD_ADMIN=not-mine\nTRINO_PASSWORD_MANIFEST_COLLECTOR=mine\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(gen, "__file__", str(tmp_path / "scripts" / "generate_metrics_manifest.py"))
     monkeypatch.delenv("TRINO_PASSWORD", raising=False)
-    assert gen.trino_credentials("manifest_collector") == (None, None)
+    assert gen.trino_credentials("manifest_collector")[0] == "mine"
+    monkeypatch.setenv("TRINO_PASSWORD", "explicit")
+    assert gen.trino_credentials("manifest_collector")[0] == "explicit"
 
 
 def test_superset_uri(monkeypatch):
@@ -109,3 +117,29 @@ def test_freshness_exporter_sends_basic_auth_when_configured(monkeypatch):
     exporter = _load("docker/monitoring/exporters/freshness_exporter.py", "fresh_auth")
     assert exporter.TRINO_URL.startswith("https://")
     assert exporter._auth_headers()["Authorization"] == "Basic " + base64.b64encode(b"freshness_exporter:pw").decode()
+
+
+@pytest.mark.parametrize(
+    "rel", ["docker/monitoring/exporters/freshness_exporter.py", "scripts/generate_metrics_manifest.py"]
+)
+def test_every_urlopen_carries_the_ssl_context(rel: str):
+    """Request đầu có context mà request theo nextUri không có → cert tự ký bị từ chối
+    ở trang thứ hai của kết quả. Đã xảy ra trên stack (2026-09-27)."""
+    source = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    calls = [c for c in re.findall(r"urlopen\((.*?)\)\s*as", source, re.DOTALL)]
+    assert calls, "không tìm thấy urlopen"
+    for call in calls:
+        assert "context=" in call, f"{rel}: urlopen không truyền SSL context: urlopen({call.strip()[:80]})"
+
+
+def test_exporter_has_no_hardcoded_http_url():
+    """Healthcheck từng gọi http://…:{TRINO_PORT} — khi TRINO_PORT là cổng HTTPS, `up` luôn = 0."""
+    source = (REPO_ROOT / "docker/monitoring/exporters/freshness_exporter.py").read_text(encoding="utf-8")
+    assert 'f"http://' not in source
+
+
+def test_exporter_queries_the_trino_catalog_name():
+    """ADR-0002: phía Trino catalog là `iceberg`. `lakehouse.` làm mọi truy vấn fail."""
+    source = (REPO_ROOT / "docker/monitoring/exporters/freshness_exporter.py").read_text(encoding="utf-8")
+    code = "\n".join(line.split("#", 1)[0] for line in source.splitlines())
+    assert "lakehouse." not in code

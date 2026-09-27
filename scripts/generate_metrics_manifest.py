@@ -515,15 +515,22 @@ class MetricQueryError(RuntimeError):
 def trino_credentials(user: str) -> tuple[str | None, str | None]:
     """(mật khẩu, cert CA) cho Trino — ADR-0016.
 
-    Chỉ dùng mật khẩu khi TRINO_PASSWORD được đặt TƯỜNG MINH. Không tự đọc
-    docker/secrets/trino/passwords.env: máy đã chạy bootstrap_trino_auth.py có sẵn
-    mật khẩu ở đó, và tự chuyển sang HTTPS sẽ gãy với một Trino chưa bật xác thực.
+    Trino đòi mật khẩu, nên mặc định đọc mật khẩu của `user` từ
+    docker/secrets/trino/passwords.env (sinh bởi bootstrap_trino_auth.py).
+    TRINO_PASSWORD, nếu đặt, thắng. Không có cả hai → HTTP không mật khẩu, và
+    Trino sẽ trả 403 — lỗi nói rõ phải chạy bootstrap.
     """
+    secrets_dir = Path(__file__).resolve().parents[1] / "docker" / "secrets" / "trino"
     password = os.environ.get("TRINO_PASSWORD")
+    if not password and (secrets_dir / "passwords.env").exists():
+        key = f"TRINO_PASSWORD_{user.upper()}="
+        for line in (secrets_dir / "passwords.env").read_text(encoding="utf-8").splitlines():
+            if line.startswith(key):
+                password = line[len(key) :]
     if not password:
         return None, None
     ca_cert = os.environ.get("TRINO_CA_CERT")
-    default_pem = Path(__file__).resolve().parents[1] / "docker" / "secrets" / "trino" / "trino.pem"
+    default_pem = secrets_dir / "trino.pem"
     if not ca_cert and default_pem.exists():
         ca_cert = str(default_pem)
     return password, ca_cert
@@ -540,10 +547,10 @@ class TrinoClient:
         password: str | None = None,
         ca_cert: str | None = None,
     ):
-        # ADR-0016: có mật khẩu → HTTPS 8443 + Basic auth, verify bằng cert của stack.
-        # Không có → HTTP 8085 như trước (Trino chưa bật xác thực).
+        # ADR-0016: có mật khẩu → HTTPS + Basic auth, verify bằng cert của stack.
+        # Chạy trên HOST: HTTPS ánh xạ ra 8453 (8443 hay bị dịch vụ khác chiếm).
         scheme = "https" if password else "http"
-        port = port or (8443 if password else 8085)
+        port = port or (8453 if password else 8085)
         self.url = f"{scheme}://{host}:{port}/v1/statement"
         self.user = user
         self.headers = {"X-Trino-User": user}
@@ -859,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Thu evidence + ghi run artifact, KHÔNG promote canonical")
     parser.add_argument("--output", type=Path, help="Ghi kết quả ra file này thay vì canonical")
     parser.add_argument("--trino-host", default="localhost")
-    parser.add_argument("--trino-port", type=int, default=None, help="mặc định 8443 khi có mật khẩu, 8085 khi không")
+    parser.add_argument("--trino-port", type=int, default=None, help="mặc định 8453 (HTTPS trên host) khi có mật khẩu")
     args = parser.parse_args(argv)
 
     manifest = load_contract()

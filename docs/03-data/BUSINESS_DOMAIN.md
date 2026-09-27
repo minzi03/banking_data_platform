@@ -341,8 +341,8 @@ Sáu cột nhạy cảm nhất — CCCD, họ tên, SĐT, email, địa chỉ, n
 Ai thấy bản gốc ở bảng nào: [`RBAC_MATRIX.md`](../06-security-compliance/RBAC_MATRIX.md), sinh tự
 động từ `governance/rbac.py`.
 
-**Giới hạn:** Trino **chưa xác thực người dùng** — tin tên user client tự khai. Spark và MinIO
-**không đi qua Trino**. Đủ để chặn lộ vô ý; không đủ để chặn người cố ý (ADR-0015).
+**Xác thực:** Trino chỉ nhận HTTPS + mật khẩu, mỗi client một mật khẩu, cấm mạo danh (ADR-0016).
+**Giới hạn:** Spark và MinIO **không đi qua Trino**; cert tự ký; mật khẩu nằm trong file trên máy dev.
 
 ---
 

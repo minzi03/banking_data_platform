@@ -261,10 +261,11 @@ Trino enforces file-based access control. Rules live in
 
 Any other user name can reach no data at all.
 
-**Authentication (ADR-0016) — being rolled out in two steps.** Until step 2
-lands, Trino still trusts the user name the client sends. Step 1 (now) lets
-every client authenticate when `TRINO_PASSWORD` is set; generate the secrets
-once per machine:
+**Authentication (ADR-0016).** Trino accepts queries only over HTTPS with a
+password: HTTP answers 403, a wrong password 401, and a logged-in user cannot
+impersonate another (`--session-user admin` → "cannot impersonate"). HTTPS is
+`trino:8443` inside the docker network and `localhost:8453` on the host. Generate
+the secrets once per machine, **before** starting the stack:
 
 ```bash
 py -3 scripts/bootstrap_trino_auth.py          # everything → docker/secrets/trino/ (gitignored)
@@ -277,10 +278,26 @@ you pass `--rotate`. Each service gets a file with only its own password
 mounted nowhere. Nothing is written to `docker/.env` — nine services load that
 file whole and would see every password.
 
-**Query as a specific user** — the CLI defaults to user `trino` (admin):
+**Stacks created before authentication** — generate secrets, then recreate Trino and
+its clients (api and the freshness exporter copy code at build time, so rebuild them):
 
 ```bash
-docker compose exec trino trino --user analytics_report \
+py -3 scripts/bootstrap_trino_auth.py
+docker compose up -d --no-deps --force-recreate trino dbt streamlit
+docker compose build api freshness-exporter
+docker compose up -d --no-deps --force-recreate api freshness-exporter
+```
+
+**Query as the admin CLI** — `docker exec … trino` works unchanged: the container's
+`~/.trino_config` points the CLI at `https://localhost:8443` as user `trino`, with the
+password from its environment.
+
+**Query as a specific user** — pass that user's password in the environment, never
+in argv. With `--user X` and no password for X, Trino refuses:
+
+```bash
+TRINO_PASSWORD=$(grep '^TRINO_PASSWORD_ANALYTICS_REPORT=' docker/secrets/trino/passwords.env | cut -d= -f2-) \
+  docker exec -e TRINO_PASSWORD banking-trino trino --user analytics_report \
   --execute "SELECT cccd FROM iceberg.silver.dim_customer LIMIT 3"
 # → ***********1234   (masked)
 ```
@@ -306,10 +323,10 @@ Without it Trino silently falls back to allowing everything.
 
 **What this does not protect**
 
-- **No authentication yet.** Trino trusts the user name the client sends, so anyone
-  who can reach port 8080/8085 can claim to be `admin`. The rules stop *accidental*
-  access and mask PII for well-behaved clients; they are not a defence against a
-  deliberate one.
+- **Self-signed certificate, passwords in files.** Authentication is real (ADR-0016)
+  but there is no PKI, and passwords live in `docker/secrets/trino/` on the dev
+  machine, not in a secret manager. Anyone who can read that directory — or exec
+  into a container — has the passwords.
 - **Spark bypasses Trino.** Spark jobs read and write Iceberg through the REST
   catalog and MinIO directly. Anyone with MinIO credentials can read the raw files.
 - A symptom worth knowing: `Access Denied: Cannot access catalog iceberg` from a

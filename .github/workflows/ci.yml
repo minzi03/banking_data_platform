@@ -57,7 +57,7 @@ jobs:
           # kích hoạt rộng hơn trước một chút: đổi cấu hình lint cũng chạy
           # Trino integration. Chấp nhận — thà chạy thừa còn hơn để cổng ngủ
           # khi testpaths/marker đổi.
-          PATTERN='^(code_etl/|data_generator/|docker/|tests/integration/|requirements-ci-seed\.txt|pyproject\.toml|scripts/summarize_junit\.py|scripts/verify_trino_access_control\.py|\.github/workflows/ci\.yml)'
+          PATTERN='^(code_etl/|data_generator/|docker/|tests/integration/|requirements-ci-seed\.txt|pyproject\.toml|scripts/summarize_junit\.py|scripts/verify_trino_access_control\.py|scripts/bootstrap_trino_auth\.py|governance/rbac\.py|\.github/workflows/ci\.yml)'
           if echo "$CHANGED" | grep -qE "$PATTERN"; then
             echo "trino_integration=true" >> "$GITHUB_OUTPUT"
           else
@@ -523,6 +523,14 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pytest pytest-timeout pyyaml
+    # Trino đòi mật khẩu (ADR-0016): sinh keystore, password file và mật khẩu
+    # từng user vào docker/secrets/trino/ TRƯỚC khi dựng stack. Secret sinh mới
+    # cho mỗi run — không có secret nào trong repo hay trong GitHub secrets.
+    - name: Bootstrap Trino authentication
+      run: |
+        set -euo pipefail
+        python scripts/bootstrap_trino_auth.py
+        python scripts/bootstrap_trino_auth.py --check
     - name: Pull images
       working-directory: docker
       timeout-minutes: 15

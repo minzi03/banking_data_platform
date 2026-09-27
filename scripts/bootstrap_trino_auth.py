@@ -40,10 +40,24 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
-from governance.rbac import USERS  # noqa: E402
+
+def _load_users() -> dict:
+    """USERS từ governance/rbac.py, nạp THẲNG file — không qua governance/__init__.py.
+
+    Package governance import cả contracts (pydantic); job CI dựng stack chỉ cài
+    pytest + pyyaml, và bootstrap phải chạy ở đó TRƯỚC khi dựng Trino.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_rbac_for_bootstrap", REPO_ROOT / "governance" / "rbac.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # @dataclass cần module có trong sys.modules
+    spec.loader.exec_module(module)
+    return module.USERS
+
+
+USERS = _load_users()
 
 SECRETS_DIR = REPO_ROOT / "docker" / "secrets" / "trino"
 TRINO_IMAGE = "trinodb/trino:443"

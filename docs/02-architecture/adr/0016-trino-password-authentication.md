@@ -1,6 +1,6 @@
 # ADR-0016 — Trino xác thực bằng mật khẩu qua HTTPS, mỗi client một credential
 
-**Status**: Accepted — triển khai hai bước (PR-A: client và bootstrap; PR-B: bật trên server)
+**Status**: Accepted — đã bật (PR-A #64: client và bootstrap; PR-B: server, compose, CI)
 **Ngày**: 2026-09-27
 **Liên quan**: [`0015`](0015-trino-access-control-generated-from-rbac.md) · [`RBAC_MATRIX.md`](../../06-security-compliance/RBAC_MATRIX.md) §5 · TD-3 · TD-15
 

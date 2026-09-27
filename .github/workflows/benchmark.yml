@@ -69,6 +69,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-timeout pyyaml
 
+      # Trino đòi mật khẩu (ADR-0016) — secret sinh mới cho mỗi run.
+      - name: Bootstrap Trino authentication
+        run: |
+          set -euo pipefail
+          python scripts/bootstrap_trino_auth.py
+          python scripts/bootstrap_trino_auth.py --check
+
       # -----------------------------------------------------------------------
       # Image acquisition is a SEPARATE step from startup.
       #
