@@ -675,8 +675,10 @@ Step 11: source_table_registry (19) ── manual seed
 ### 8.4. Date Range & Time Distribution
 
 ```
-Date range: 2020-01-01 → 2025-12-31 (6 years of data)
-Seed date:  2025-12-31 (cob_dt for all generated data)
+Anchor:     --as-of (default: today) — newest transaction = as_of
+Txn range:  as_of − 14 months → as_of (account, card, online)
+Other:      open / issue / hire dates reach further back, shifted by the same offset
+            (see data_generator/generators/timeline.py, TD-16)
 
 Time distribution (transaction tables):
 ├── 65% weekday (Mon–Fri)

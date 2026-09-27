@@ -37,9 +37,11 @@ docker compose ps  # Verify all services are healthy
 
 ### 2. Generate Seed Data
 ```bash
-# From host (recommended)
+# From host (recommended). --as-of = the cob_dt you will load: the newest
+# transaction lands on that date, so "last 30 days" KPIs in Gold have data.
+# Default is today. See data_generator/generators/timeline.py (TD-16).
 cd banking_data_platform
-python data_generator/generate_all.py --host localhost --port 5432
+python data_generator/generate_all.py --host localhost --port 5432 --as-of 2026-09-22
 ```
 
 ### 3. Run ETL Pipeline

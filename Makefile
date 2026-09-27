@@ -24,7 +24,7 @@ help:
 	@echo "    make logs        Tail all logs"
 	@echo ""
 	@echo "  Data:"
-	@echo "    make seed        Generate seed data (in airflow-scheduler)"
+	@echo "    make seed        Generate seed data (in airflow-scheduler); AS_OF=YYYY-MM-DD = cob_dt se nap"
 	@echo "    make seed-local  Generate seed data (from host)"
 	@echo ""
 	@echo "  Bronze Layer:"
@@ -158,12 +158,12 @@ psql:
 seed:
 	@echo "Running seed data generator inside airflow-scheduler container..."
 	$(DC) exec -w /opt/project airflow-scheduler python data_generator/generate_all.py \
-		--host postgres --port 5432
+		--host postgres --port 5432 $(if $(AS_OF),--as-of $(AS_OF))
 	@echo "Seed data generated successfully"
 
 seed-local:
 	@echo "Running seed data generator from host (PostgreSQL must be running)..."
-	python data_generator/generate_all.py --host localhost --port 5432
+	python data_generator/generate_all.py --host localhost --port 5432 $(if $(AS_OF),--as-of $(AS_OF))
 	@echo "Seed data generated successfully"
 
 # ---------------------------------------------------------------------------

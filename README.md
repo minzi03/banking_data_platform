@@ -1622,8 +1622,12 @@ Generate seed data if required:
 ```bash
 python data_generator/generate_all.py \
   --host localhost \
-  --port 5432
+  --port 5432 \
+  --as-of 2026-09-22   # the cob_dt you will load; default today
 ```
+
+`--as-of` anchors the generated timeline: the newest transaction falls on that date.
+Load a `cob_dt` far from the one you seeded for, and 30-day KPIs go to zero (TD-16).
 
 Then open Airflow and run the required workflows according to their dependencies.
 

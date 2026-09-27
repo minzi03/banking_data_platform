@@ -798,7 +798,9 @@ jobs:
         python -m pip install -r requirements-ci-seed.txt
 
         echo "=== Generating seed data (CI: scaled 1%) ==="
-        python data_generator/generate_all.py --scale 0.01
+        # --as-of: giao dịch mới nhất = cob_dt sẽ nạp, để cửa sổ "30 ngày gần nhất"
+        # của Gold có dữ liệu thay vì trôi theo ngày chạy (data_generator/generators/timeline.py).
+        python data_generator/generate_all.py --scale 0.01 --as-of "$BENCHMARK_COB_DT"
 
         # Post-condition trên chính source, không tin generator tự báo.
         # `> 0` chứ không ghim số: khối lượng do seed_config.yaml + --scale
@@ -916,6 +918,18 @@ jobs:
         echo "::group::F — Silver state"
         assert_rows "silver.fact_txn_account" \
           "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account WHERE cob_dt = DATE '${COB_DT}'"
+
+        # Snapshot của một ngày không được chứa giao dịch của ngày sau đó. Seed
+        # thiếu --as-of sẽ neo dữ liệu vào ngày chạy CI, tức SAU cob_dt này.
+        future=$(docker exec ci-trino trino --output-format CSV_UNQUOTED --execute \
+          "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account
+           WHERE cob_dt = DATE '${COB_DT}'
+             AND CAST(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE) > DATE '${COB_DT}'" | tr -d ' \r')
+        echo "  silver.fact_txn_account · giao dịch sau cob_dt: ${future}"
+        if [ "$future" != "0" ]; then
+          echo "::error::${future} giao dịch sau cob_dt=${COB_DT} — seed không neo vào cob_dt (--as-of)?"
+          exit 1
+        fi
         echo "::endgroup::"
 
         run_stage "G — Gold process" "${SPARK_SUBMIT[@]}" \
@@ -940,6 +954,13 @@ jobs:
           echo "::error::grain sai: ${rows} dòng cho ${distinct} khách hàng — fan-out"
           exit 1
         fi
+
+        # Cửa sổ "30 ngày gần nhất" phải có dữ liệu. Khi ngày giao dịch trôi khỏi
+        # cob_dt (seed không có --as-of), mọi KPI 30 ngày bằng 0 cho MỌI khách mà
+        # bảng vẫn đủ dòng, grain vẫn đúng — không kiểm tra nào ở trên bắt được.
+        assert_rows "gold.mart_customer_360 · khách có giao dịch 30 ngày" \
+          "SELECT COUNT(*) FROM iceberg.gold.mart_customer_360
+           WHERE cob_dt = DATE '${COB_DT}' AND txn_count_30d > 0"
         echo "::endgroup::"
 
         echo "✅ ETL pipeline complete"
