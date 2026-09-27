@@ -55,11 +55,21 @@ image ngoài là rủi ro thật. 1.300.000 là mức OWASP cho PBKDF2-SHA1; đo
 lần gọi CLI ~1,1–1,4s ở cả 210k lẫn 1,3M vòng — chi phí nằm ở JVM của CLI, không
 ở hash.
 
-**3. Secret sinh lúc dựng stack, không bao giờ commit.** `scripts/bootstrap_trino_auth.py`
-sinh vào `docker/secrets/trino/` (đã gitignore): keystore PKCS12 tự ký, cert PEM
-cho client verify, file mật khẩu, và một mật khẩu ngẫu nhiên cho **mỗi user trong
-`governance/rbac.py`**. Mật khẩu client đi vào `docker/.env` (đã gitignore) dưới
-dạng `TRINO_PASSWORD_<USER>`. Chạy lại không đổi mật khẩu đã có, trừ khi `--rotate`.
+**3. Secret sinh lúc dựng stack, không bao giờ commit, mỗi service chỉ thấy của mình.**
+`scripts/bootstrap_trino_auth.py` sinh vào `docker/secrets/trino/` (đã gitignore):
+keystore PKCS12 tự ký, cert PEM cho client verify, file mật khẩu, và một mật khẩu
+ngẫu nhiên cho **mỗi user trong `governance/rbac.py`**:
+
+- `passwords.env` — nguồn sự thật, chỉ công cụ chạy trên host đọc (generator
+  manifest, verifier). Không mount vào container nào.
+- `env/<user>.env` — đúng một dòng `TRINO_PASSWORD=…`. Service nạp qua `env_file`,
+  nên API chỉ thấy mật khẩu của `customer_api`, dbt chỉ thấy của `dbt`…
+- `env/trino-server.env` — mật khẩu keystore, shared secret, mật khẩu `trino` cho CLI.
+
+**Không** ghi vào `docker/.env`. Bản đầu của PR-A làm vậy, và `docker compose config`
+cho thấy hậu quả: chín service nạp nguyên `docker/.env` qua `env_file` (airflow ×3,
+postgres, minio, mc, iceberg-rest, openmetadata, om-migrate) nhận **cả 14** mật khẩu
+Trino, kể cả của admin. Chạy lại không đổi mật khẩu đã có, trừ khi `--rotate`.
 
 **4. Client xác thực khi có `TRINO_PASSWORD`, chạy như cũ khi không có.** Mọi client
 Python dùng một cách kết nối: có `TRINO_PASSWORD` → `https` + `BasicAuthentication`
@@ -85,5 +95,6 @@ vi, và PR-B chỉ còn là bật server + truyền biến môi trường.
   benchmark, RUNBOOK phải mang credential.
 - **Spark và MinIO vẫn đi vòng qua Trino.** ADR này chỉ khép lỗ hổng *danh tính trên
   Trino*. RBAC_MATRIX §5 mục 2–3 vẫn nguyên.
-- **Mật khẩu nằm trong `docker/.env`** — bảo vệ bằng quyền file của máy dev, không
-  bằng secret manager.
+- **Mật khẩu nằm trong file trên đĩa** (`docker/secrets/trino/`) — bảo vệ bằng quyền
+  file của máy dev, không bằng secret manager. Airflow có docker socket nên đọc được
+  env của mọi container; ADR này không đổi điều đó.

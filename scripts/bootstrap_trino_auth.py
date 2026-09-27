@@ -5,20 +5,27 @@ Sinh secret cho xác thực Trino (ADR-0016). Không in secret nào ra màn hìn
     py -3 scripts/bootstrap_trino_auth.py --rotate   # sinh lại mọi mật khẩu và keystore
     py -3 scripts/bootstrap_trino_auth.py --check    # exit 1 nếu thiếu hoặc lệch rbac.py
 
-Ghi vào hai nơi, cả hai đã gitignore:
+Mọi thứ nằm trong docker/secrets/trino/ (đã gitignore):
 
-  docker/secrets/trino/keystore.p12     keystore PKCS12 tự ký (CN=trino, SAN trino/localhost)
-  docker/secrets/trino/trino.pem        cert công khai — client dùng để verify HTTPS
-  docker/secrets/trino/password.db      user:iterations:salt:hash, PBKDF2-HMAC-SHA1
-  docker/.env                           TRINO_PASSWORD_<USER>, TRINO_KEYSTORE_PASSWORD,
-                                        TRINO_SHARED_SECRET
+  passwords.env            nguồn sự thật: TRINO_PASSWORD_<USER> cho mọi user của rbac.py,
+                           TRINO_KEYSTORE_PASSWORD, TRINO_SHARED_SECRET. Chỉ công cụ chạy trên
+                           HOST đọc file này (generator manifest, verifier) — không mount vào đâu.
+  env/<user>.env           đúng MỘT dòng TRINO_PASSWORD=… — service nạp qua `env_file`, nên mỗi
+                           client chỉ thấy mật khẩu của chính nó.
+  env/trino-server.env     keystore password + shared secret + mật khẩu user `trino` cho CLI
+                           trong container Trino.
+  keystore.p12, trino.pem  keystore PKCS12 tự ký (CN=trino, SAN trino/localhost) và cert công khai
+  password.db              user:iterations:salt:hash, PBKDF2-HMAC-SHA1
+
+KHÔNG ghi vào docker/.env: chín service nạp nguyên file đó qua `env_file` (airflow,
+postgres, minio, openmetadata…) và sẽ nhận mọi mật khẩu Trino, kể cả của admin — đo
+bằng `docker compose config` khi thiết kế ADR-0016.
 
 Danh sách user lấy từ governance/rbac.py — cùng nguồn với rules.json (ADR-0015):
 không ai có mật khẩu mà không có role.
 
-Định dạng hash ĐO trên Trino 443, không suy từ tài liệu: PBKDF2 SHA-1 được nhận,
-SHA-256 cùng định dạng bị từ chối. Keystore tạo bằng keytool trong chính image
-Trino đã pin — không thêm image hay gói Python nào.
+Định dạng hash ĐO trên Trino 443: PBKDF2 SHA-1 được nhận, SHA-256 cùng định dạng bị
+từ chối. Keystore tạo bằng keytool trong chính image Trino đã pin.
 """
 
 from __future__ import annotations
@@ -39,9 +46,9 @@ if str(REPO_ROOT) not in sys.path:
 from governance.rbac import USERS  # noqa: E402
 
 SECRETS_DIR = REPO_ROOT / "docker" / "secrets" / "trino"
-ENV_FILE = REPO_ROOT / "docker" / ".env"
 TRINO_IMAGE = "trinodb/trino:443"
 KEYTOOL = "/usr/lib/jvm/jdk-21.0/bin/keytool"
+SERVER_USER = "trino"  # user của CLI trong container Trino (trino-cli.properties)
 
 # OWASP khuyến nghị cho PBKDF2-HMAC-SHA1. Đo trên Trino 443: mỗi lần gọi CLI
 # ~1,1–1,4s ở cả 210k lẫn 1,3M vòng — chi phí là JVM của CLI, không phải hash.
@@ -51,6 +58,10 @@ SALT_BYTES = 16
 
 KEYSTORE_PASSWORD_VAR = "TRINO_KEYSTORE_PASSWORD"
 SHARED_SECRET_VAR = "TRINO_SHARED_SECRET"
+
+
+def passwords_file() -> Path:
+    return SECRETS_DIR / "passwords.env"
 
 
 def password_var(username: str) -> str:
@@ -81,50 +92,61 @@ def read_env(path: Path) -> dict[str, str]:
     return values
 
 
-def write_env(path: Path, updates: dict[str, str]) -> None:
-    """Cập nhật/thêm khoá, giữ nguyên mọi dòng khác (comment, thứ tự, khoá không liên quan)."""
-    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    pending = dict(updates)
-    out = []
-    for line in lines:
-        key = line.partition("=")[0].strip()
-        if "=" in line and not line.lstrip().startswith("#") and key in pending:
-            out.append(f"{key}={pending.pop(key)}")
-        else:
-            out.append(line)
-    if pending:
-        out += ["", "# Trino authentication — sinh bởi scripts/bootstrap_trino_auth.py (ADR-0016)"]
-        out += [f"{k}={v}" for k, v in pending.items()]
+def _write(path: Path, values: dict[str, str], header: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+    body = "".join(f"{k}={v}\n" for k, v in values.items())
+    path.write_text(
+        f"# {header}\n# Sinh bởi scripts/bootstrap_trino_auth.py (ADR-0016) — không sửa tay.\n{body}",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
-def plan_env(existing: dict[str, str], *, rotate: bool) -> dict[str, str]:
-    """Giá trị cần ghi vào .env: sinh mới cái thiếu (hoặc tất cả khi rotate), giữ cái đã có."""
-    wanted = [password_var(u) for u in USERS] + [KEYSTORE_PASSWORD_VAR, SHARED_SECRET_VAR]
-    updates = {}
-    for key in wanted:
-        if rotate or not existing.get(key):
-            updates[key] = secrets.token_urlsafe(32 if key == SHARED_SECRET_VAR else 24)
-    return updates
+def plan(existing: dict[str, str], *, rotate: bool) -> dict[str, str]:
+    """Giá trị mới cần sinh: cái thiếu (hoặc tất cả khi rotate). Cái đã có giữ nguyên."""
+    wanted = [password_var(u) for u in sorted(USERS)] + [KEYSTORE_PASSWORD_VAR, SHARED_SECRET_VAR]
+    return {
+        k: secrets.token_urlsafe(32 if k == SHARED_SECRET_VAR else 24) for k in wanted if rotate or not existing.get(k)
+    }
+
+
+def service_env_files(env: dict[str, str]) -> dict[Path, dict[str, str]]:
+    """Mỗi user một file chỉ chứa mật khẩu của nó; server một file riêng."""
+    files = {SECRETS_DIR / "env" / f"{u}.env": {"TRINO_PASSWORD": env[password_var(u)]} for u in sorted(USERS)}
+    files[SECRETS_DIR / "env" / "trino-server.env"] = {
+        KEYSTORE_PASSWORD_VAR: env[KEYSTORE_PASSWORD_VAR],
+        SHARED_SECRET_VAR: env[SHARED_SECRET_VAR],
+        "TRINO_PASSWORD": env[password_var(SERVER_USER)],
+    }
+    return files
 
 
 def render_password_db(env: dict[str, str]) -> str:
     return "".join(f"{u}:{hash_password(env[password_var(u)])}\n" for u in sorted(USERS))
 
 
-def password_db_matches(path: Path, env: dict[str, str]) -> list[str]:
-    """Lỗi nếu password.db thiếu user của rbac.py, thừa user, hoặc hash không khớp .env."""
-    if not path.exists():
-        return [f"{path.relative_to(REPO_ROOT)} không tồn tại"]
-    stored = dict(line.split(":", 1) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
-    problems = [f"thiếu user {u}" for u in sorted(set(USERS) - set(stored))]
-    problems += [f"user thừa {u} (không có trong rbac.py)" for u in sorted(set(stored) - set(USERS))]
-    for user in sorted(set(USERS) & set(stored)):
-        password = env.get(password_var(user))
-        if not password or not verify_password(password, stored[user]):
-            problems.append(f"hash của {user} không khớp {password_var(user)} trong docker/.env")
-    return problems
+def problems(env: dict[str, str]) -> list[str]:
+    """Mọi chỗ lệch: thiếu giá trị, thiếu file, password.db / env files không khớp passwords.env."""
+    found = [f"thiếu {k} trong passwords.env" for k in plan(env, rotate=False)]
+    if found:
+        return found
+    db = SECRETS_DIR / "password.db"
+    if not db.exists():
+        found.append("thiếu password.db")
+    else:
+        stored = dict(line.split(":", 1) for line in db.read_text(encoding="utf-8").splitlines() if line.strip())
+        found += [f"password.db thiếu user {u}" for u in sorted(set(USERS) - set(stored))]
+        found += [f"password.db có user thừa {u} (không có trong rbac.py)" for u in sorted(set(stored) - set(USERS))]
+        found += [
+            f"hash của {u} không khớp passwords.env"
+            for u in sorted(set(USERS) & set(stored))
+            if not verify_password(env[password_var(u)], stored[u])
+        ]
+    for path, values in service_env_files(env).items():
+        if read_env(path) != values:
+            found.append(f"{path.relative_to(SECRETS_DIR).as_posix()} thiếu hoặc lệch passwords.env")
+    found += [f"thiếu {n}" for n in ("keystore.p12", "trino.pem") if not (SECRETS_DIR / n).exists()]
+    return found
 
 
 def generate_keystore(keystore_password: str) -> None:
@@ -153,28 +175,35 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="chỉ kiểm, exit 1 nếu thiếu hoặc lệch")
     args = parser.parse_args(argv)
 
-    existing = read_env(ENV_FILE)
+    existing = read_env(passwords_file())
     if args.check:
-        problems = [f"thiếu {k} trong docker/.env" for k in plan_env(existing, rotate=False)]
-        problems += password_db_matches(SECRETS_DIR / "password.db", existing)
-        problems += [f"thiếu {n}" for n in ("keystore.p12", "trino.pem") if not (SECRETS_DIR / n).exists()]
-        for p in problems:
+        found = problems(existing)
+        for p in found:
             print(f"  ✗ {p}", file=sys.stderr)
-        print("Trino auth: OK" if not problems else f"Trino auth: {len(problems)} vấn đề")
-        return 1 if problems else 0
+        print("Trino auth: OK" if not found else f"Trino auth: {len(found)} vấn đề")
+        return 1 if found else 0
 
-    updates = plan_env(existing, rotate=args.rotate)
+    updates = plan(existing, rotate=args.rotate)
     env = {**existing, **updates}
     SECRETS_DIR.mkdir(parents=True, exist_ok=True)
     if updates:
-        write_env(ENV_FILE, updates)
+        ordered = {
+            k: env[k] for k in [password_var(u) for u in sorted(USERS)] + [KEYSTORE_PASSWORD_VAR, SHARED_SECRET_VAR]
+        }
+        _write(passwords_file(), ordered, "Nguồn sự thật cho mật khẩu Trino — chỉ công cụ trên host đọc")
+    for path, values in service_env_files(env).items():
+        if read_env(path) != values:
+            _write(path, values, f"Chỉ mật khẩu cho {path.stem}")
     if args.rotate or KEYSTORE_PASSWORD_VAR in updates or not (SECRETS_DIR / "keystore.p12").exists():
         generate_keystore(env[KEYSTORE_PASSWORD_VAR])
-    if args.rotate or updates or password_db_matches(SECRETS_DIR / "password.db", env):
-        (SECRETS_DIR / "password.db").write_text(render_password_db(env), encoding="utf-8", newline="\n")
+    db = SECRETS_DIR / "password.db"
+    if args.rotate or updates or not db.exists() or any("password.db" in p or "hash" in p for p in problems(env)):
+        db.write_text(render_password_db(env), encoding="utf-8", newline="\n")
 
     # Chỉ in TÊN khoá, không in giá trị.
-    print(f"Trino auth: {len(USERS)} user từ rbac.py · {len(updates)} giá trị mới trong docker/.env")
+    print(
+        f"Trino auth: {len(USERS)} user từ rbac.py · {len(updates)} giá trị mới trong {passwords_file().relative_to(REPO_ROOT).as_posix()}"
+    )
     for key in sorted(updates):
         print(f"  + {key}")
     return 0

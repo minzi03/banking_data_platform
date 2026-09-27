@@ -5,12 +5,17 @@ Không cần Docker: keystore (keytool trong image Trino) được thay bằng s
 Định dạng hash đã được ĐO trên Trino 443 khi quyết định ADR-0016: PBKDF2
 HMAC-**SHA1**, `iterations:salt_hex:hash_hex`. SHA-256 cùng định dạng bị từ
 chối — test khoá đúng thuật toán đó.
+
+Phạm vi lộ: mỗi service chỉ nhận mật khẩu của chính nó (env/<user>.env). Bản
+đầu ghi vào docker/.env, mà chín service nạp nguyên file đó — mỗi service thấy
+cả 14 mật khẩu, kể cả admin. Test khoá cả hai điều.
 """
 
 from __future__ import annotations
 
 import hashlib
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -31,12 +36,8 @@ FAST = 1000  # vòng lặp tối thiểu Trino nhận — đủ cho test, không
 def sandbox(tmp_path, monkeypatch):
     """Chạy script trên thư mục tạm, keystore là stub, hash nhanh."""
     secrets_dir = tmp_path / "secrets" / "trino"
-    env_file = tmp_path / ".env"
-    env_file.write_text("# giữ nguyên\nPOSTGRES_USER=banking_admin\n", encoding="utf-8")
     monkeypatch.setattr(boot, "SECRETS_DIR", secrets_dir)
-    monkeypatch.setattr(boot, "ENV_FILE", env_file)
     monkeypatch.setattr(boot, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(boot, "PBKDF2_ITERATIONS", FAST)
 
     def fake_keystore(_password: str) -> None:
         secrets_dir.mkdir(parents=True, exist_ok=True)
@@ -46,9 +47,11 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(boot, "generate_keystore", fake_keystore)
     real_hash = boot.hash_password
     monkeypatch.setattr(
-        boot, "hash_password", lambda pw, *, iterations=FAST, salt=None: real_hash(pw, iterations=iterations, salt=salt)
+        boot,
+        "hash_password",
+        lambda pw, *, iterations=FAST, salt=None: real_hash(pw, iterations=iterations, salt=salt),
     )
-    return secrets_dir, env_file
+    return secrets_dir
 
 
 def test_hash_is_pbkdf2_sha1_in_the_format_trino_accepts():
@@ -69,58 +72,77 @@ def test_verify_accepts_the_right_password_only():
     assert not boot.verify_password("wrong", stored)
 
 
-def test_one_password_per_rbac_user_and_nothing_printed(sandbox, capsys):
-    secrets_dir, env_file = sandbox
+def test_each_service_file_holds_only_its_own_password(sandbox, capsys):
     assert boot.main([]) == 0
-    env = boot.read_env(env_file)
+    source = boot.read_env(boot.passwords_file())
 
     for user in USERS:
-        assert env.get(boot.password_var(user)), f"thiếu mật khẩu cho {user}"
-    assert env["POSTGRES_USER"] == "banking_admin", "khoá có sẵn bị mất"
-    assert "# giữ nguyên" in env_file.read_text(encoding="utf-8")
+        values = boot.read_env(sandbox / "env" / f"{user}.env")
+        assert values == {"TRINO_PASSWORD": source[boot.password_var(user)]}, f"{user}.env phải chứa đúng MỘT mật khẩu"
+    server = boot.read_env(sandbox / "env" / "trino-server.env")
+    assert set(server) == {"TRINO_KEYSTORE_PASSWORD", "TRINO_SHARED_SECRET", "TRINO_PASSWORD"}
+    assert server["TRINO_PASSWORD"] == source[boot.password_var("trino")]
 
     printed = capsys.readouterr()
-    secret_values = [v for k, v in env.items() if k.startswith("TRINO_")]
-    for value in secret_values:
+    for value in source.values():
         assert value not in printed.out + printed.err, "script in giá trị secret ra màn hình"
 
-    db_users = {line.split(":", 1)[0] for line in (secrets_dir / "password.db").read_text().splitlines()}
+    db_users = {line.split(":", 1)[0] for line in (sandbox / "password.db").read_text().splitlines()}
     assert db_users == set(USERS)
-    assert boot.password_db_matches(secrets_dir / "password.db", env) == []
+    assert boot.problems(source) == []
+
+
+def test_docker_env_is_never_written(sandbox):
+    """docker/.env được chín service nạp nguyên file — không được chứa secret Trino."""
+    docker_env = sandbox.parents[1] / ".env"
+    docker_env.write_text("POSTGRES_USER=banking_admin\n", encoding="utf-8")
+    boot.main([])
+    assert docker_env.read_text(encoding="utf-8") == "POSTGRES_USER=banking_admin\n"
 
 
 def test_rerun_keeps_existing_passwords(sandbox):
-    _secrets, env_file = sandbox
     boot.main([])
-    first = boot.read_env(env_file)
+    first = boot.read_env(boot.passwords_file())
     boot.main([])
-    assert boot.read_env(env_file) == first
+    assert boot.read_env(boot.passwords_file()) == first
 
 
 def test_rotate_changes_every_password(sandbox):
-    _secrets, env_file = sandbox
     boot.main([])
-    first = boot.read_env(env_file)
+    first = boot.read_env(boot.passwords_file())
     boot.main(["--rotate"])
-    second = boot.read_env(env_file)
+    second = boot.read_env(boot.passwords_file())
     for user in USERS:
         key = boot.password_var(user)
         assert first[key] != second[key]
 
 
-def test_check_fails_when_a_hash_no_longer_matches(sandbox):
-    secrets_dir, env_file = sandbox
+def test_check_fails_when_a_service_file_drifts(sandbox):
     boot.main([])
     assert boot.main(["--check"]) == 0
     user = sorted(USERS)[0]
-    boot.write_env(env_file, {boot.password_var(user): "changed-behind-its-back"})
+    (sandbox / "env" / f"{user}.env").write_text("TRINO_PASSWORD=changed-behind-its-back\n", encoding="utf-8")
     assert boot.main(["--check"]) == 1
-    assert any(user in p for p in boot.password_db_matches(secrets_dir / "password.db", boot.read_env(env_file)))
+
+
+def test_check_fails_when_a_hash_no_longer_matches(sandbox):
+    boot.main([])
+    user = sorted(USERS)[0]
+    db = sandbox / "password.db"
+    lines = [
+        f"{user}:{boot.hash_password('other')}" if line.startswith(f"{user}:") else line
+        for line in db.read_text().splitlines()
+    ]
+    db.write_text("\n".join(lines) + "\n")
+    assert boot.main(["--check"]) == 1
 
 
 def test_secrets_land_only_in_gitignored_paths():
-    import subprocess
-
-    for rel in ("docker/.env", "docker/secrets/trino/password.db", "docker/secrets/trino/keystore.p12"):
+    for rel in (
+        "docker/secrets/trino/passwords.env",
+        "docker/secrets/trino/env/dbt.env",
+        "docker/secrets/trino/password.db",
+        "docker/secrets/trino/keystore.p12",
+    ):
         out = subprocess.run(["git", "check-ignore", rel], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
         assert out.returncode == 0, f"{rel} KHÔNG bị gitignore — secret có thể bị commit"

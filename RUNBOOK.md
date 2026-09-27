@@ -267,12 +267,15 @@ every client authenticate when `TRINO_PASSWORD` is set; generate the secrets
 once per machine:
 
 ```bash
-py -3 scripts/bootstrap_trino_auth.py          # passwords → docker/.env, keystore + password file → docker/secrets/trino/
+py -3 scripts/bootstrap_trino_auth.py          # everything → docker/secrets/trino/ (gitignored)
 py -3 scripts/bootstrap_trino_auth.py --check  # exit 1 if missing or out of sync with governance/rbac.py
 ```
 
 It prints key *names* only, never values, and keeps existing passwords unless
-you pass `--rotate`. Both output locations are gitignored.
+you pass `--rotate`. Each service gets a file with only its own password
+(`env/<user>.env`); `passwords.env` holds them all for host-side tools and is
+mounted nowhere. Nothing is written to `docker/.env` — nine services load that
+file whole and would see every password.
 
 **Query as a specific user** — the CLI defaults to user `trino` (admin):
 

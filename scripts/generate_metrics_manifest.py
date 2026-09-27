@@ -516,8 +516,8 @@ def trino_credentials(user: str) -> tuple[str | None, str | None]:
     """(mật khẩu, cert CA) cho Trino — ADR-0016.
 
     Chỉ dùng mật khẩu khi TRINO_PASSWORD được đặt TƯỜNG MINH. Không tự đọc
-    docker/.env: máy đã chạy bootstrap_trino_auth.py có sẵn mật khẩu ở đó, và tự
-    chuyển sang HTTPS sẽ gãy với một Trino chưa bật xác thực.
+    docker/secrets/trino/passwords.env: máy đã chạy bootstrap_trino_auth.py có sẵn
+    mật khẩu ở đó, và tự chuyển sang HTTPS sẽ gãy với một Trino chưa bật xác thực.
     """
     password = os.environ.get("TRINO_PASSWORD")
     if not password:
