@@ -81,3 +81,32 @@ lakehouse.meta.cdc_watermark                        last_cdc_timestamp_ms + last
 ```
 
 **Nếu xem lại quyết định này**: thêm `kafka_partition`/`kafka_offset` vào Bronze CDC và chuyển thứ tự sang offset sẽ loại bỏ cả ba nhược điểm đầu. Chi phí là một lần schema evolution trên bảng append-only — rẻ hơn nhiều so với sửa sau khi đã có sự cố thứ tự.
+
+## Drift found and fixed (2026-09-27)
+
+The code had drifted from this decision without anyone noticing. From `d84b0e3`
+(2026-09-08), `cdc_dlq.validate_and_split` added six Kafka provenance columns
+(`source_topic`, `kafka_partition`, `kafka_offset`, `kafka_timestamp`, `raw_payload`,
+`payload_hash`) to the **valid** path. Neither Bronze CDC DDL (`04_ddl_bronze_cdc.sql`,
+`create_cdc_tables.py`) has those columns, which matches this ADR. So every non-empty
+micro-batch failed at `writeTo().append()` with `INSERT_COLUMN_ARITY_MISMATCH`. The CDC
+path never ran in CI, so nothing caught it. It surfaced while verifying CDC against the
+rotated credentials:
+
+```text
+before  core_customer stream, batch 0   INSERT_COLUMN_ARITY_MISMATCH (too many data columns)
+after   core_customer stream, batch 0   10,000 valid -> bronze.core_customer_cdc, 0 -> DLQ
+        Bronze: 10,000 rows, 10,000 distinct customer_id, all SNAPSHOT operations
+```
+
+The valid path now carries exactly the table's columns again, and Kafka coordinates stay
+in the DLQ only. `tests/bronze/test_cdc_bronze_schema.py` covers this in two parts:
+
+- **Static check (unit CI):** every CDC config plus the 5 metadata columns equals the
+  table in both DDLs.
+- **Spark check (Gold Spark Regression job):** the real `validate_and_split` produces
+  exactly those columns and sends a bad `__op` to the DLQ. All 6 configs fail on the
+  old code.
+
+Persisting offsets into Bronze is still the "if revisited" option above. It is a schema
+change, not something to reintroduce into the write path unannounced.
