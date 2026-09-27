@@ -1679,8 +1679,9 @@ Vietnam.
 
 ## TD-18 — Replication slots kept WAL without limit
 
-**Status:** fixed in configuration (2026-09-27). The three orphaned slots on the local
-stack are still there: dropping them is the user's call (RUNBOOK §12).
+**Status:** fixed in configuration (2026-09-27). On the local stack, the user dropped
+the three stale slots and applied the cap (RUNBOOK §12, PowerShell variant). WAL
+went from 3,616 MB to 512 MB after a checkpoint.
 
 ### Measured (2026-09-27, before CDC verification)
 
@@ -1692,15 +1693,23 @@ debezium_slot_digital    f       2,729 MB      extended
 pg_wal directory                 3,616 MB      max_wal_size 1GB, max_slot_wal_keep_size -1
 ```
 
-- **Orphaned.** No file in the repo, and nothing in its Git history, uses the name
-  `debezium_slot_*`. `register_connectors.py` and `cdc_register_connectors_dag.py`
-  both use `debezium_core_banking`, `debezium_card_crm` and `debezium_digital_banking`.
-  Nothing reads these three slots, and they grow with every write. One re-seed alone
-  adds about 3.6 GB.
-- **Structural.** Kafka has no volume, so Debezium's connector configs and offsets are
-  lost whenever Kafka restarts. Even a correctly named slot is left behind every time
-  the CDC stack stops. With `max_slot_wal_keep_size = -1` (the default), that ends in
-  a full disk.
+- **Registered outside the repo.** No file in the repo, and nothing in its Git history,
+  uses the name `debezium_slot_*`. `register_connectors.py` and
+  `cdc_register_connectors_dag.py` both use `debezium_core_banking`, `debezium_card_crm`
+  and `debezium_digital_banking`. When the CDC stack was brought up, it turned out the
+  slots belonged to three connectors still registered in Kafka Connect with a config
+  not in the repo. All three tasks were `FAILED` with "Couldn't obtain encoding for
+  database", which fits a login failure after the CDC password was rotated. Nothing had
+  read the slots since. They grew with every write; one re-seed alone adds about 3.6 GB.
+  Re-registering through `register_connectors.py` switched them to the repo's slot names
+  (3 tasks RUNNING, 3 new slots active).
+- **Structural.** Kafka has no volume. Its topics, connector configs and offsets live in
+  the container layer, so they survive `docker restart` but are lost when the container
+  is recreated. A slot whose connector is gone, or stopped, keeps WAL. With
+  `max_slot_wal_keep_size = -1` (the default), that ends in a full disk.
+- **Side note.** All three connectors share `topic.prefix = postgresql.banking`, so their
+  JMX metric names collide. Debezium logs "Failed to register metrics MBean, metrics will
+  not be available". Not fixed here.
 
 ### Fix
 
