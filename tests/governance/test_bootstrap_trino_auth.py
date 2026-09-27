@@ -146,3 +146,39 @@ def test_secrets_land_only_in_gitignored_paths():
     ):
         out = subprocess.run(["git", "check-ignore", rel], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
         assert out.returncode == 0, f"{rel} KHÔNG bị gitignore — secret có thể bị commit"
+
+
+def test_keytool_runs_as_the_host_user_on_posix(monkeypatch):
+    """Trên runner Linux, container chạy user `trino` (uid 1000) không ghi được thư mục
+    mount thuộc uid của runner — CI đỏ 2026-09-27. keytool phải chạy dưới uid:gid của host."""
+    monkeypatch.setattr(boot.os, "getuid", lambda: 1001, raising=False)
+    monkeypatch.setattr(boot.os, "getgid", lambda: 127, raising=False)
+    cmd = boot.keytool_command(["-help"])
+    assert cmd[cmd.index("--user") + 1] == "1001:127"
+    assert cmd.index("--user") < cmd.index(boot.TRINO_IMAGE), "--user phải đứng trước image"
+
+
+def test_keytool_failure_reports_stderr(tmp_path, monkeypatch):
+    # SECRETS_DIR tạm: generate_keystore XOÁ keystore cũ trước khi gọi keytool. Bản
+    # đầu của test này chạy trên thư mục thật và đã xoá keystore của máy dev.
+    monkeypatch.setattr(boot, "SECRETS_DIR", tmp_path)
+
+    class Failed:
+        # keytool in lỗi ra stdout, stderr rỗng — đúng như đo được.
+        returncode = 1
+        stdout = "keytool error: java.io.FileNotFoundException: /out/keystore.p12 (Permission denied)"
+        stderr = ""
+
+    monkeypatch.setattr(boot.subprocess, "run", lambda *a, **k: Failed())
+    with pytest.raises(RuntimeError, match="Permission denied"):
+        boot.generate_keystore("pw")
+
+
+def test_missing_cert_regenerates_the_keypair(sandbox):
+    """Keystore còn mà cert mất (xảy ra thật khi một lần chạy dở) → phải sinh lại, không bỏ qua."""
+    boot.main([])
+    (sandbox / "trino.pem").unlink()
+    assert boot.main(["--check"]) == 1
+    boot.main([])
+    assert (sandbox / "trino.pem").exists()
+    assert boot.main(["--check"]) == 0

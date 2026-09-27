@@ -425,7 +425,15 @@ jobs:
           AIRFLOW_ADMIN_PASSWORD=admin
           AIRFLOW_ADMIN_EMAIL=admin@example.com
           EOF
+          # Secret Trino theo từng service (ADR-0016) do bootstrap_trino_auth.py sinh.
+          # Bước này chỉ kiểm cú pháp compose, nên tạo placeholder cho ĐÚNG các file
+          # compose tham chiếu — đọc từ compose, không liệt kê tay.
+          for f in $(grep -ho 'secrets/trino/env/[A-Za-z0-9_-]*\.env' docker-compose.yml docker-compose.ci.yml | sort -u); do
+            mkdir -p "$(dirname "$f")"
+            printf 'TRINO_PASSWORD=ci-placeholder\n' > "$f"
+          done
           docker compose config --quiet
+          docker compose -f docker-compose.ci.yml config --quiet
           echo "✅ Docker Compose config is valid"
 
       - name: Check Dockerfile syntax
