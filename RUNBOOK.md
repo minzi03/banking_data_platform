@@ -457,6 +457,21 @@ This is a reload-level setting, so no restart is needed:
 docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "ALTER SYSTEM SET max_slot_wal_keep_size = '"'"'4GB'"'"'" -c "SELECT pg_reload_conf()"'
 ```
 
+The commands above use bash quoting (`'"'"'`). PowerShell mangles it: on 2026-09-27 a
+`pg_drop_replication_slot` pasted into PowerShell matched no slot at all. In PowerShell,
+send the SQL on stdin instead:
+
+```powershell
+"ALTER SYSTEM SET max_slot_wal_keep_size = '4GB';", "SELECT pg_reload_conf();" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
+Drop orphaned slots the same way. List the names from the query above; never drop an
+active slot:
+
+```powershell
+"SELECT slot_name, pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN ('debezium_slot_core','debezium_slot_card','debezium_slot_digital') AND NOT active;" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
 A slot over the cap becomes `wal_status = lost`, and its connector fails with a clear
 error. Re-register the connector: Debezium drops nothing by itself, so drop the lost
 slot first, and the connector takes a new snapshot. The slot names in use are the
