@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import random
 import re
+import subprocess
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -105,3 +106,44 @@ def test_no_generator_keeps_an_unanchored_date_literal():
             if re.search(r"datetime\(20\d{2},", code) and "shift_dt(" not in code:
                 loose.append(f"{name}.py:{n}: {line.strip()}")
     assert not loose, "Ngày literal chưa neo vào timeline.shift():\n" + "\n".join(loose)
+
+
+def test_crm_interactions_reach_as_of():
+    """KPI `interaction_count_90d` của Customer 360 cần CRM trong 90 ngày trước as_of.
+
+    Trước đây CRM dừng 7 tháng trước giao dịch mới nhất — sau khi neo as_of, cửa sổ
+    90 ngày vẫn rỗng (đo trên stack 2026-09-27: 0 / 10.000 khách).
+    """
+    as_of = date(2026, 9, 22)
+    timeline.set_as_of(as_of)
+    random.seed(20260927)
+    rows = card_crm.generate_crm_interactions(3000, CONFIG["card_crm"]["crm_interaction"], [1, 2, 3])
+    days = [_business_date(r[2]) for r in rows]
+    assert max(days) <= as_of
+    assert max(days) >= as_of - timedelta(days=7)
+    assert any(as_of - timedelta(days=90) <= d for d in days)
+
+
+def test_full_size_merchant_generation_terminates():
+    """2.000 merchant từng treo vĩnh viễn: vòng `while` chỉ đổi chữ A–E của một cặp đã cạn.
+
+    Chạy trong tiến trình con có timeout: nếu lỗi quay lại, test ĐỎ thay vì treo cả suite.
+    """
+    code = (
+        "import random, yaml; random.seed(7)\n"
+        "from generators import digital_banking as db\n"
+        "cfg = yaml.safe_load(open('config/seed_config.yaml', encoding='utf-8'))['digital_banking']\n"
+        "mcc = [r[0] for r in db.generate_mcc_codes(cfg['mcc_code'])]\n"
+        "m = db.generate_merchants(cfg['merchant']['row_count'], cfg['merchant'], mcc, cfg['location'].get('cities'))\n"
+        "print(len(m), len({r[1] for r in m}))\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT / "data_generator",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    )
+    total, unique = map(int, out.stdout.split())
+    assert total == unique == CONFIG["digital_banking"]["merchant"]["row_count"]

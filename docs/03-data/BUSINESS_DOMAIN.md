@@ -306,7 +306,7 @@ số, lệch là lỗi (`branch_monthly_cross_engine_reconciles`).
 
 | Vấn đề | Hệ quả |
 |---|---|
-| Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng. **Đã sửa trong generator (TD-16)** — ngày neo vào `--as-of`; stack local đang chạy vẫn mang dữ liệu cũ cho tới khi seed lại |
+| Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng. **Đã sửa (TD-16)** — ngày neo vào `--as-of`. Seed lại trên stack: 9.657 / 10.000 khách có giao dịch 30 ngày, 9.655 khách Active |
 | `gold_job.py` chạy `OPTIMIZE … ZORDER BY` — cú pháp Delta Lake, Iceberg không có | Bước tối ưu thất bại ở mọi job Gold, bị bắt thành WARNING; dữ liệu vẫn ghi đúng |
 
 ---

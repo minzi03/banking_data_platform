@@ -64,7 +64,7 @@ def generate_devices(count: int, config: dict, customer_ids: list[int]) -> list[
         ip = f"{random.randint(1, 223)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
         is_trusted = 1 if random.random() < trusted_rate else 0
         first_seen = _random_datetime(shift("2022-01-01"), shift("2024-12-31"))
-        last_seen = _random_datetime(first_seen.strftime("%Y-%m-%d"), shift("2025-12-31"))
+        last_seen = _random_datetime(first_seen.strftime("%Y-%m-%d"), shift("2026-08-01"))
 
         rows.append((
             i,
@@ -233,7 +233,7 @@ def generate_support_tickets(count: int, config: dict, customer_ids: list[int]) 
         status = random.choices(statuses, weights=s_weights)[0]
         subject = random.choice(ISSUE_SUBJECTS.get(issue, ["General inquiry"]))
 
-        date_opened = _random_datetime(shift("2024-01-01"), shift("2025-12-31"))
+        date_opened = _random_datetime(shift("2024-08-01"), shift("2026-08-01"))
         date_resolved = None
         resolution_hrs = None
         satisfaction = None
@@ -352,13 +352,20 @@ def generate_merchants(count: int, config: dict, mcc_codes: list[str],
     for i in range(1, count + 1):
         cat = random.choice(merchant_categories)
 
-        # Generate unique merchant name
-        name_prefix = random.choice(MERCHANT_NAMES)
-        suffix = random.choice(["", " Corp", " LLC", " JSC", " Co", " Vietnam",
-                                 " Trading", " Services", " Express"])
-        name = f"{name_prefix}{suffix}"
-        while name in used_names:
-            name = f"{name_prefix} {random.choice(['A', 'B', 'C', 'D', 'E'])}{suffix}"
+        # Tên merchant duy nhất. Trước đây khi trùng chỉ đổi chữ A–E mà giữ nguyên
+        # cặp (tên gốc, hậu tố): cặp đã dùng hết 6 biến thể thì `while` không bao
+        # giờ thoát. 2.000 merchant trên sức chứa 2.322 tên — seed đầy đủ treo ở
+        # đây (2026-09-27); CI seed 1% (20 merchant) không bao giờ chạm tới.
+        # Giờ bốc lại CẢ cặp, và sau 50 lần vẫn trùng thì gắn số thứ tự.
+        for _ in range(50):
+            name_prefix = random.choice(MERCHANT_NAMES)
+            suffix = random.choice(["", " Corp", " LLC", " JSC", " Co", " Vietnam",
+                                     " Trading", " Services", " Express"])
+            name = f"{name_prefix}{random.choice(['', ' A', ' B', ' C', ' D', ' E'])}{suffix}"
+            if name not in used_names:
+                break
+        else:
+            name = f"{name_prefix}{suffix} #{i}"
         used_names.add(name)
 
         city = random.choice(cities)

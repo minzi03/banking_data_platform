@@ -40,7 +40,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['High', 'Medium', 'Low']
+              values: ['Active', 'High', 'Medium', 'Low']
       - name: is_churn_candidate
         data_tests:
           - not_null
@@ -79,7 +79,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['MASS', 'AFFLUENT', 'PRIORITY', '0-50M', '50M-200M', '200M-500M', '500M-1B', '1B+']
+              values: ['MASS', 'AFFLUENT', 'PRIORITY', 'VIP']
 
   - name: customer_card_summary_current
     description: "Card holding + card txn 30d — current serving, wave 2, do dbt/Trino sở hữu."
@@ -177,7 +177,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: ['High', 'Medium', 'Low', 'HIGH', 'MEDIUM', 'LOW']
+              values: ['Active', 'High', 'Medium', 'Low']
 
   - name: mart_customer_360_current
     description: "Customer 360 — current serving, wave 3, do dbt/Trino sở hữu."

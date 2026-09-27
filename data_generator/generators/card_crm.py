@@ -266,7 +266,7 @@ def generate_crm_interactions(count: int, config: dict, customer_ids: list[int])
         else:
             satisfaction = random.choices([1, 2, 3, 4, 5], weights=[0.15, 0.25, 0.30, 0.20, 0.10])[0]
 
-        interaction_date = _random_datetime(shift("2024-01-01"), shift("2025-12-31"))
+        interaction_date = _random_datetime(shift("2024-08-01"), shift("2026-08-01"))
 
         rows.append((
             i,
