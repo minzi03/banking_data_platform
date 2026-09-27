@@ -43,9 +43,13 @@ sql: |
     GROUP BY customer_id,
       CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
   ),
+  -- "Đêm" là 23:00–05:59 giờ VN. HOUR() trần trên instant đọc giờ UTC (session
+  -- UTC) = 06:00–12:59 giờ VN; phải derive giờ nghiệp vụ tường minh như ngày.
   flagged AS (
     SELECT t.*, s.avg_amt, s.std_amt,
-      CASE WHEN HOUR(t.txn_date)<6 OR HOUR(t.txn_date)>22 THEN 1 ELSE 0 END AS night_flag,
+      CASE WHEN HOUR(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh')) < 6
+             OR HOUR(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh')) > 22
+           THEN 1 ELSE 0 END AS night_flag,
       CASE WHEN t.txn_amount>100000000 THEN 1 ELSE 0 END AS high_amount_flag,
       CASE WHEN t.balance_after<0 THEN 1 ELSE 0 END AS neg_balance_flag,
       CASE WHEN s.avg_amt>0 AND t.txn_amount>s.avg_amt+3*COALESCE(s.std_amt,0) THEN 1 ELSE 0 END AS anomaly_flag

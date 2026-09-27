@@ -301,6 +301,25 @@ class TestBusinessDateDerivationIsExplicit:
             f"Dùng: CAST(from_utc_timestamp(<ts>, '{BUSINESS_TZ}') AS DATE)\n  " + "\n  ".join(violations)
         )
 
+    def test_no_naive_time_part_on_event_timestamps(self):
+        """
+        Giờ / thứ / tháng nghiệp vụ cũng là giờ VN, không riêng ngày.
+        `HOUR(txn_date)` trần dưới session UTC là giờ UTC: night_flag từng đo
+        06:00–12:59 giờ VN thay vì 23:00–05:59.
+        """
+        parts = r"HOUR|MINUTE|DAYOFWEEK|WEEKDAY|DAYOFMONTH|DAY|MONTH|YEAR|DATE_FORMAT|DATE_TRUNC|EXTRACT"
+        violations = []
+        for path in gold_config_paths():
+            sql = load_sql(path)
+            for col in EVENT_TIMESTAMP_COLUMNS:
+                pattern = rf"\b({parts})\(\s*(?:\w+\s+FROM\s+|'\w+'\s*,\s*)?(\w+\.)?{col}\b"
+                for m in re.finditer(pattern, sql, re.IGNORECASE):
+                    violations.append(f"{path.name}: {m.group(0)}")
+        assert not violations, (
+            "Trích giờ/thứ/tháng trần trên event timestamp — ra giờ UTC, không phải giờ nghiệp vụ.\n"
+            f"Dùng: HOUR(from_utc_timestamp(<ts>, '{BUSINESS_TZ}'))\n  " + "\n  ".join(violations)
+        )
+
     def test_business_date_uses_explicit_timezone(self):
         """Mọi derive ngày từ event timestamp phải nêu rõ business timezone."""
         missing = []

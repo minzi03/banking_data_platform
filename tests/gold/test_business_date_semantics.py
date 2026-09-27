@@ -238,3 +238,40 @@ class TestCobDtIndependence:
         """).collect()
         assert all(r["cob_dt"] == date(2026, 9, 6) for r in rows)
         assert {r["event_utc_date"] for r in rows} != {date(2026, 9, 6)}, "cob_dt phải độc lập với event date"
+
+
+# (instant UTC, giờ VN, night_flag kỳ vọng). "Đêm" = 23:00–05:59 giờ VN.
+NIGHT_CASES = [
+    ("2026-02-14T15:59:59Z", 0, "22:59 VN — chưa tới đêm"),
+    ("2026-02-14T16:00:00Z", 1, "23:00 VN — bắt đầu đêm"),
+    ("2026-02-14T22:59:59Z", 1, "05:59 VN — vẫn là đêm"),
+    ("2026-02-14T23:00:00Z", 0, "06:00 VN — hết đêm"),
+    ("2026-02-15T03:00:00Z", 0, "10:00 VN — cao điểm; 03h UTC mà SQL cũ tính là đêm"),
+]
+
+
+class TestNightFlagUsesBusinessHour:
+    """Chạy ĐÚNG biểu thức night_flag trong fraud_risk_txn.yml, ở các biên giờ VN."""
+
+    @staticmethod
+    def _night_flag_expr() -> str:
+        import re
+
+        import yaml
+
+        sql = yaml.safe_load(
+            (PROJECT_ROOT / "code_etl" / "gold" / "risk" / "fraud_risk_txn.yml").read_text(encoding="utf-8")
+        )["sql"]
+        m = re.search(r"(CASE WHEN HOUR\(.*?END) AS night_flag", sql, re.DOTALL)
+        assert m, "không tìm thấy biểu thức night_flag trong fraud_risk_txn.yml"
+        return m.group(1).replace("t.txn_date", "event_ts")
+
+    def test_night_flag_at_business_hour_boundaries(self, spark):
+        rows = [
+            (i, datetime.fromisoformat(utc.replace("Z", "+00:00")), want)
+            for i, (utc, want, _) in enumerate(NIGHT_CASES)
+        ]
+        spark.createDataFrame(rows, "id int, event_ts timestamp, want int").createOrReplaceTempView("night_events")
+        got = spark.sql(f"SELECT id, {self._night_flag_expr()} AS got, want FROM night_events ORDER BY id").collect()
+        wrong = [(NIGHT_CASES[r["id"]][2], r["got"]) for r in got if r["got"] != r["want"]]
+        assert not wrong, f"night_flag sai ở biên giờ VN: {wrong}"
