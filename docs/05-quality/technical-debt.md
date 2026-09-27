@@ -1215,8 +1215,8 @@ Airflow itself was not run.
 
 **Status:** fixed for Silver/Gold edges (2026-09-24) — the table exists, the dead
 DDL is gone, the RUNBOOK queries work, and `ops_lineage_dag` writes the edges the
-jobs declare. **Open: the DAG is manual-trigger only, and `data_lineage_audit` has
-no writer (below).**
+jobs declare. The DAG is scheduled daily after Gold (2026-09-27). **Open:
+`data_lineage_audit` has no writer (below).**
 
 `governance/lineage.py` and `ops_lineage_dag` name `opslakehouse.lineage_log`.
 Its only DDL was in `docker/init_openmetadata/01_create_schemas.sql`, which
@@ -1287,8 +1287,13 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
 
 ### Still open
 
-- **Nothing triggers `ops_lineage_dag`** (`schedule_interval=None`, no DAG
-  triggers it). The table fills only when someone runs it.
+- ~~Nothing triggers `ops_lineage_dag`~~ **scheduled (2026-09-27).** It runs daily
+  at 08:00, the same pattern as `ops_data_quality_dag` and `ops_pii_masking_daily_dag`.
+  Its existing sensors wait for the `silver_all_dag` and `gold_all_dag` flags of the
+  same `{{ ds }}`, and every daily DAG uses that same `cob_dt` template.
+  `test_airflow_dag_contracts.py::TestFlagWaitingDagsAreScheduled` checks that every DAG
+  waiting on another DAG's flag has a daily schedule no earlier than that DAG. On the old
+  code it fails only for `ops_lineage_dag`. Not run on Airflow, which was down.
 - **Not covered:** source → Bronze, CDC, dbt serving. Bronze YAMLs do not declare
   source tables the same way.
 - **`opslakehouse.data_lineage_audit` has no writer** (`09_ddl_regulatory.sql`).
@@ -1313,7 +1318,7 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
 [x] lineage edges derived from what the jobs declare (source.tables / contracts),
     not a hand-written list — a test compares them
 [x] ops_lineage_dag writes those edges, run on the stack, rows observed
-[ ] ops_lineage_dag triggered after gold_all_dag, or its manual status documented
+[x] ops_lineage_dag scheduled after gold_all_dag (08:00, sensors on both flags)
 [x] data_lineage removed (duplicate of lineage_log, no reader or writer)
 [ ] data_lineage_audit given a writer, or removed — decided with REGULATORY_MAPPING.md
 ```

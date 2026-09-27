@@ -29,7 +29,10 @@ dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Lineage emission — Record and emit data lineage",
-    schedule_interval=None,
+    # Cùng mẫu với ops_data_quality_dag / ops_pii_masking_daily_dag: chạy 08:00, sensor chờ cờ
+    # silver_all_dag + gold_all_dag của cùng {{ ds }}. Trước đây None và không DAG nào
+    # trigger — lineage_log chỉ có dữ liệu khi có người bấm tay (TD-13).
+    schedule_interval="0 8 * * *",  # Daily at 8:00 AM (Production - after Gold 06:00)
     catchup=False,
     max_active_tasks=4,
     tags=["ops", "lineage", "governance"],
