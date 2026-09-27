@@ -313,6 +313,23 @@ pytest --collect-only -q tests/            1773   (1758 + 15)
 py -3 -m pytest -q -m "not integration"    1703 passed, 1 skipped, 69 deselected
 ```
 
+Rồi đợt secret (TD-3, #71–#75) thêm **25 hàm → 21 node**, đo bằng diff ID node giữa commit
+merge #69 và #75:
+
+| Nguồn | Hàm | Node |
+|---|---:|---:|
+| #71 MinIO từ env: quét file cấu hình engine, scanner mẫu cũ, `get_spark_session` báo lỗi khi thiếu key | +3 | +3 |
+| #71 gỡ `test_known_debt_is_still_real` — `KNOWN_DEBT` về rỗng (5 node parametrize) | −1 | −5 |
+| #72 `tests/governance/test_terraform_secrets.py` | +6 | +6 |
+| #73 `tests/governance/test_postgres_init_roles.py` | +4 | +4 |
+| #74 + #75 `tests/governance/test_rotate_local_secrets.py` | +13 | +13 |
+
+```text
+def test_* count                            886   (861 + 25)
+pytest --collect-only -q tests/            1794   (1773 + 21)
+py -3 -m pytest -q -m "not integration"    1724 passed, 1 skipped, 69 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -608,10 +625,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1773 node · 861 hàm · 1704 node chạy không cần hạ tầng   (2026-09-27)
-suite       1703 passed · 1 skipped (có chủ ý) · 69 deselected · ~19s
-coverage    76% (76,16%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 861 / 1773 — mọi delta ở §3 giờ nằm trong manifest
+pytest      1794 node · 886 hàm · 1725 node chạy không cần hạ tầng   (2026-09-27)
+suite       1724 passed · 1 skipped (có chủ ý) · 69 deselected · ~19s
+coverage    76% (76,20%) trên governance + code_etl/shared · fail_under 60 đang áp
+manifest    đã promote 886 / 1794 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
