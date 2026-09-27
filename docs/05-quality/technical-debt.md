@@ -1674,3 +1674,55 @@ Vietnam.
 
 - `aml_alert.txn_date` uses a uniform hour of day, so it has no peaks to shift.
   `_random_datetime` (uniform over the day) is also unaffected.
+
+---
+
+## TD-19 — JVM heaps sized from host RAM, not the container limit
+
+**Status:** fixed for Trino (2026-09-27). Kafka, Zookeeper and Debezium are still open
+(below).
+
+### Measured
+
+Trino was OOM-killed on the local stack (`exit 137`, `OOMKilled=true`). The
+`trinodb/trino` image sizes its heap as 80% of the memory the JVM sees
+(`-XX:MaxRAMPercentage=80`). On Docker Desktop (WSL2), the JVM does not see the
+container's cgroup limit; it sees the host's RAM:
+
+```text
+container memory.max          6,291,456,000   (mem_limit 6000m)
+running Trino MaxHeapSize    20,166,213,632   (~19 GB)
+heap committed               10.3 GB
+```
+
+Nothing stopped the heap from growing past the container limit, so the kernel killed
+the container.
+
+### Fix (Trino)
+
+- `docker/init_trino/jvm.config` is the image's default `jvm.config` with the heap fixed
+  at `-Xms1G -Xmx4G` instead of the percentages. It is mounted in both the main and the
+  CI compose files. A fixed heap does not depend on whether the JVM detects the
+  container. The file is ASCII-only, because the launcher, not Trino, reads it.
+- Guard: `tests/governance/test_jvm_heap_fits_container.py`. Both compose files must
+  mount the file, the heap must be fixed rather than a percentage, `-Xmx` must be at
+  most 75% of `mem_limit`, and the file must be ASCII. All four checks fail without the
+  fix.
+- Verified on the stack after recreating Trino. `jcmd` reports `MaxHeapSize=4294967296`.
+  A full `dbt build` (PASS=130) peaked at 3,974 MiB of 6,000 MiB with no OOM. The
+  manifest generator peaked at 2,772 MiB.
+
+### Still open: the CDC stack
+
+Measured the same day, with `jcmd VM.flags` against `mem_limit`:
+
+```text
+container    mem_limit   max heap
+debezium     2048 MiB    2048 MiB   no room for off-heap memory
+kafka        1024 MiB    1024 MiB   no room for off-heap memory
+zookeeper     256 MiB     512 MiB   heap larger than the limit
+```
+
+These are the images' default `HEAP_OPTS` / `KAFKA_HEAP_OPTS`. Fixing them means
+recreating the Kafka container. Kafka has no volume, so its topics and connector configs
+are lost, and Debezium re-snapshots about 2.3 M rows. That is a separate, disruptive step.
