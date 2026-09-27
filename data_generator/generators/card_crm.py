@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .amounts import amount_sampler
+from .timeline import shift
 
 
 MERCHANT_NAMES = [
@@ -83,7 +84,7 @@ def generate_cards(count: int, config: dict, customer_ids: list[int],
             masked = f"{prefix}****{suffix}"
         used_numbers.add(masked)
 
-        issue_date = _random_date("2020-01-01", "2025-06-30")
+        issue_date = _random_date(shift("2020-01-01"), shift("2025-06-30"))
         issue_dt = datetime.strptime(issue_date, "%Y-%m-%d")
         expiry_months = random.randint(expiry_range[0], expiry_range[1])
         expiry_date = (issue_dt + timedelta(days=expiry_months * 30)).strftime("%Y-%m-%d")
@@ -174,7 +175,7 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
         amount = sample_amount()
         merchant = random.choice(MERCHANT_NAMES)
         merchant_cat = random.choice(merchant_cats)
-        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
+        txn_date = _random_datetime_seasonal(shift("2025-06-01"), shift("2026-08-01"))
 
         # Refunds and reversals have negative amounts
         if txn_type in ("REFUND", "REVERSAL"):
@@ -265,7 +266,7 @@ def generate_crm_interactions(count: int, config: dict, customer_ids: list[int])
         else:
             satisfaction = random.choices([1, 2, 3, 4, 5], weights=[0.15, 0.25, 0.30, 0.20, 0.10])[0]
 
-        interaction_date = _random_datetime("2024-01-01", "2025-12-31")
+        interaction_date = _random_datetime(shift("2024-01-01"), shift("2025-12-31"))
 
         rows.append((
             i,
@@ -326,6 +327,12 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
         while dt.weekday() != 6:
             dt = dt + timedelta(days=1)
 
+    # Dời sang thứ Bảy / Chủ nhật / thứ Hai chỉ đi TỚI, nên có thể vượt `end` tới
+    # 6 ngày. Khi `end` là cob_dt (timeline) thì đó là giao dịch trong tương lai.
+    # Lùi đúng một tuần: giữ thứ trong tuần, không vượt mốc.
+    if dt > end:
+        dt -= timedelta(days=7)
+
     # Hour peaks: 9-11am and 7-9pm for card spending
     hour_weights = {
         0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,
@@ -340,4 +347,12 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
     h_weights = list(hour_weights.values())
     hour = random.choices(hours, weights=h_weights)[0]
 
-    return dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))
+    result = dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))
+    # Timestamp lưu ở UTC, ngày nghiệp vụ là giờ Việt Nam (ADR-0004). 18:00 UTC
+    # ngày `end` đã là ngày hôm sau theo giờ VN — với `end` = cob_dt, đó là giao
+    # dịch trong tương lai (CI bắt được 2 dòng như vậy). Mốc muộn nhất là
+    # 23:59:59 giờ VN của `end` = 16:59:59 UTC; vượt thì lùi đúng một tuần.
+    latest = end + timedelta(hours=16, minutes=59, seconds=59)
+    if result > latest:
+        result -= timedelta(days=7)
+    return result

@@ -6,10 +6,14 @@
 # -----------------------------------------------------------------------------
 # General
 # -----------------------------------------------------------------------------
+# ⚠ Ba khoá dưới KHÔNG được code nào đọc — giữ lại chỉ để không phá ai đang
+# tham chiếu. Ngày của dữ liệu do `--as-of` quyết định (mặc định: hôm nay):
+# giao dịch mới nhất = as_of, mọi ngày khác dời theo cùng độ lệch.
+# Xem data_generator/generators/timeline.py.
 data:
-  seed_date: "2025-12-31"          # cob_dt for all generated data
-  start_date: "2020-01-01"         # earliest date in dataset
-  end_date: "2025-12-31"           # latest date in dataset
+  seed_date: "2025-12-31"          # không dùng — xem --as-of
+  start_date: "2020-01-01"         # không dùng — xem --as-of
+  end_date: "2025-12-31"           # không dùng — xem --as-of
 
 # -----------------------------------------------------------------------------
 # core_banking schema
