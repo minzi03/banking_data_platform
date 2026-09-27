@@ -426,8 +426,13 @@ lists these at the end:
 
 - Superset: `SECRET_KEY` needs `superset re-encrypt-secrets`; the admin password
   needs `fab reset-password`.
-- Airflow: Fernet key rotation, the admin password, and the `postgres` connection
-  that `airflow-init` stored with the old password.
+- Airflow: Fernet key rotation and the admin password. The `postgres-*`
+  connections stored in the Airflow database keep the old password until
+  `airflow-init` runs again. Since 2026-09-27 it upserts them:
+
+  ```bash
+  docker compose -f docker/docker-compose.yml up --no-deps airflow-init
+  ```
 - OpenMetadata's MySQL passwords.
 - Debezium connectors registered with the old `CDC_DB_PASSWORD`.
 
