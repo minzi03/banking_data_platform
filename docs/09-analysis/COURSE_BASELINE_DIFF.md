@@ -103,7 +103,7 @@ assert_non_empty(result_df, config, cob_dt, logger)      # ② kết quả có r
 if not table_exists(spark, target):                      # ③ bảng đích có tồn tại?
     create_iceberg_table_if_not_exists(result_df, target, logger)
 result_df.writeTo(target).overwritePartitions()
-_run_zorder_if_needed(spark, target, job_type, logger)   # ④ tối ưu đọc
+optimize_written_partition(spark, target, cob_dt, job_type, logger)  # ④ tối ưu đọc
 ```
 
 ### 3.3 Vì sao guard ① là bắt buộc — và vì sao template gốc nguy hiểm
@@ -119,7 +119,7 @@ Với template gốc, kịch bản này xảy ra **âm thầm**: DAG xanh, bản
 | | Template | Repo |
 |---|---|---|
 | `VALID_JOB_TYPES` | `mart360, segment, time_analytics` | `+ risk` |
-| Z-Ordering | không có | 13 bảng, skip khi >1M dòng, lỗi non-fatal |
+| Z-Ordering | không có | 13 bảng, `rewrite_data_files` sort/zorder trên partition vừa ghi; lỗi non-fatal nhưng log `OPTIMIZE_FAILED` |
 | Tạo bảng nếu thiếu | không (yêu cầu bảng tồn tại sẵn) | có, kèm giải thích giới hạn Iceberg V2 writer |
 | Log lỗi | `logger.error(..., exc_info=True)` | `logger.exception(...)` |
 

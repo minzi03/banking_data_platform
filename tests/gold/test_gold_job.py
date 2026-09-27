@@ -6,8 +6,8 @@ Covers:
   - assert_source_snapshots: the fail-loud guard against silent corruption
   - assert_non_empty: the guard against overwriting a partition with nothing
   - _qualify: catalog qualification rules
-  - run_gold_job: write path, table creation, Z-Order dispatch
-  - _run_zorder_if_needed: which tables get optimized
+  - run_gold_job: write path, table creation, optimize dispatch
+  - optimize_written_partition / build_rewrite_sql: Iceberg rewrite, failure policy
 
 The two `assert_*` guards are the point of this suite. Without them a Gold job
 whose upstream partition is missing does not fail — it writes a full row set
@@ -238,7 +238,7 @@ class TestRunGoldJob:
             patch.object(gold_job, "load_source_df", return_value=result),
             patch.object(gold_job, "assert_non_empty"),
             patch.object(gold_job, "table_exists", return_value=True),
-            patch.object(gold_job, "_run_zorder_if_needed"),
+            patch.object(gold_job, "optimize_written_partition"),
         ):
             run_gold_job(spark, _config(), "2026-09-17", logger)
 
@@ -258,7 +258,7 @@ class TestRunGoldJob:
             patch.object(gold_job, "assert_non_empty"),
             patch.object(gold_job, "table_exists", return_value=False),
             patch.object(gold_job, "create_iceberg_table_if_not_exists") as create,
-            patch.object(gold_job, "_run_zorder_if_needed"),
+            patch.object(gold_job, "optimize_written_partition"),
         ):
             run_gold_job(spark, _config(), "2026-09-17", logger)
 
@@ -273,7 +273,7 @@ class TestRunGoldJob:
             patch.object(gold_job, "assert_non_empty"),
             patch.object(gold_job, "table_exists", return_value=True),
             patch.object(gold_job, "create_iceberg_table_if_not_exists") as create,
-            patch.object(gold_job, "_run_zorder_if_needed"),
+            patch.object(gold_job, "optimize_written_partition"),
         ):
             run_gold_job(spark, _config(), "2026-09-17", logger)
 
@@ -302,55 +302,109 @@ class TestRunGoldJob:
                 run_gold_job(spark, _config(), "2026-09-17", logger)
             result.writeTo.assert_not_called()
 
-    def test_zorder_is_dispatched_after_the_write(self, logger):
+    def test_written_partition_is_optimized_after_the_write(self, logger):
         spark = MagicMock()
         result = MagicMock()
+        calls = []
+        result.writeTo.return_value.overwritePartitions.side_effect = lambda: calls.append("write")
         with (
             patch.object(gold_job, "assert_source_snapshots"),
             patch.object(gold_job, "load_source_df", return_value=result),
             patch.object(gold_job, "assert_non_empty"),
             patch.object(gold_job, "table_exists", return_value=True),
-            patch.object(gold_job, "_run_zorder_if_needed") as zorder,
+            patch.object(gold_job, "get_target_table", return_value="lakehouse.gold.mart_x"),
+            patch.object(
+                gold_job, "optimize_written_partition", side_effect=lambda *a: calls.append("optimize")
+            ) as optimize,
         ):
             run_gold_job(spark, _config(), "2026-09-17", logger)
 
-        zorder.assert_called_once()
+        assert calls == ["write", "optimize"]
+        assert optimize.call_args[0][1:3] == ("lakehouse.gold.mart_x", "2026-09-17")
 
 
 # ---------------------------------------------------------------------------
-# _run_zorder_if_needed
+# build_rewrite_sql / optimize_written_partition
 # ---------------------------------------------------------------------------
 
 
-class TestZOrder:
+class TestRewriteSql:
+    """
+    Gold từng chạy `OPTIMIZE … ZORDER BY` — cú pháp Delta Lake. Iceberg trả
+    PARSE_SYNTAX_ERROR, lỗi bị nuốt thành WARNING, và không bảng Gold nào được
+    sắp xếp lại. Các test này khoá cú pháp Iceberg.
+    """
+
+    def test_uses_iceberg_procedure_not_delta_syntax(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.rfm_segment", ["rfm_segment", "customer_id"], "2026-09-22")
+        assert sql.startswith("CALL lakehouse.system.rewrite_data_files(")
+        assert "OPTIMIZE" not in sql.upper()
+        assert "ZORDER BY" not in sql.upper()
+
+    def test_table_argument_is_catalog_relative(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.rfm_segment", ["a", "b"], "2026-09-22")
+        assert "table => 'gold.rfm_segment'" in sql
+
+    def test_multi_column_uses_zorder(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.rfm_segment", ["rfm_segment", "customer_id"], "2026-09-22")
+        assert "strategy => 'sort'" in sql
+        assert "sort_order => 'zorder(rfm_segment,customer_id)'" in sql
+
+    def test_single_column_uses_linear_sort(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.mart_customer_360", ["customer_id"], "2026-09-22")
+        assert "sort_order => 'customer_id ASC NULLS LAST'" in sql
+        assert "zorder" not in sql
+
+    def test_rewrite_is_scoped_to_the_written_partition(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.rfm_segment", ["a", "b"], "2026-09-22")
+        assert "where => \"cob_dt = '2026-09-22'\"" in sql
+
+    def test_small_partitions_are_still_rewritten(self):
+        sql = gold_job.build_rewrite_sql("lakehouse.gold.rfm_segment", ["a", "b"], "2026-09-22")
+        assert "'rewrite-all', 'true'" in sql
+
+
+class TestOptimizeWrittenPartition:
     def test_unlisted_table_is_skipped(self, logger):
         spark = MagicMock()
-        gold_job._run_zorder_if_needed(spark, "lakehouse.gold.unknown_table", "mart360", logger)
+        assert gold_job.optimize_written_partition(
+            spark, "lakehouse.gold.unknown_table", "2026-09-22", "mart360", logger
+        )
         spark.sql.assert_not_called()
 
-    def test_listed_table_is_optimized(self, logger):
+    def test_listed_table_runs_the_procedure(self, logger):
         spark = MagicMock()
-        spark.table.return_value.count.return_value = 100
-        gold_job._run_zorder_if_needed(spark, "lakehouse.gold.mart_customer_360", "mart360", logger)
+        ok = gold_job.optimize_written_partition(
+            spark, "lakehouse.gold.mart_customer_360", "2026-09-22", "mart360", logger
+        )
+        assert ok
         spark.sql.assert_called_once()
-        assert "OPTIMIZE" in spark.sql.call_args[0][0]
+        assert "rewrite_data_files" in spark.sql.call_args[0][0]
+        logger.warning.assert_not_called()
 
-    def test_large_table_is_skipped(self, logger):
-        """Z-Order on a multi-million row table costs more than it saves."""
+    def test_no_full_table_count_before_optimizing(self, logger):
+        """Rewrite chỉ đụng một partition — không cần (và không được) count cả bảng."""
         spark = MagicMock()
-        spark.table.return_value.count.return_value = 2_000_000
-        gold_job._run_zorder_if_needed(spark, "lakehouse.gold.mart_customer_360", "mart360", logger)
-        spark.sql.assert_not_called()
+        gold_job.optimize_written_partition(spark, "lakehouse.gold.mart_customer_360", "2026-09-22", "mart360", logger)
+        spark.table.assert_not_called()
 
-    def test_zorder_failure_is_not_fatal(self, logger):
+    def test_failure_is_not_fatal_but_is_marked(self, logger):
         """
-        A failed OPTIMIZE must not fail the job — the data is already written.
+        Dữ liệu đã commit trước bước này → lỗi không được làm job fail.
+        Nhưng phải để lại dấu grep được: marker, bảng, cob_dt, loại lỗi.
         """
         spark = MagicMock()
-        spark.table.return_value.count.return_value = 100
-        spark.sql.side_effect = RuntimeError("not supported")
-        gold_job._run_zorder_if_needed(spark, "lakehouse.gold.mart_customer_360", "mart360", logger)
-        logger.warning.assert_called()
+        spark.sql.side_effect = RuntimeError("[PARSE_SYNTAX_ERROR] Syntax error")
+        ok = gold_job.optimize_written_partition(
+            spark, "lakehouse.gold.mart_customer_360", "2026-09-22", "mart360", logger
+        )
+        assert ok is False
+        logger.warning.assert_called_once()
+        msg = logger.warning.call_args[0][0]
+        assert gold_job.OPTIMIZE_FAILED_MARKER in msg
+        assert "lakehouse.gold.mart_customer_360" in msg
+        assert "2026-09-22" in msg
+        assert "RuntimeError" in msg
 
     def test_all_risk_marts_have_zorder_columns(self):
         for table in ("loan_portfolio_risk", "fraud_risk_txn", "aml_monitoring"):
@@ -359,3 +413,20 @@ class TestZOrder:
     def test_zorder_columns_are_non_empty_lists(self):
         for table, cols in ZORDER_COLUMNS.items():
             assert isinstance(cols, list) and cols, f"{table} has an empty Z-Order column list"
+
+
+def test_no_delta_optimize_syntax_left_in_etl_code():
+    """
+    `OPTIMIZE <bảng> ZORDER BY (...)` là cú pháp Delta Lake — không được quay lại
+    code chạy trên Iceberg. Bắt dạng câu SQL (bảng là f-string, ZORDER BY có
+    ngoặc), không bắt comment nhắc tên lệnh.
+    """
+    import re
+
+    pattern = re.compile(r"\bOPTIMIZE\s+\{|\bZORDER\s+BY\s*\(", re.IGNORECASE)
+    offenders = [
+        str(p.relative_to(PROJECT_ROOT))
+        for p in (PROJECT_ROOT / "code_etl").rglob("*.py")
+        if pattern.search(p.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
