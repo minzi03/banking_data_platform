@@ -7,7 +7,7 @@ Quy ước JDBC connection trong Airflow UI:
   - Port      : 5432
   - Schema    : banking_db
   - Login     : banking_admin
-  - Password  : BankingAdmin123
+  - Password  : $POSTGRES_PASSWORD (docker/.env)
 """
 
 from __future__ import annotations

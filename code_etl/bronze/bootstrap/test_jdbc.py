@@ -1,5 +1,7 @@
 """Quick JDBC test to check source data readability."""
 
+import os
+
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.appName("jdbc-test").getOrCreate()
@@ -18,8 +20,8 @@ for schema_table, pk in tables:
             spark.read.format("jdbc")
             .option("url", "jdbc:postgresql://postgres:5432/banking_db")
             .option("dbtable", f"(SELECT {pk} FROM {schema_table}) t")
-            .option("user", "banking_admin")
-            .option("password", "BankingAdmin123")
+            .option("user", os.environ["POSTGRES_USER"])
+            .option("password", os.environ["POSTGRES_PASSWORD"])
             .option("driver", "org.postgresql.Driver")
             .load()
         )

@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -65,6 +66,11 @@ def get_connector_status(url: str, connector_name: str) -> dict:
 
 
 def main():
+    # Credential của CDC user từ môi trường (docker/.env) — không viết cứng.
+    cdc_user = os.environ.get("CDC_DB_USER", "cdc_user")
+    cdc_password = os.environ.get("CDC_DB_PASSWORD")
+    if not cdc_password:
+        sys.exit("CDC_DB_PASSWORD chưa đặt — Debezium cần mật khẩu của CDC_DB_USER (docker/.env)")
     parser = argparse.ArgumentParser(description="Register Debezium CDC connectors")
     parser.add_argument(
         "--debezium-url", default="http://debezium:8083", help="Debezium Connect URL (default: http://debezium:8083)"
@@ -85,8 +91,8 @@ def main():
                 "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
                 "database.hostname": "postgres",
                 "database.port": "5432",
-                "database.user": "cdc_user",
-                "database.password": "CDCPassword123",
+                "database.user": cdc_user,
+                "database.password": cdc_password,
                 "database.dbname": "banking_db",
                 "topic.prefix": "postgresql.banking",
                 "plugin.name": "pgoutput",
@@ -120,8 +126,8 @@ def main():
                 "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
                 "database.hostname": "postgres",
                 "database.port": "5432",
-                "database.user": "cdc_user",
-                "database.password": "CDCPassword123",
+                "database.user": cdc_user,
+                "database.password": cdc_password,
                 "database.dbname": "banking_db",
                 "topic.prefix": "postgresql.banking",
                 "plugin.name": "pgoutput",
@@ -148,8 +154,8 @@ def main():
                 "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
                 "database.hostname": "postgres",
                 "database.port": "5432",
-                "database.user": "cdc_user",
-                "database.password": "CDCPassword123",
+                "database.user": cdc_user,
+                "database.password": cdc_password,
                 "database.dbname": "banking_db",
                 "topic.prefix": "postgresql.banking",
                 "plugin.name": "pgoutput",

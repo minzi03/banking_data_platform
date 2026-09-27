@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Insert missing seed data directly into PostgreSQL."""
 
+import os
 import random
 from datetime import datetime, timedelta
 
 import psycopg2
 
+# Credential từ môi trường, không có mặc định (KeyError nếu thiếu — cố ý).
 conn = psycopg2.connect(
-    host="postgres", port=5432, dbname="banking_db", user="banking_admin", password="BankingAdmin123"
+    host="postgres",
+    port=5432,
+    dbname="banking_db",
+    user=os.environ["POSTGRES_USER"],
+    password=os.environ["POSTGRES_PASSWORD"],
 )
 conn.autocommit = True
 cur = conn.cursor()

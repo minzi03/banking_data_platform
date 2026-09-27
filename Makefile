@@ -68,13 +68,13 @@ help:
 	@echo "    make infra-destroy   terraform destroy"
 	@echo ""
 	@echo "UI URLs:"
-	@echo "  Airflow:      http://localhost:8080 (admin/admin123)"
-	@echo "  MinIO:        http://localhost:9001 (minioadmin/Minioadmin123)"
+	@echo "  Airflow:      http://localhost:8080 (login: see docker/.env)"
+	@echo "  MinIO:        http://localhost:9001 (login: MINIO_ROOT_* in docker/.env)"
 	@echo "  Spark:        http://localhost:9090"
 	@echo "  Spark Worker: http://localhost:9091"
 	@echo "  Trino:        http://localhost:8085"
 	@echo "  OpenMetadata: http://localhost:8585"
-	@echo "  Superset:     http://localhost:8088 (admin/admin123)"
+	@echo "  Superset:     http://localhost:8088 (login: see docker/.env)"
 	@echo "  Prometheus:   http://localhost:9095"
 	@echo "  Grafana:      http://localhost:3000"
 	@echo ""
@@ -179,7 +179,7 @@ superset:
 	$(DC) up -d superset superset-init
 	@echo ""
 	@echo "Superset starting... http://localhost:8088"
-	@echo "Login: admin / admin123"
+	@echo "Login: admin / SUPERSET_ADMIN_PASSWORD in docker/.env"
 
 superset-logs:
 	$(DC) logs -f superset superset-init --tail=30
@@ -237,27 +237,28 @@ bronze-init:
 
 bronze-bootstrap:
 	@echo "Running Bronze bootstrap (full load from PostgreSQL)..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	# Credential từ môi trường CỦA spark-worker-1 ($$ → $ trong container), không từ Makefile.
+	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/bronze/bootstrap/initial_load.py \
 		--jdbc_url "jdbc:postgresql://postgres:5432/banking_db" \
-		--db_user banking_admin \
-		--db_password BankingAdmin123 \
-		--cob_dt $(COB_DT)
+		--db_user "$$POSTGRES_USER" \
+		--db_password "$$POSTGRES_PASSWORD" \
+		--cob_dt $(COB_DT)'
 	@echo "Bronze bootstrap completed"
 
 bronze-ingest:
 	@echo "Running Bronze incremental ingestion..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/bronze/base_job/ingestion_jdbc.py \
 		--config $(CONFIG) \
 		--cob_dt $(COB_DT) \
 		--jdbc_url "jdbc:postgresql://postgres:5432/banking_db" \
-		--db_user banking_admin \
-		--db_password BankingAdmin123
+		--db_user "$$POSTGRES_USER" \
+		--db_password "$$POSTGRES_PASSWORD"'
 	@echo "Bronze ingestion completed"
 
 # ---------------------------------------------------------------------------

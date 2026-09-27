@@ -6,6 +6,7 @@ read-only so it can be used as an Airflow gate.
 """
 
 import argparse
+import os
 import sys
 
 from pyspark.sql import SparkSession
@@ -63,8 +64,8 @@ def main() -> int:
                     spark.read.format("jdbc")
                     .option("url", "jdbc:postgresql://postgres:5432/banking_db")
                     .option("dbtable", f"(SELECT 1 FROM {source}) s")
-                    .option("user", "banking_admin")
-                    .option("password", "BankingAdmin123")
+                    .option("user", os.environ["POSTGRES_USER"])
+                    .option("password", os.environ["POSTGRES_PASSWORD"])
                     .option("driver", "org.postgresql.Driver")
                     .load()
                     .count()
