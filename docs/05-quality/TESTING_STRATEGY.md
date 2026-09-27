@@ -266,6 +266,18 @@ pytest --collect-only -q tests/            1699   (1689 + 10)
 py -3 -m pytest -q -m "not integration"    1630 passed, 1 skipped, 68 deselected
 ```
 
+Rồi ba PR ngày 2026-09-27, không PR nào thêm test `integration` (deselected giữ 68).
+Số node theo từng merge commit, đo bằng collector:
+TD-16 generator `--as-of` (#60) **+5 hàm → +7 node**; ba lỗi lộ ra sau khi seed lại
+(#62) **+6 hàm → +10 node**; Gold `rewrite_data_files` thay `OPTIMIZE … ZORDER BY`
+(#61) **+7 hàm → +7 node**.
+
+```text
+def test_* count                            828   (810 + 5 + 6 + 7)
+pytest --collect-only -q tests/            1723   (1699 + 7 + 10 + 7)
+py -3 -m pytest -q -m "not integration"    1654 passed, 1 skipped, 68 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -561,10 +573,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1699 node · 810 hàm · 1631 node chạy không cần hạ tầng   (2026-09-27)
-suite       1630 passed · 1 skipped (có chủ ý) · 68 deselected · ~12s
-coverage    76% (75,91%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 810 / 1699 — mọi delta ở §3 giờ nằm trong manifest
+pytest      1723 node · 828 hàm · 1655 node chạy không cần hạ tầng   (2026-09-27)
+suite       1654 passed · 1 skipped (có chủ ý) · 68 deselected · ~14s
+coverage    76% (76,45%) trên governance + code_etl/shared · fail_under 60 đang áp
+manifest    đã promote 828 / 1723 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)

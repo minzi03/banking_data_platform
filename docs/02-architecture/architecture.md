@@ -178,7 +178,7 @@ flowchart LR
         DEV["Developer"]
         GH["GitHub"]
         GHA["GitHub Actions"]
-        TEST["Tests / Validation<br/>810 Automated Tests"]
+        TEST["Tests / Validation<br/>828 Automated Tests"]
         DOCKER["Docker Compose"]
     end
 
@@ -1344,7 +1344,7 @@ The repository contains three primary workflow categories:
 ### Automated Testing
 
 ```text
-810 automated tests
+828 automated tests
 ```
 
 covering areas such as:
@@ -1379,7 +1379,7 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | **Governance**    | Data contracts                 |             33 |
 |                   | Data-quality check types       |              9 |
 | **Orchestration** | Airflow DAGs                   |             21 |
-| **Testing**       | Automated tests                |            810 |
+| **Testing**       | Automated tests                |            828 |
 |                   | dbt data tests                 |            117 |
 | **Platform**      | Docker services                |             29 |
 | **CDC Current**   | Customer rows                  |         10,000 |
