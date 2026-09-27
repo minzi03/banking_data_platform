@@ -16,6 +16,13 @@ on:
 permissions:
   contents: read
 
+# Commit mới trên cùng một PR huỷ run cũ đang chạy — kết quả của nó đã lỗi thời, và
+# job Trino Integration giữ runner ~15 phút. Trên main thì KHÔNG huỷ: mỗi lần merge
+# phải được kiểm đủ. Đo 2026-09-28: một nhánh PR từng có 4 run chạy trọn song song.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ===========================================================================
   # Job 0: phát hiện thay đổi liên quan tới Trino integration
@@ -925,9 +932,14 @@ jobs:
           "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
         echo "::endgroup::"
 
+        # --in-process: 16 job trong MỘT Spark app, mỗi job một session con. Chế độ
+        # một spark-submit mỗi job tốn ~18 s khởi động/job ≈ 5 phút cho vài giây việc
+        # thật trên dữ liệu 1%. Cùng hàm job, cùng dữ liệu (đối chiếu 30 bảng + checksum
+        # trên stack, 2026-09-28). Đường spark-submit từng job vẫn được chạy ở stage
+        # "G2 — per-job CLI smoke" và bước FIXTURE SCD2.
         run_stage "E — Silver process" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/bootstrap/initial_load.py \
-          --cob_dt "${COB_DT}"
+          --cob_dt "${COB_DT}" --in-process
 
         # fact_txn_account, không phải dim_customer: chỉ các bảng fact_* trong
         # Silver mang cob_dt (đã kiểm information_schema), và đây đúng là fact
@@ -952,7 +964,22 @@ jobs:
 
         run_stage "G — Gold process" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/gold/bootstrap/initial_load.py \
-          --cob_dt "${COB_DT}"
+          --cob_dt "${COB_DT}" --in-process
+
+        # Đường production (Airflow): một spark-submit mỗi job, qua main()/argparse của
+        # chính module job. Một job mỗi loại chưa được bước khác chạy theo cách đó
+        # (scd_type2 đã có ở FIXTURE SCD2). Chạy LẠI job đã có dữ liệu cho cùng cob_dt —
+        # và mart_customer_360 chạy trước kiểm grain ở H, nên grain cũng xác nhận việc
+        # chạy lại là idempotent.
+        run_stage "G2 — per-job CLI smoke: silver scd_type1" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/base_job/scd_type1.py \
+          --config code_etl/silver/dims/dim_branch.yml --cob_dt "${COB_DT}"
+        run_stage "G2 — per-job CLI smoke: silver fact_txn" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/base_job/fact_txn.py \
+          --config code_etl/silver/facts/fact_txn_account.yml --cob_dt "${COB_DT}"
+        run_stage "G2 — per-job CLI smoke: gold_job" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/gold/base_job/gold_job.py \
+          --config code_etl/gold/mart360/customer_360.yml --cob_dt "${COB_DT}"
 
         echo "::group::H — Gold state + grain"
         assert_rows "gold.mart_customer_360" \

@@ -9,7 +9,10 @@ Usage:
   spark-submit \\
     --master spark://spark-master:7077 \\
     code_etl/gold/bootstrap/initial_load.py \\
-    --cob_dt 2025-01-01
+    --cob_dt 2025-01-01 [--in-process]
+
+--in-process: mọi job chạy trong CHÍNH app này (mỗi job một session con) thay vì một
+spark-submit mỗi job — bỏ ~20 s khởi động mỗi job. Xem code_etl/shared/spark/in_process.py.
 """
 
 import argparse
@@ -107,6 +110,9 @@ JOB_TYPE_MAP = {
     "risk": "code_etl.gold.base_job.gold_job",
 }
 
+# --in-process: mọi loại job Gold dùng chung gold_job.run_gold_job.
+GOLD_JOB_FILE = Path(__file__).resolve().parent.parent / "base_job" / "gold_job.py"
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Gold Bootstrap Initial Load")
@@ -117,7 +123,24 @@ def parse_arguments():
     # `[Errno 2] No such file or directory: 'spark-submit'`, 0/10 Gold job chạy,
     # trong khi Silver (vốn đã dùng đường dẫn tuyệt đối) chạy 13/13.
     parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit", help="Path to spark-submit command")
+    parser.add_argument(
+        "--in-process",
+        action="store_true",
+        help="chạy mọi job trong app này (một session con mỗi job) thay vì spark-submit từng job",
+    )
     return parser.parse_args()
+
+
+def run_gold_job_in_process(job_def: dict, cob_dt: str, spark, logger) -> bool:
+    """Chạy một job Gold trên session con của app hiện tại (--in-process)."""
+    from spark.in_process import load_job_module, run_job_in_process
+
+    logger.info(f"Running: {job_def['name']} ({job_def['type']}, in-process)")
+    module = load_job_module(GOLD_JOB_FILE)
+    ok = run_job_in_process(spark, module, "run_gold_job", job_def["config"], cob_dt, logger)
+    if ok:
+        logger.info(f"  ✓ {job_def['name']} completed successfully")
+    return ok
 
 
 def run_gold_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
@@ -174,6 +197,12 @@ def main():
 
     results = {"success": [], "failed": []}
 
+    spark = None
+    if args.in_process:
+        from spark.spark_session import get_spark_session
+
+        spark = get_spark_session("gold-bootstrap-in-process")
+
     for job_def in GOLD_JOB_ORDER:
         # Check if dependencies are met
         deps = job_def.get("depends_on", [])
@@ -184,7 +213,10 @@ def main():
                 results["failed"].append(f"{job_def['name']} (deps: {unmet})")
                 continue
 
-        success = run_gold_job(job_def, args.cob_dt, args.spark_submit, logger)
+        if spark is not None:
+            success = run_gold_job_in_process(job_def, args.cob_dt, spark, logger)
+        else:
+            success = run_gold_job(job_def, args.cob_dt, args.spark_submit, logger)
         if success:
             results["success"].append(job_def["name"])
         else:
@@ -206,6 +238,9 @@ def main():
     logger.info("")
     logger.info(f"Total: {len(results['success'])}/{len(GOLD_JOB_ORDER)} jobs succeeded")
     logger.info(f"Failed: {len(results['failed'])}")
+
+    if spark is not None:
+        spark.stop()
 
     if results["failed"]:
         sys.exit(1)
