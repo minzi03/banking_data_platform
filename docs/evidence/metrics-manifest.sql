@@ -409,8 +409,11 @@ SELECT version() AS value;
 -- nó đổi nghĩa hoàn toàn: cả hai engine chạy session UTC và cùng derive ngày
 -- nghiệp vụ tường minh, nên con số này chỉ nói "bao nhiêu dòng thực sự rơi vào
 -- ngày lịch khác giữa ICT và UTC" — hệ quả tất yếu của UTC+7, KHÔNG phải bug.
--- Kỳ vọng ~29% (7/24). Nếu nó bằng 0 thì mới đáng ngờ: nghĩa là conversion
--- không có tác dụng.
+-- Nó ĐÚNG BẰNG số giao dịch lúc 00:00–06:59 giờ VN (ngày UTC là hôm trước) —
+-- đo 2026-09-27: 70,100 = 70,100. Nên tỉ lệ phụ thuộc phân bố giờ: 7/24 ≈ 29%
+-- chỉ khi giờ đều, còn generator có cao điểm 9–11h giờ VN (TD-17) nên ~6%. Số cũ
+-- 263,126 (~22%) là dữ liệu trước TD-17, khi giờ VN bị ghi như UTC. Nếu nó bằng
+-- 0 thì mới đáng ngờ: nghĩa là conversion không có tác dụng.
 SELECT
     COUNT(*)                                                      AS total_rows,
     COUNT_IF(CAST(txn_date AS DATE)
