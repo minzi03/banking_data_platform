@@ -10,7 +10,23 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
+
 from trino.dbapi import connect
+
+
+def trino_auth_kwargs(user: str) -> dict:
+    """ADR-0016: có TRINO_PASSWORD → HTTPS + mật khẩu (verify bằng TRINO_CA_CERT); không có → HTTP như trước."""
+    password = os.environ.get("TRINO_PASSWORD")
+    if not password:
+        return {}
+    from trino.auth import BasicAuthentication
+
+    return {
+        "http_scheme": "https",
+        "auth": BasicAuthentication(user, password),
+        "verify": os.environ.get("TRINO_CA_CERT") or True,
+    }
 from datetime import datetime, timedelta
 import io
 
@@ -70,11 +86,15 @@ st.markdown("""
 @st.cache_resource
 def get_connection():
     """Create Trino connection"""
+    # Trước đây: host="trino", port=8085 — 8085 là cổng ánh xạ ra HOST, trong mạng
+    # docker Trino nghe 8080. Giờ đọc biến môi trường như mọi client khác.
+    user = os.environ.get("TRINO_USER", "streamlit")
     return connect(
-        host="trino",
-        port=8085,
-        user="streamlit",
-        catalog="iceberg"
+        host=os.environ.get("TRINO_HOST", "trino"),
+        port=int(os.environ.get("TRINO_PORT", "8080")),
+        user=user,
+        catalog="iceberg",
+        **trino_auth_kwargs(user),
     )
 
 def query_data(sql: str) -> pd.DataFrame:

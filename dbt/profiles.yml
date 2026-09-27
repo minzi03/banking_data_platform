@@ -28,15 +28,19 @@ banking:
       timeout_seconds: 300
 
     # Docker target (when running inside Docker network)
+    # ADR-0016: có TRINO_PASSWORD → xác thực mật khẩu (dbt-trino gọi là `ldap`)
+    # qua HTTPS 8443, verify bằng cert của stack. Không có → như trước.
     docker:
       type: trino
-      method: none
+      method: "{{ 'ldap' if env_var('TRINO_PASSWORD', '') else 'none' }}"
+      http_scheme: "{{ 'https' if env_var('TRINO_PASSWORD', '') else 'http' }}"
       host: trino
-      port: 8080
+      port: "{{ 8443 if env_var('TRINO_PASSWORD', '') else 8080 }}"
+      cert: "{{ env_var('TRINO_CA_CERT', '/usr/src/dbt/.trino/trino.pem') }}"
       catalog: iceberg
       schema: semantic
       user: dbt
-      password: ""
+      password: "{{ env_var('TRINO_PASSWORD', '') }}"
       threads: 4
       timeout_seconds: 300
 

@@ -261,6 +261,22 @@ Trino enforces file-based access control. Rules live in
 
 Any other user name can reach no data at all.
 
+**Authentication (ADR-0016) — being rolled out in two steps.** Until step 2
+lands, Trino still trusts the user name the client sends. Step 1 (now) lets
+every client authenticate when `TRINO_PASSWORD` is set; generate the secrets
+once per machine:
+
+```bash
+py -3 scripts/bootstrap_trino_auth.py          # everything → docker/secrets/trino/ (gitignored)
+py -3 scripts/bootstrap_trino_auth.py --check  # exit 1 if missing or out of sync with governance/rbac.py
+```
+
+It prints key *names* only, never values, and keeps existing passwords unless
+you pass `--rotate`. Each service gets a file with only its own password
+(`env/<user>.env`); `passwords.env` holds them all for host-side tools and is
+mounted nowhere. Nothing is written to `docker/.env` — nine services load that
+file whole and would see every password.
+
 **Query as a specific user** — the CLI defaults to user `trino` (admin):
 
 ```bash

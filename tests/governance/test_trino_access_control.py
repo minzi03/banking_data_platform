@@ -426,13 +426,14 @@ class TestRbacAgreesWithRules:
 CLIENT_USERS = [
     ("dbt/profiles.yml", r"^\s*user:\s*(\S+)", "dbt"),
     ("docker/dbt/docker-compose.dbt.yml", r"DBT_TRINO_USER=(\S+)", "dbt"),
-    ("docker/superset/add_trino_connection.py", r"trino://([^@]+)@", "superset"),
+    # ADR-0016: client đọc user từ TRINO_USER, mặc định là user của chính nó.
+    ("docker/superset/add_trino_connection.py", r'"TRINO_USER",\s*"([^"]+)"', "superset"),
     ("api/main.py", r'"TRINO_USER",\s*"([^"]+)"', "customer_api"),
     ("docker/docker-compose.yml", r"TRINO_USER=(\S+)", "customer_api"),
-    ("streamlit/app.py", r'\buser="([^"]+)"', "streamlit"),
-    ("ml/pipeline/churn_prediction.py", r'\buser="([^"]+)"', "ml"),
-    ("ml/pipeline/credit_scoring.py", r'\buser="([^"]+)"', "ml"),
-    ("ml/monitoring/drift_detection.py", r'\buser="([^"]+)"', "ml"),
+    ("streamlit/app.py", r'"TRINO_USER",\s*"([^"]+)"', "streamlit"),
+    ("ml/pipeline/churn_prediction.py", r'"TRINO_USER",\s*"([^"]+)"', "ml"),
+    ("ml/pipeline/credit_scoring.py", r'"TRINO_USER",\s*"([^"]+)"', "ml"),
+    ("ml/monitoring/drift_detection.py", r'"TRINO_USER",\s*"([^"]+)"', "ml"),
     ("docker/monitoring/exporters/freshness_exporter.py", r'"TRINO_USER",\s*"([^"]+)"', "freshness_exporter"),
     ("scripts/generate_metrics_manifest.py", r'\buser: str = "([^"]+)"', "manifest_collector"),
 ]
@@ -448,4 +449,6 @@ class TestClientsUseTheirOwnUser:
 
     def test_no_hardcoded_trino_header_user(self):
         text = (REPO_ROOT / "docker/monitoring/exporters/freshness_exporter.py").read_text(encoding="utf-8")
-        assert re.findall(r'"X-Trino-User":\s*([^,}\n]+)', text) == ["TRINO_USER", "TRINO_USER"]
+        # ADR-0016: header dựng ở một chỗ (_auth_headers) cho cả request đầu lẫn nextUri.
+        found = re.findall(r'"X-Trino-User":\s*([^,}\n]+)', text)
+        assert found and set(found) == {"TRINO_USER"}, found

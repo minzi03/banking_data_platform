@@ -8,9 +8,24 @@ from sklearn.metrics import accuracy_score,f1_score,roc_auc_score
 from sklearn.preprocessing import LabelEncoder
 import xgboost as xgb
 TRACKING_URI=os.getenv("MLFLOW_TRACKING_URI","http://mlflow:5000")
+
+
+def trino_auth_kwargs(user: str) -> dict:
+    """ADR-0016: có TRINO_PASSWORD → HTTPS + mật khẩu (verify bằng TRINO_CA_CERT); không có → HTTP như trước."""
+    password = os.environ.get("TRINO_PASSWORD")
+    if not password:
+        return {}
+    from trino.auth import BasicAuthentication
+
+    return {
+        "http_scheme": "https",
+        "auth": BasicAuthentication(user, password),
+        "verify": os.environ.get("TRINO_CA_CERT") or True,
+    }
 FEATURES=["total_accounts","total_cards","total_loans","total_deposit_balance","total_loan_outstanding","aum_total","txn_count_30d","txn_amount_30d","days_since_last_txn","interaction_count_90d","rfm_recency_score","rfm_frequency_score","rfm_monetary_score"]
 def load_features(cob_dt):
-    conn=connect(host="trino",port=8080,user="ml",catalog="iceberg",schema="serving")
+    user=os.getenv("TRINO_USER","ml")
+    conn=connect(host=os.getenv("TRINO_HOST","trino"),port=int(os.getenv("TRINO_PORT","8080")),user=user,catalog="iceberg",schema="serving",**trino_auth_kwargs(user))
     cols=",".join(FEATURES)
     sql=f"SELECT customer_id,customer_segment,{cols},churn_flag FROM mart_customer_360_current WHERE cob_dt=DATE ''{cob_dt}''"
     df=pd.read_sql(sql,conn)

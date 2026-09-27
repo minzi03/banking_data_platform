@@ -14,13 +14,26 @@ Metrics:
 import http.server
 import json
 import urllib.request
-import time
+import base64
 import os
+import ssl
+import time
 
 TRINO_HOST = os.getenv("TRINO_HOST", "trino")
 TRINO_PORT = os.getenv("TRINO_PORT", "8080")
 TRINO_USER = os.getenv("TRINO_USER", "freshness_exporter")
-TRINO_URL = f"http://{TRINO_HOST}:{TRINO_PORT}/v1/statement"
+TRINO_PASSWORD = os.getenv("TRINO_PASSWORD")  # ADR-0016: có → HTTPS + mật khẩu
+TRINO_SCHEME = "https" if TRINO_PASSWORD else "http"
+TRINO_URL = f"{TRINO_SCHEME}://{TRINO_HOST}:{TRINO_PORT}/v1/statement"
+_SSL_CONTEXT = ssl.create_default_context(cafile=os.getenv("TRINO_CA_CERT")) if TRINO_PASSWORD else None
+
+
+def _auth_headers() -> dict:
+    headers = {"X-Trino-User": TRINO_USER}
+    if TRINO_PASSWORD:
+        token = base64.b64encode(f"{TRINO_USER}:{TRINO_PASSWORD}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
+    return headers
 FRESHNESS_TABLES = [
     "lakehouse.silver.dim_customer_current",
     "lakehouse.silver.dim_account_current",
@@ -42,14 +55,11 @@ def query_trino(sql: str) -> list:
     req = urllib.request.Request(
         TRINO_URL,
         data=data_bytes,
-        headers={
-            "Content-Type": "text/plain",
-            "X-Trino-User": TRINO_USER,
-        },
+        headers={"Content-Type": "text/plain", **_auth_headers()},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30, context=_SSL_CONTEXT) as resp:
             result = json.loads(resp.read().decode("utf-8"))
 
         columns = []
@@ -72,7 +82,7 @@ def query_trino(sql: str) -> list:
             time.sleep(0.3)
             next_req = urllib.request.Request(
                 next_uri,
-                headers={"X-Trino-User": TRINO_USER},
+                headers=_auth_headers(),
             )
             with urllib.request.urlopen(next_req, timeout=30) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
