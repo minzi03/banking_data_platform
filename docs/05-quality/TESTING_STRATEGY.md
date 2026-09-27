@@ -278,6 +278,24 @@ pytest --collect-only -q tests/            1723   (1699 + 7 + 10 + 7)
 py -3 -m pytest -q -m "not integration"    1654 passed, 1 skipped, 68 deselected
 ```
 
+Rồi xác thực Trino (ADR-0016, #64 + #65) thêm **25 hàm → 35 node**, đo bằng diff ID node
+giữa commit merge #63 và #65:
+
+| File | Hàm | Node |
+|---|---:|---:|
+| `tests/governance/test_bootstrap_trino_auth.py` | +13 | +13 |
+| `tests/governance/test_trino_clients_can_authenticate.py` | +10 | +15 |
+| `tests/governance/test_trino_access_control.py` — mỗi service chỉ nạp mật khẩu của nó | +2 | +7 −1 |
+| `test_docs_links_resolve` — tự parametrize thêm ADR-0016 | 0 | +1 |
+
+Node −1 là kiểm tra `TRINO_USER` trên cả file compose, thay bằng kiểm tra theo từng service.
+
+```text
+def test_* count                            853   (828 + 25)
+pytest --collect-only -q tests/            1758   (1723 + 35)
+py -3 -m pytest -q -m "not integration"    1689 passed, 1 skipped, 68 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -573,10 +591,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1723 node · 828 hàm · 1655 node chạy không cần hạ tầng   (2026-09-27)
-suite       1654 passed · 1 skipped (có chủ ý) · 68 deselected · ~14s
+pytest      1758 node · 853 hàm · 1690 node chạy không cần hạ tầng   (2026-09-27)
+suite       1689 passed · 1 skipped (có chủ ý) · 68 deselected · ~19s
 coverage    76% (76,45%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 828 / 1723 — mọi delta ở §3 giờ nằm trong manifest
+manifest    đã promote 853 / 1758 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
