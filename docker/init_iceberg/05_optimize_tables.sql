@@ -425,14 +425,15 @@ ALTER TABLE lakehouse.gold.customer_card_summary_current SET TBLPROPERTIES (
 
 -- =============================================================================
 -- Z-ORDERING for frequently filtered columns
--- Run OPTIMIZE with ZORDER after data load for better query performance
+-- `OPTIMIZE ... ZORDER BY` is Delta Lake syntax; Iceberg rejects it.
+-- gold_job.py sorts each written partition itself (optimize_written_partition,
+-- columns in ZORDER_COLUMNS). Manual equivalent, via Spark SQL:
 -- =============================================================================
 
--- Note: OPTIMIZE is a DML operation, run via Spark SQL
--- Example:
--- OPTIMIZE lakehouse.gold.mart_customer_360 ZORDER BY (customer_id);
--- OPTIMIZE lakehouse.gold.rfm_segment ZORDER BY (rfm_segment, customer_id);
--- OPTIMIZE lakehouse.gold.churn_prediction ZORDER BY (churn_risk, customer_id);
+-- CALL lakehouse.system.rewrite_data_files(
+--   table => 'gold.rfm_segment', strategy => 'sort',
+--   sort_order => 'zorder(rfm_segment,customer_id)',
+--   where => "cob_dt = '2026-09-22'", options => map('rewrite-all', 'true'));
 
 -- =============================================================================
 -- END OF OPTIMIZATION SCRIPT

@@ -106,41 +106,9 @@ def rewrite_data_files(spark, table: str, strategy: str = "binpack") -> None:
             )
         )
     """)
-
-    # Run Z-Order after compaction for Gold tables
-    if "gold." in table:
-        _run_zorder_after_compaction(spark, table)
-
-
-def _run_zorder_after_compaction(spark, table: str) -> None:
-    """
-    Run Z-Order after compaction for Gold tables.
-    This co-locates data by customer_id for faster queries.
-    """
-    table_name = table.split(".")[-1] if "." in table else table
-
-    # Z-Order columns for Gold tables
-    zorder_columns = {
-        "mart_customer_360": "customer_id",
-        "rfm_segment": "rfm_segment, customer_id",
-        "churn_prediction": "churn_risk, customer_id",
-        "cross_sell_segment": "cross_sell_score, customer_id",
-        "campaign_target": "campaign_type, customer_id",
-    }
-
-    if table_name not in zorder_columns:
-        return
-
-    try:
-        cols = zorder_columns[table_name]
-        logger.info("Running Z-Order on %s by (%s)", table, cols)
-        spark.sql(f"""
-            OPTIMIZE {table}
-            ZORDER BY ({cols})
-        """)
-    except Exception as e:
-        # Z-Order failure is non-fatal
-        logger.warning("Z-Order failed for %s: %s", table, e)
+    # Z-order cho bảng Gold không làm ở đây: gold_job.py sắp xếp partition
+    # ngay khi ghi (optimize_written_partition). Bước OPTIMIZE … ZORDER BY cũ
+    # ở đây là cú pháp Delta Lake, luôn thất bại trên Iceberg.
 
 
 def expire_snapshots(spark, table: str, retain_days: int = 7, min_snapshots: int = 3) -> None:
