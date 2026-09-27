@@ -101,9 +101,10 @@ class TestEveryConnIdIsProvisioned:
             for src in core-banking card-crm; do
               airflow connections add "postgres-$${src}"
         """
-        provisioned = set(re.findall(r"""airflow connections add ["']([a-z0-9-]+)["']""", compose_text))
+        creates = r"""(?:airflow connections add|upsert_pg_conn)"""
+        provisioned = set(re.findall(creates + r""" ["']([a-z0-9-]+)["']""", compose_text))
         loop_vars = dict((var, items.split()) for var, items in re.findall(r"for (\w+) in ([^;\n]+); do", compose_text))
-        for tmpl in re.findall(r"""airflow connections add ["']([^"']*\$\$\{\w+\}[^"']*)["']""", compose_text):
+        for tmpl in re.findall(creates + r""" ["']([^"']*\$\$\{\w+\}[^"']*)["']""", compose_text):
             var = re.search(r"\$\$\{(\w+)\}", tmpl).group(1)
             for item in loop_vars.get(var, []):
                 provisioned.add(re.sub(r"\$\$\{\w+\}", item, tmpl))
@@ -120,6 +121,26 @@ class TestEveryConnIdIsProvisioned:
             f"init đang tạo: {sorted(provisioned)}\n"
             "Trên môi trường sạch, thiếu conn_id ở top-level làm DAG lỗi import."
         )
+
+    def test_connections_are_upserted_and_failures_are_loud(self, compose_text):
+        """
+        `connections add … || true` trên Airflow DB đã có connection: add lỗi, bị nuốt, và
+        connection giữ mật khẩu cũ sau khi POSTGRES_PASSWORD được đổi. Mỗi add phải đi sau
+        một delete của cùng conn_id, và lỗi add không được nuốt.
+        """
+        adds = list(
+            re.finditer(
+                r"airflow connections add (\S+)(.*?)(?=\n\s*(?:\}|airflow|upsert_pg_conn|for |done|echo))",
+                compose_text,
+                re.DOTALL,
+            )
+        )
+        assert adds, "không tìm thấy `airflow connections add` — regex hỏng?"
+        for m in adds:
+            conn = m.group(1)
+            before = compose_text[: m.start()].rstrip().splitlines()[-1]
+            assert f"airflow connections delete {conn}" in before, f"add {conn} không đi sau delete — không phải upsert"
+            assert "|| true" not in m.group(2), f"add {conn} nuốt lỗi bằng `|| true`"
 
 
 # ---------------------------------------------------------------------------

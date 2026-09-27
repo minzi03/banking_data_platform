@@ -462,6 +462,13 @@ on the same `spark-defaults.conf` credential path as every batch job.
     and reads through S3A/S3FileIO; the old MinIO credentials are rejected.
   - The script now passes the new values to compose explicitly (tested with a stale
     shell variable) and prints the rollback command when a step fails.
+  - **Airflow connections.** `airflow-init` created its five `postgres-*` connections
+    with `connections add … || true`. On an existing Airflow database the add failed,
+    the error was swallowed, and the stored password stayed old. Measured after the
+    rotation: all five connections failed to log in. `airflow-init` now upserts them
+    (delete, then add) and fails if an add fails. After re-running it, all five log in,
+    and a second run also succeeds (5 adds, exit 0).
+    `test_connections_are_upserted_and_failures_are_loud` fails on the old compose.
 - CI-only values (CI compose, workflow env) are throwaway and stay as they are.
 
 ---

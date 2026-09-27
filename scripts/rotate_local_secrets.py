@@ -93,7 +93,7 @@ PENDING = {
     "OM_MYSQL_ROOT_PASSWORD": "ALTER USER root trong om-mysql",
 }
 FOLLOW_UPS = (
-    "Connection `postgres` trong Airflow được airflow-init tạo với POSTGRES_PASSWORD cũ — cập nhật khi Airflow chạy.",
+    "Connection postgres-* trong Airflow DB giữ POSTGRES_PASSWORD cũ — chạy lại: docker compose up --no-deps airflow-init (upsert).",
     "Connector Debezium đã đăng ký giữ CDC_DB_PASSWORD cũ — đăng ký lại (code_etl/cdc/register_connectors.py).",
 )
 

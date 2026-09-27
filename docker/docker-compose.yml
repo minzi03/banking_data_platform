@@ -497,38 +497,34 @@ services:
           --lastname User \
           --role Admin \
           --email $${AIRFLOW_ADMIN_EMAIL}
-        # Create Airflow connections for JDBC
-        airflow connections add 'postgres-banking' \
-          --conn-type 'postgres' \
-          --conn-host 'postgres' \
-          --conn-port '5432' \
-          --conn-schema "${POSTGRES_DB}" \
-          --conn-login "${POSTGRES_USER}" \
-          --conn-password "${POSTGRES_PASSWORD}" || true
+        # Connection JDBC — UPSERT: xoá rồi tạo lại, để connection luôn mang mật
+        # khẩu HIỆN TẠI. Trước đây `connections add … || true`: trên Airflow DB đã
+        # có connection thì add lỗi và bị nuốt, nên sau khi đổi POSTGRES_PASSWORD
+        # (scripts/rotate_local_secrets.py) connection giữ mật khẩu cũ và mọi
+        # flag task / sensor chết lúc xác thực. Add lỗi giờ làm init lỗi.
+        upsert_pg_conn() {
+          airflow connections delete "$$1" >/dev/null 2>&1 || true
+          airflow connections add "$$1" \
+            --conn-type 'postgres' \
+            --conn-host 'postgres' \
+            --conn-port '5432' \
+            --conn-schema "${POSTGRES_DB}" \
+            --conn-login "${POSTGRES_USER}" \
+            --conn-password "${POSTGRES_PASSWORD}" || { echo "tạo connection $$1 thất bại"; exit 1; }
+        }
+        upsert_pg_conn 'postgres-banking'
         # postgres-etl: conn_id mà MỌI DAG dùng (etl_flag + các SqlSensor).
         # Trước đây init chỉ tạo 'postgres-banking', nên trên môi trường sạch
         # mọi sensor/flag task chết: "The conn_id `postgres-etl` isn't defined".
         # Đã runtime-proven trong lần clean rebuild.
-        airflow connections add 'postgres-etl' \
-          --conn-type 'postgres' \
-          --conn-host 'postgres' \
-          --conn-port '5432' \
-          --conn-schema "${POSTGRES_DB}" \
-          --conn-login "${POSTGRES_USER}" \
-          --conn-password "${POSTGRES_PASSWORD}" || true
+        upsert_pg_conn 'postgres-etl'
         # Ba conn_id per-source mà 3 DAG Bronze JDBC dùng. Thiếu chúng thì DAG
         # KHÔNG chỉ fail lúc chạy — nó fail ngay lúc import (conn được đọc ở
         # top-level để sinh task), nên DAG biến mất khỏi UI thay vì hiện màu đỏ.
         # Cả ba trỏ cùng một PostgreSQL; tách theo source domain để phân quyền
         # sau này không phải sửa DAG.
         for src in core-banking card-crm digital-banking; do
-          airflow connections add "postgres-$${src}" \
-            --conn-type 'postgres' \
-            --conn-host 'postgres' \
-            --conn-port '5432' \
-            --conn-schema "${POSTGRES_DB}" \
-            --conn-login "${POSTGRES_USER}" \
-            --conn-password "${POSTGRES_PASSWORD}" || true
+          upsert_pg_conn "postgres-$${src}"
         done
         echo "Airflow initialization complete"
     environment:
