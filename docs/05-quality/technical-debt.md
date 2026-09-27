@@ -1349,8 +1349,9 @@ multi-arch indexes; only the cached `linux/amd64` manifest could be pushed.
 
 ## TD-16 — Generated transaction dates drift away from `cob_dt`, so 30-day KPIs read zero
 
-**Status:** fixed in the generator and guarded in CI (2026-09-27). **Open: the
-running local stack still holds the old seed until it is re-seeded.**
+**Status:** fixed and verified on the stack (2026-09-27): re-seeded with
+`--as-of 2026-09-22`, Bronze → Silver → Gold → dbt rebuilt. The re-seed exposed
+three more defects, fixed in the follow-up PR (below).
 
 Measured on the stack for `cob_dt` 2026-09-22 (2026-09-26):
 
@@ -1419,6 +1420,42 @@ hour-based features. That is its own decision.
 ```text
 [x] generated dates anchored to --as-of; newest transaction = as_of, never after
 [x] CI seeds with as_of = the cob_dt it loads, and asserts both properties
-[ ] local stack re-seeded with --as-of = cob_dt and the pipeline re-run;
+[x] local stack re-seeded with --as-of = cob_dt and the pipeline re-run;
     txn_count_30d > 0 and a non-empty 'Active' tier observed
 ```
+
+### Verified on the stack (2026-09-27, cob_dt 2026-09-22)
+
+```text
+source (Postgres)   newest txn 2026-09-22 16:59 UTC = 23:59 ICT   (all three txn tables)
+bronze              1,200,000 / 600,000 / 500,000 txns, newest business date 2026-09-22
+silver              16/16 jobs · 0 transactions after cob_dt
+gold                14/14 jobs
+                                    before     after
+customers with txn_count_30d > 0        0      9,657 / 10,000
+txn_count_30d (sum)                     0    131,187
+churn tier 'Active'                     0      9,655
+```
+
+### What the re-seed exposed
+
+- **dbt `accepted_values` were wrong, and nothing could show it.** `churn_risk`
+  listed High/Medium/Low, but Gold also emits `'Active'`. `aum_bucket` lacked
+  `'VIP'` and still listed `'0-50M'`, `'1B+'`… that no SQL emits. Both passed
+  only because the data never produced those values: no customer was Active
+  while the dates drifted, and none was VIP. `dbt build` failed 3/117 on the
+  re-seeded data. Now the lists match the SQL, and
+  `tests/gold/test_serving_accepted_values.py` compares every string
+  `accepted_values` list with the THEN/ELSE literals of `CASE … END AS <column>`
+  in Gold SQL, with no data needed. `dbt build` is 117/117 afterwards.
+- **A full-size seed never finished.** `generate_merchants` looped forever:
+  when a name was taken it changed only the A–E letter of an exhausted
+  (prefix, suffix) pair. 2,000 merchants against a capacity of 2,322 names.
+  CI seeds 1% (20 merchants) and never reaches it. `merchant`,
+  `source_table_registry` and the AML tables stayed empty. No pipeline reads
+  them, which is why the rebuild still worked.
+- **CRM ended 7 months before the newest transaction**, so
+  `interaction_count_90d` was 0 for everyone even after anchoring. The CRM,
+  support-ticket and device-`last_seen` windows now end at `as_of`, keeping a
+  two-year span. Tested in the generator; **not yet observed on the stack,
+  which needs another re-seed.**
