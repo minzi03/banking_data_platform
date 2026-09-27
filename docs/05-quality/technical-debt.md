@@ -309,6 +309,24 @@ has to be queried from the platform.
 
 **Status:** fixed (2026-09-14)
 
+**Postgres init roles (2026-09-27).** `docker/init_postgres/` created four `LOGIN`
+roles with passwords written into the SQL. `cdc_user` was in `05-cdc-setup.sql`;
+`etl_user`, `analytics_user` and `readonly_user` were in `05_security.sql`. The
+runtime secret scan did not read `.sql`, so it did not see them. No service logs in
+as the last three: they are permission groups, and they are now `NOLOGIN`.
+`cdc_user` does need to log in (Debezium). `05-cdc-setup.sh` sets its password from
+`CDC_DB_PASSWORD` with psql's `\getenv`; if the variable is unset, the role is
+`NOLOGIN`, so there is no default. Checked on a throwaway Postgres 15 container:
+
+- With the variable, `cdc_user` logs in over scram, and a wrong password is
+  rejected.
+- Without it, `cdc_user` is `NOLOGIN`.
+- The three group roles have `rolcanlogin = false` in both cases.
+
+Guard: `tests/governance/test_postgres_init_roles.py`, 3 of 4 tests fail on the old
+files. These scripts run only on a fresh data directory, so **an existing stack
+keeps the old `LOGIN` roles and passwords until they are rotated.**
+
 **Risk assessment (after investigation):**
 
 ```text

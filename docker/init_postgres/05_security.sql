@@ -2,6 +2,9 @@
 -- PostgreSQL Security Configuration — Banking Data Platform
 -- =============================================================================
 -- Creates dedicated roles for different access levels
+-- Các role dưới đây là NOLOGIN: nhóm quyền để GRANT cho người dùng thật, không
+-- phải tài khoản đăng nhập. Bản cũ tạo chúng LOGIN với mật khẩu viết cứng trong
+-- file này; không service nào đăng nhập bằng chúng.
 -- Enables audit logging
 -- =============================================================================
 
@@ -13,7 +16,7 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'etl_user') THEN
-        CREATE ROLE etl_user WITH LOGIN PASSWORD 'ETLPassword123';
+        CREATE ROLE etl_user NOLOGIN;
     END IF;
 END
 $$;
@@ -30,7 +33,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA digital_banking GRANT ALL ON TABLES TO etl_us
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'analytics_user') THEN
-        CREATE ROLE analytics_user WITH LOGIN PASSWORD 'AnalyticsPassword123';
+        CREATE ROLE analytics_user NOLOGIN;
     END IF;
 END
 $$;
@@ -52,7 +55,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA opslakehouse GRANT SELECT ON TABLES TO analyt
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'readonly_user') THEN
-        CREATE ROLE readonly_user WITH LOGIN PASSWORD 'ReadOnlyPassword123';
+        CREATE ROLE readonly_user NOLOGIN;
     END IF;
 END
 $$;
