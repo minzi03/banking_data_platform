@@ -1674,3 +1674,51 @@ Vietnam.
 
 - `aml_alert.txn_date` uses a uniform hour of day, so it has no peaks to shift.
   `_random_datetime` (uniform over the day) is also unaffected.
+
+---
+
+## TD-18 — Replication slots kept WAL without limit
+
+**Status:** fixed in configuration (2026-09-27). The three orphaned slots on the local
+stack are still there: dropping them is the user's call (RUNBOOK §12).
+
+### Measured (2026-09-27, before CDC verification)
+
+```text
+slot                     active  retained WAL  wal_status
+debezium_slot_card       f       3,024 MB      extended
+debezium_slot_core       f       3,597 MB      extended
+debezium_slot_digital    f       2,729 MB      extended
+pg_wal directory                 3,616 MB      max_wal_size 1GB, max_slot_wal_keep_size -1
+```
+
+- **Orphaned.** No file in the repo, and nothing in its Git history, uses the name
+  `debezium_slot_*`. `register_connectors.py` and `cdc_register_connectors_dag.py`
+  both use `debezium_core_banking`, `debezium_card_crm` and `debezium_digital_banking`.
+  Nothing reads these three slots, and they grow with every write. One re-seed alone
+  adds about 3.6 GB.
+- **Structural.** Kafka has no volume, so Debezium's connector configs and offsets are
+  lost whenever Kafka restarts. Even a correctly named slot is left behind every time
+  the CDC stack stops. With `max_slot_wal_keep_size = -1` (the default), that ends in
+  a full disk.
+
+### Fix
+
+- `05-cdc-setup.sh`: `ALTER SYSTEM SET max_slot_wal_keep_size = '4GB'`. A slot over the
+  cap becomes `wal_status = lost` instead of filling the disk. Debezium then fails
+  loudly, and re-registering takes a new snapshot. Because Kafka is ephemeral, an old
+  slot preserves nothing that a new snapshot does not.
+- Checked on a throwaway Postgres 15 running the whole init directory:
+  `SHOW max_slot_wal_keep_size` returns `4GB`, `wal_level` is `logical`, and there
+  were 0 psql errors.
+- RUNBOOK §12 covers checking retention, applying the cap to an existing stack, and
+  dropping lost or orphaned slots.
+- Guard: `tests/governance/test_postgres_cdc_setup.py`. The cap must be set, positive
+  and finite (this fails on the old file), and the script and the DAG must use the same
+  slot names.
+
+### Not done here
+
+- Kafka still has no volume. Persisting it (topics, connect configs, offsets) would
+  let Debezium resume instead of re-snapshotting, at the cost of disk and state to
+  manage. That is a separate decision.

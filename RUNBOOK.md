@@ -436,6 +436,33 @@ lists these at the end:
 - OpenMetadata's MySQL passwords.
 - Debezium connectors registered with the old `CDC_DB_PASSWORD`.
 
+### 12. Replication slots (CDC)
+
+A replication slot keeps WAL until its consumer reads it. With Postgres's default
+`max_slot_wal_keep_size = -1`, a slot that nobody reads keeps WAL forever. That
+happens whenever the CDC stack is down, and Kafka has no volume, so Debezium's
+offsets do not survive a restart anyway. On 2026-09-27, three orphaned
+`debezium_slot_*` slots, a name nothing in the repo uses, held 3.6 GB. See TD-18.
+
+Check how much WAL each slot holds:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT slot_name, active, wal_status, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained FROM pg_replication_slots ORDER BY 1"'
+```
+
+New stacks get a 4 GB cap from `05-cdc-setup.sh`. Apply it once on an existing stack.
+This is a reload-level setting, so no restart is needed:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "ALTER SYSTEM SET max_slot_wal_keep_size = '"'"'4GB'"'"'" -c "SELECT pg_reload_conf()"'
+```
+
+A slot over the cap becomes `wal_status = lost`, and its connector fails with a clear
+error. Re-register the connector: Debezium drops nothing by itself, so drop the lost
+slot first, and the connector takes a new snapshot. The slot names in use are the
+`slot.name` values in `code_etl/cdc/register_connectors.py`; a test keeps the
+Airflow DAG in sync with them.
+
 ---
 
 ## 🐛 Troubleshooting

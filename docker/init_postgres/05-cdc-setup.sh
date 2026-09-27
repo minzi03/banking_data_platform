@@ -12,6 +12,13 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'S
 ALTER SYSTEM SET wal_level = logical;
 ALTER SYSTEM SET max_replication_slots = 4;
 ALTER SYSTEM SET max_wal_senders = 4;
+-- Trần WAL mà MỘT replication slot được giữ. Mặc định -1 = không giới hạn: slot
+-- không ai đọc giữ WAL mãi. Đo 2026-09-27: ba slot mồ côi (không code nào dùng
+-- tên đó) giữ 3.6 GB và tăng theo mỗi lần seed. Vượt trần thì slot bị vô hiệu
+-- (wal_status = lost) thay vì làm đầy đĩa — Debezium báo lỗi rõ, đăng ký lại
+-- connector sẽ snapshot lại. Kafka không có volume, nên offset vốn đã mất khi
+-- Kafka khởi động lại; slot cũ không giữ được gì mà snapshot mới không có.
+ALTER SYSTEM SET max_slot_wal_keep_size = '4GB';
 
 DO $$
 BEGIN
