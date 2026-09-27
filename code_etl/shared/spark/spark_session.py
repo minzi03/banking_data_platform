@@ -34,8 +34,12 @@ def get_spark_session(app_name: str = "banking-lakehouse-job") -> SparkSession:
     if catalog_uri:
         warehouse = os.environ.get("ICEBERG_WAREHOUSE", "s3a://lakehouse/lakehouse")
         minio_endpoint = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
-        minio_access_key = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
-        minio_secret_key = os.environ.get("MINIO_SECRET_KEY", "Minioadmin123")
+        # Không có mặc định: thiếu biến thì báo lỗi, không âm thầm dùng key đã commit.
+        missing = [name for name in ("MINIO_ACCESS_KEY", "MINIO_SECRET_KEY") if not os.environ.get(name)]
+        if missing:
+            raise OSError(f"ICEBERG_CATALOG_URI đã đặt nhưng thiếu {missing} — credential MinIO không có mặc định.")
+        minio_access_key = os.environ["MINIO_ACCESS_KEY"]
+        minio_secret_key = os.environ["MINIO_SECRET_KEY"]
 
         builder = (
             builder.config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")

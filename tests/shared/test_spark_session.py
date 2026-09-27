@@ -130,6 +130,20 @@ class TestGetSparkSession:
         monkeypatch.delenv("MINIO_SECRET_KEY")
 
     @patch.object(_spark_mod, "SparkSession")
+    def test_catalog_override_without_minio_keys_fails_loud(self, mock_spark_cls, monkeypatch):
+        """Thiếu key MinIO thì báo lỗi — trước đây âm thầm dùng key viết cứng trong code."""
+        monkeypatch.setenv("ICEBERG_CATALOG_URI", "http://custom-catalog:8181")
+        monkeypatch.delenv("MINIO_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
+        mock_builder = MagicMock()
+        mock_spark_cls.builder.appName.return_value = mock_builder
+        mock_builder.config.return_value = mock_builder
+
+        with pytest.raises(OSError, match="MINIO_ACCESS_KEY"):
+            _spark_mod.get_spark_session("test_missing_keys")
+        mock_builder.getOrCreate.assert_not_called()
+
+    @patch.object(_spark_mod, "SparkSession")
     def test_no_env_vars_skips_catalog_config(self, mock_spark_cls, monkeypatch):
         """When no env vars set, should NOT configure Iceberg catalog."""
         monkeypatch.delenv("ICEBERG_CATALOG_URI", raising=False)

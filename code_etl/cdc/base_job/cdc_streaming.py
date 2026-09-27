@@ -11,7 +11,6 @@ Usage:
 """
 
 import argparse
-import os
 
 import yaml
 from pyspark.sql import SparkSession
@@ -28,9 +27,9 @@ def create_spark_session() -> SparkSession:
         .config("spark.sql.catalog.lakehouse.warehouse", "s3a://lakehouse/lakehouse")
         .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
         .config("spark.sql.catalog.lakehouse.s3.endpoint", "http://minio:9000")
+        # Credential S3A/S3FileIO: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY từ env
+        # (spark-defaults.conf), không viết cứng ở đây.
         .config("spark.hadoop.fs.s3a.endpoint", "http://minio:9000")
-        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("MINIO_ROOT_USER", "minioadmin"))
-        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("MINIO_ROOT_PASSWORD", "Minioadmin123"))
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
         .config("spark.sql.shuffle.partitions", "4")
         .config("spark.default.parallelism", "4")

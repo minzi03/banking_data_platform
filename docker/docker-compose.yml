@@ -245,6 +245,9 @@ services:
       SPARK_MASTER_PORT: "7077"
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      # Credential MinIO cho S3FileIO / S3A (spark-defaults.conf không còn chứa key).
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ..:/opt/project
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
@@ -278,6 +281,9 @@ services:
       SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      # Credential MinIO cho S3FileIO / S3A (spark-defaults.conf không còn chứa key).
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       # Ops job trên worker ghi log vào Postgres qua JDBC. Trước đây worker
       # không có hai biến này, nên data_quality.py chỉ ghi được nhờ mật khẩu
       # mặc định viết cứng trong code; contract_validation.py bắt buộc chúng.
@@ -315,6 +321,9 @@ services:
     environment:
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      # Credential MinIO cho S3FileIO / S3A (spark-defaults.conf không còn chứa key).
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ..:/opt/project
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro

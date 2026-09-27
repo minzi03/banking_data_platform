@@ -5,6 +5,12 @@
 # Usage: docker compose -f docker-compose.ci.yml up -d
 # =============================================================================
 
+# Credential MinIO chỉ dành cho CI, khai MỘT lần. spark-defaults.conf và catalog
+# Trino không còn chứa key; Spark và Trino đọc hai biến AWS_* này.
+x-ci-minio-credentials: &ci-minio-credentials
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: Minioadmin123
+
 services:
   # ===========================================================================
   # PostgreSQL (Source Database)
@@ -135,6 +141,7 @@ services:
       SPARK_MASTER_PORT: "7077"
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      <<: *ci-minio-credentials
     volumes:
       - ..:/opt/project
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
@@ -169,6 +176,7 @@ services:
       SPARK_WORKER_CORES: 4
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      <<: *ci-minio-credentials
     ports:
       - "9091:9091"
     volumes:
@@ -192,6 +200,9 @@ services:
     image: trinodb/trino:443
     container_name: ci-trino
     hostname: trino
+    environment:
+      <<: *ci-minio-credentials
+      AWS_REGION: us-east-1
     # Keystore password, shared secret, mật khẩu `trino` cho CLI — sinh bởi
     # scripts/bootstrap_trino_auth.py trong bước CI trước khi dựng stack (ADR-0016).
     env_file:
