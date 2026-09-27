@@ -384,8 +384,19 @@ environment; Superset init ran with the required variables (exit 0).
   and the Spark worker receives no MinIO variables. Fixing this means passing MinIO
   credentials to Spark and Trino from the environment (Trino supports `${ENV:…}`) and
   removing them from both config files.
-- **Terraform (group D).** `terraform/terraform.tfvars` is committed with passwords;
-  `variables.tf` has password defaults.
+- **Terraform (group D), fixed 2026-09-27.** `terraform/terraform.tfvars` was
+  committed with the Postgres and MinIO passwords, and `variables.tf` used the same
+  values as defaults. `.gitignore` also missed `terraform.tfstate`, where Terraform
+  stores secrets in plain text. Now `postgres_password` and `minio_secret_key` are
+  `sensitive` with no default, so a missing value stops `terraform plan`. Only
+  `terraform.tfvars.example` (secrets `CHANGE_ME`) is committed. The real tfvars,
+  the state, `.terraform/` and the lock file are ignored; the local tfvars stays on
+  disk, untracked. The old tfvars was also missing `alertmanager` in `ports`, an
+  object with 13 required attributes, so `terraform plan` with it had been broken
+  unnoticed, because CI never runs Terraform. Guard:
+  `tests/governance/test_terraform_secrets.py` (5 of 6 tests fail on the old files).
+  Not run: `terraform validate` or `plan`, because no Terraform binary is available
+  here.
 - **Rotation.** Removing fallbacks rotates nothing. Change the values in
   `docker/.env` if they are still the ones from the example. An existing Superset
   admin keeps its old password (`superset fab reset-password`).
