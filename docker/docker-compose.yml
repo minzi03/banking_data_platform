@@ -431,9 +431,17 @@ services:
     container_name: banking-trino
     hostname: trino
     ports:
+      # 8443: HTTPS, đòi mật khẩu (ADR-0016). 8085→8080 vẫn mở nhưng trả 403
+      # cho mọi truy vấn client — Trino tự đóng HTTP khi bật password auth.
+      - "8443:8443"
       - "8085:8080"
     volumes:
       - ./init_trino/catalog:/etc/trino/catalog:ro
+      - ./init_trino/config.properties:/etc/trino/config.properties:ro
+      - ./init_trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
+      - ./init_trino/trino-cli.properties:/home/trino/.trino_config:ro
+      # Keystore + password file: sinh bởi scripts/bootstrap_trino_auth.py, gitignore.
+      - ./secrets/trino:/etc/trino/secrets:ro
       # Access control: Trino chỉ đọc đúng /etc/trino/access-control.properties.
       # Thiếu mount này thì Trino chạy access control `default` — cho phép tất cả.
       - ./init_trino/access-control.properties:/etc/trino/access-control.properties:ro
@@ -444,7 +452,12 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1
+      TRINO_KEYSTORE_PASSWORD: ${TRINO_KEYSTORE_PASSWORD:?chạy scripts/bootstrap_trino_auth.py}
+      TRINO_SHARED_SECRET: ${TRINO_SHARED_SECRET:?chạy scripts/bootstrap_trino_auth.py}
+      # Mật khẩu của user `trino` cho CLI trong container (trino-cli.properties).
+      TRINO_PASSWORD: ${TRINO_PASSWORD_TRINO:?chạy scripts/bootstrap_trino_auth.py}
     healthcheck:
+      # /v1/info vẫn trả lời qua HTTP khi đã bật xác thực (đo trên Trino 443).
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/info || exit 1"]
       interval: 10s
       timeout: 5s
@@ -693,8 +706,15 @@ services:
     hostname: streamlit
     ports:
       - "8501:8501"
+    environment:
+      - TRINO_HOST=trino
+      - TRINO_PORT=8443
+      - TRINO_USER=streamlit
+      - TRINO_PASSWORD=${TRINO_PASSWORD_STREAMLIT}
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - ../streamlit:/app
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')\" || exit 1"]
@@ -714,13 +734,13 @@ services:
     hostname: dbt
     volumes:
       - ../dbt:/usr/src/dbt
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     working_dir: /usr/src/dbt
+    # profiles.yml (target docker) đọc hai biến này (ADR-0016). Các biến DBT_*
+    # cũ (user admin, catalog lakehouse, cổng 8085) không được profile nào đọc.
     environment:
-      - DBT_HOST=trino
-      - DBT_PORT=8085
-      - DBT_CATALOG=lakehouse
-      - DBT_SCHEMA=semantic
-      - DBT_USER=admin
+      - TRINO_PASSWORD=${TRINO_PASSWORD_DBT}
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     mem_limit: 1g
     networks:
       - lakehouse_net
@@ -745,11 +765,15 @@ services:
       - "8000:8000"
     environment:
       - TRINO_HOST=trino
-      - TRINO_PORT=8080
+      - TRINO_PORT=8443
       - TRINO_USER=customer_api
+      - TRINO_PASSWORD=${TRINO_PASSWORD_CUSTOMER_API}
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
       - TRINO_CATALOG=iceberg
       - TRINO_SCHEMA=serving
       - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8000/health').raise_for_status()\""]
@@ -785,9 +809,13 @@ services:
       - SUPERSET_ENV=production
       - SUPERSET_HOME=/app/superset_home
       - TZ=Asia/Ho_Chi_Minh
+      - TRINO_USER=superset
+      - TRINO_PASSWORD=${TRINO_PASSWORD_SUPERSET}
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - superset-home:/app/superset_home
       - ./superset/dashboards:/app/dashboards:ro
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 1024m
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8088/health || exit 1"]
@@ -817,9 +845,13 @@ services:
       - FLASK_APP=superset
       - SUPERSET_HOME=/app/superset_home
       - TZ=Asia/Ho_Chi_Minh
+      - TRINO_USER=superset
+      - TRINO_PASSWORD=${TRINO_PASSWORD_SUPERSET}
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - superset-home:/app/superset_home
       - ./superset/dashboards:/app/dashboards:ro
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     entrypoint: /bin/bash
     command: ["/app/docker/init.sh"]
     depends_on:
@@ -932,8 +964,13 @@ services:
       - "9119:9119"
     environment:
       TRINO_HOST: trino
-      TRINO_PORT: "8080"
+      TRINO_PORT: "8443"
+      TRINO_USER: freshness_exporter
+      TRINO_PASSWORD: ${TRINO_PASSWORD_FRESHNESS_EXPORTER}
+      TRINO_CA_CERT: /etc/trino-ca/trino.pem
       PORT: "9119"
+    volumes:
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 128m
     depends_on:
       - trino
