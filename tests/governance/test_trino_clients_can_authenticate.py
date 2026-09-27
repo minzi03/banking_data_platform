@@ -98,7 +98,7 @@ def test_superset_uri(monkeypatch):
     assert mod.trino_uri() == "trino://superset@trino:8080/iceberg"
     monkeypatch.setenv("TRINO_PASSWORD", "p@ss/w:rd")
     uri = mod.trino_uri()
-    assert uri.startswith("trino://superset:") and uri.endswith("@trino:8443/iceberg?protocol=https")
+    assert uri.startswith("trino://superset:") and uri.endswith("@trino:8443/iceberg")
     assert "p@ss/w:rd" not in uri, "mật khẩu phải được URL-encode"
 
 

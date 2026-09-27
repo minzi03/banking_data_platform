@@ -26,38 +26,42 @@ def trino_uri() -> str:
     if not password:
         return f"trino://{quote(user)}@{host}:{os.environ.get('TRINO_PORT', '8080')}/{catalog}"
     port = os.environ.get("TRINO_PORT", "8443")
-    return f"trino://{quote(user)}:{quote(password, safe='')}@{host}:{port}/{catalog}?protocol=https"
+    # HTTPS không nằm trong URI: driver trino của image Superset bỏ qua `?protocol=https`
+    # (đo 2026-09-27: "TLS/SSL is required for authentication"). Nó được đặt qua
+    # connect_args.http_scheme trong `extra` — xem add_trino_connection().
+    return f"trino://{quote(user)}:{quote(password, safe='')}@{host}:{port}/{catalog}"
 
 
 def add_trino_connection():
-    """Add Trino as a data source in Superset."""
+    """Add Trino as a data source in Superset (create or update)."""
     try:
-        from flask import current_app
+        import json
+
         from superset.app import create_app
 
-        app = create_app("superset")
+        # create_app() KHÔNG tham số. Bản trước gọi create_app("superset"): tham số đó
+        # là tên MODULE CẤU HÌNH, nên Superset nạp nhầm module và chết KeyError
+        # 'DATA_DIR' — script chưa từng chạy được, và init.sh nuốt lỗi bằng `|| echo`.
+        app = create_app()
         with app.app_context():
-            from superset.models.core import Database
-            from superset.utils.core import get_or_create_db
+            from superset.extensions import db as meta_db
+            # Superset 3.1.3 đặt hàm này ở superset.utils.database, không ở utils.core.
+            from superset.utils.database import get_or_create_db
 
             uri = trino_uri()
-            # Cert tự ký của stack (ADR-0016) — verify bằng TRINO_CA_CERT.
-            extra = {"engine_params": {"connect_args": {"verify": os.environ["TRINO_CA_CERT"]}}} if (
-                os.environ.get("TRINO_PASSWORD") and os.environ.get("TRINO_CA_CERT")
-            ) else None
-
-            # Kết nối đã có thì CẬP NHẬT — bản trước bỏ qua, nên đổi mật khẩu hay sửa
-            # catalog không bao giờ tới được một Superset đã khởi tạo.
-            db = get_or_create_db(database_name="Trino (Lakehouse)", uri=uri)
-            db.set_sqlalchemy_uri(uri)
-            if extra is not None:
-                import json
-
-                db.extra = json.dumps(extra)
-            from superset.extensions import db as meta_db
-
-            meta_db.session.commit()
-            logger.info("Trino connection ready (user=%s, https=%s)", os.environ.get("TRINO_USER", "superset"), bool(os.environ.get("TRINO_PASSWORD")))
+            # get_or_create_db tạo mới, hoặc CẬP NHẬT URI nếu kết nối đã có — đổi mật
+            # khẩu hay sửa catalog tới được một Superset đã khởi tạo.
+            database = get_or_create_db("Trino (Lakehouse)", uri)
+            if os.environ.get("TRINO_PASSWORD") and os.environ.get("TRINO_CA_CERT"):
+                # Cert tự ký của stack (ADR-0016) — verify bằng TRINO_CA_CERT.
+                connect_args = {"http_scheme": "https", "verify": os.environ["TRINO_CA_CERT"]}
+                database.extra = json.dumps({"engine_params": {"connect_args": connect_args}})
+                meta_db.session.commit()
+            logger.info(
+                "Trino connection ready (user=%s, https=%s)",
+                os.environ.get("TRINO_USER", "superset"),
+                bool(os.environ.get("TRINO_PASSWORD")),
+            )
     except ImportError:
         logger.warning("Could not import Superset modules. Connection will need to be configured via UI.")
     except Exception as e:
