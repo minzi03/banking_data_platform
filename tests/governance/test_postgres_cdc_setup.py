@@ -5,8 +5,8 @@ Replication slot không được giữ WAL vô hạn
 Postgres mặc định `max_slot_wal_keep_size = -1`: một replication slot không ai đọc
 giữ WAL mãi mãi. Đo trên stack 2026-09-27: ba slot `debezium_slot_*` — không file
 nào trong repo, kể cả lịch sử git, dùng tên đó — giữ 3.6 GB WAL (`wal_status =
-extended`) và tăng theo mỗi lần seed. Kafka không có volume, nên cả slot đúng tên
-cũng mồ côi mỗi khi stack CDC tắt.
+extended`) và tăng theo mỗi lần seed. Slot đúng tên cũng giữ WAL mỗi khi connector
+dừng hoặc task lỗi, và offset Debezium mất khi `docker compose down` (anonymous volume).
 
 `05-cdc-setup.sh` đặt trần; vượt trần thì slot bị vô hiệu thay vì làm đầy đĩa.
 """

@@ -16,8 +16,8 @@ ALTER SYSTEM SET max_wal_senders = 4;
 -- không ai đọc giữ WAL mãi. Đo 2026-09-27: ba slot mồ côi (không code nào dùng
 -- tên đó) giữ 3.6 GB và tăng theo mỗi lần seed. Vượt trần thì slot bị vô hiệu
 -- (wal_status = lost) thay vì làm đầy đĩa — Debezium báo lỗi rõ, đăng ký lại
--- connector sẽ snapshot lại. Kafka không có volume, nên offset vốn đã mất khi
--- Kafka khởi động lại; slot cũ không giữ được gì mà snapshot mới không có.
+-- connector sẽ snapshot lại. Offset Debezium nằm trong anonymous volume của Kafka
+-- (mất khi `docker compose down`); slot cũ không giữ gì mà snapshot mới không có.
 ALTER SYSTEM SET max_slot_wal_keep_size = '4GB';
 
 DO $$

@@ -440,8 +440,9 @@ lists these at the end:
 
 A replication slot keeps WAL until its consumer reads it. With Postgres's default
 `max_slot_wal_keep_size = -1`, a slot that nobody reads keeps WAL forever. That
-happens whenever the CDC stack is down or a connector's task has failed. Kafka has no
-volume, so Debezium's offsets are lost whenever the Kafka container is recreated. On
+happens whenever the CDC stack is down or a connector's task has failed. Kafka's state
+sits in anonymous volumes (declared by the image, not by compose), so a
+`docker compose down` loses Debezium's offsets. On
 2026-09-27, three stale `debezium_slot_*` slots held 3.6 GB. They belonged to connectors
 registered outside the repo, whose tasks had failed since the CDC password was rotated.
 See TD-18.

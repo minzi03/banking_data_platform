@@ -1703,10 +1703,12 @@ pg_wal directory                 3,616 MB      max_wal_size 1GB, max_slot_wal_ke
   read the slots since. They grew with every write; one re-seed alone adds about 3.6 GB.
   Re-registering through `register_connectors.py` switched them to the repo's slot names
   (3 tasks RUNNING, 3 new slots active).
-- **Structural.** Kafka has no volume. Its topics, connector configs and offsets live in
-  the container layer, so they survive `docker restart` but are lost when the container
-  is recreated. A slot whose connector is gone, or stopped, keeps WAL. With
-  `max_slot_wal_keep_size = -1` (the default), that ends in a full disk.
+- **Structural.** Compose declares no volume for Kafka or Zookeeper, but the images do
+  (`VOLUME /var/lib/kafka/data`, `/var/lib/zookeeper/{data,log}`). Their topics,
+  connector configs and offsets therefore live in *anonymous* volumes. Compose keeps
+  those across restarts and recreates, but `docker compose down` or `rm` orphans them,
+  and the next `up` starts empty. A slot whose connector is gone or stopped keeps WAL.
+  With `max_slot_wal_keep_size = -1` (the default), that ends in a full disk.
 - **Side note.** All three connectors share `topic.prefix = postgresql.banking`, so their
   JMX metric names collide. Debezium logs "Failed to register metrics MBean, metrics will
   not be available". Not fixed here.
