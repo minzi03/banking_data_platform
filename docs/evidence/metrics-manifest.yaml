@@ -616,8 +616,10 @@ metrics:
       definition: 'OBSERVATION, không phải lỗi. Số dòng mà ngày nghiệp vụ ICT khác
         ngày UTC. Trước migration metric này tên engine_timezone_consistency và đo
         "hai engine bất đồng" (WARN). Sau migration nó ĐỔI NGHĨA: cả hai engine chạy
-        session UTC và cùng derive tường minh, nên con số ~29% (7/24) chỉ phản ánh
-        thực tế UTC+7 — bằng 0 mới đáng ngờ vì nghĩa là conversion không có tác dụng.
+        session UTC và cùng derive tường minh, nên con số chỉ phản ánh thực tế UTC+7:
+        nó đúng bằng số giao dịch lúc 00:00–06:59 giờ VN. 7/24 ≈ 29% chỉ khi giờ phân
+        bố đều; với cao điểm 9–11h giờ VN (TD-17) là ~6%. Bằng 0 mới đáng ngờ vì
+        nghĩa là conversion không có tác dụng.
         Invariant cross-engine thật nằm ở gold.reconciliation.*
 
         '
