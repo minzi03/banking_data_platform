@@ -330,6 +330,20 @@ pytest --collect-only -q tests/            1794   (1773 + 21)
 py -3 -m pytest -q -m "not integration"    1724 passed, 1 skipped, 69 deselected
 ```
 
+Rồi #77 (TD-13, lịch `ops_lineage_dag`) và #78 (`airflow-init` upsert connection) thêm
+**3 hàm → 8 node**, đo bằng diff ID node giữa commit merge #75 và #78:
+
+| Nguồn | Hàm | Node |
+|---|---:|---:|
+| #77 `TestFlagWaitingDagsAreScheduled` — parametrize theo 6 DAG chờ cờ + 1 kiểm phát hiện | +2 | +7 |
+| #78 `test_connections_are_upserted_and_failures_are_loud` | +1 | +1 |
+
+```text
+def test_* count                            889   (886 + 3)
+pytest --collect-only -q tests/            1802   (1794 + 8)
+py -3 -m pytest -q -m "not integration"    1732 passed, 1 skipped, 69 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -625,10 +639,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1794 node · 886 hàm · 1725 node chạy không cần hạ tầng   (2026-09-27)
-suite       1724 passed · 1 skipped (có chủ ý) · 69 deselected · ~19s
+pytest      1802 node · 889 hàm · 1733 node chạy không cần hạ tầng   (2026-09-27)
+suite       1732 passed · 1 skipped (có chủ ý) · 69 deselected · ~19s
 coverage    76% (76,20%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 886 / 1794 — mọi delta ở §3 giờ nằm trong manifest
+manifest    đã promote 889 / 1802 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
