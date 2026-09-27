@@ -19,7 +19,9 @@ import json
 
 DEBEZIUM_URL = "http://debezium:8083"
 CDC_DB_USER = os.environ.get("CDC_DB_USER", "cdc_user")
-CDC_DB_PASSWORD = os.environ.get("CDC_DB_PASSWORD", "CDCPassword123")
+# Không có mặc định: thiếu biến thì task register_connector fail to tiếng (kiểm lúc
+# task chạy, không lúc Airflow parse DAG). Airflow nhận biến từ docker/.env.
+CDC_DB_PASSWORD = os.environ.get("CDC_DB_PASSWORD")
 
 
 def wait_for_debezium():
@@ -40,6 +42,8 @@ def wait_for_debezium():
 
 
 def register_connector(connector_name: str, config: dict):
+    if not config.get("database.password"):
+        raise ValueError("CDC_DB_PASSWORD chưa đặt — Debezium cần mật khẩu của CDC_DB_USER (docker/.env)")
     """Register a single Debezium connector."""
     url = f"{DEBEZIUM_URL}/connectors/{connector_name}/config"
     response = requests.put(

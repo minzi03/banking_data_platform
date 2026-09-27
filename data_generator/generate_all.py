@@ -98,8 +98,8 @@ def main():
                         help="PostgreSQL database (default: banking_db)")
     parser.add_argument("--user", default=os.environ.get("POSTGRES_USER", "banking_admin"),
                         help="PostgreSQL user (default: banking_admin)")
-    parser.add_argument("--password", default=os.environ.get("POSTGRES_PASSWORD", "BankingAdmin123"),
-                        help="PostgreSQL password")
+    parser.add_argument("--password", default=os.environ.get("POSTGRES_PASSWORD"),
+                        help="PostgreSQL password (mặc định: $POSTGRES_PASSWORD — không có giá trị viết cứng)")
     parser.add_argument("--truncate", action="store_true",
                         help="Truncate all tables before inserting (clear old data)")
     parser.add_argument("--csv-dir", default=None,
@@ -113,6 +113,8 @@ def main():
                              "cob_dt sẽ nạp — mọi ngày sinh ra được dời theo mốc này, nên cửa sổ "
                              "'30 ngày gần nhất' của Gold có dữ liệu. Xem generators/timeline.py.")
     args = parser.parse_args()
+    if not args.password:
+        parser.error("thiếu mật khẩu PostgreSQL: đặt POSTGRES_PASSWORD (xem RUNBOOK §2) hoặc --password")
     set_as_of(date.fromisoformat(args.as_of))
 
     logger.info("=" * 60)

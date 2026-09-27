@@ -9,10 +9,13 @@ import os
 # Set via SUPERSET_DATA_DIR env var or default to superset_home
 DATA_DIR = os.environ.get("SUPERSET_DATA_DIR", "/app/superset_home")
 os.makedirs(DATA_DIR, exist_ok=True)
-SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY", "banking_platform_secret_key_change_me")
+# Không có giá trị mặc định: SECRET_KEY ký session của Superset — một giá trị đã
+# commit nghĩa là ai đọc repo cũng giả được cookie. Thiếu biến → KeyError khi
+# khởi động, thay vì chạy với khoá công khai.
+SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
 SQLALCHEMY_DATABASE_URI = (
-    f"postgresql://{os.environ.get('DATABASE_USER', 'banking_admin')}"
-    f":{os.environ.get('DATABASE_PASSWORD', 'BankingAdmin123')}"
+    f"postgresql://{os.environ['DATABASE_USER']}"
+    f":{os.environ['DATABASE_PASSWORD']}"
     f"@{os.environ.get('DATABASE_HOST', 'postgres')}"
     f":{os.environ.get('DATABASE_PORT', '5432')}"
     f"/{os.environ.get('DATABASE_DB', 'superset')}"

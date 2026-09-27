@@ -37,6 +37,8 @@ docker compose ps  # Verify all services are healthy
 
 ### 2. Generate Seed Data
 ```bash
+# Needs POSTGRES_USER / POSTGRES_PASSWORD in the environment — there is no
+# password default in the code. PowerShell: $env:POSTGRES_PASSWORD = docker exec banking-postgres printenv POSTGRES_PASSWORD
 # From host (recommended). --as-of = the cob_dt you will load: the newest
 # transaction lands on that date, so "last 30 days" KPIs in Gold have data.
 # Default is today. See data_generator/generators/timeline.py (TD-16).

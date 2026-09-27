@@ -28,10 +28,11 @@ Usage:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger
+
+from governance.credentials import postgres_jdbc_properties
 
 log = getLogger("audit")
 
@@ -109,11 +110,6 @@ class AuditLogger:
     def __init__(self):
         self._records: list[AuditRecord] = []
         self._pg_url = "jdbc:postgresql://postgres:5432/banking_db"
-        self._pg_props = {
-            "user": os.environ.get("POSTGRES_USER", "banking_admin"),
-            "password": os.environ.get("POSTGRES_PASSWORD", "BankingAdmin123"),
-            "driver": "org.postgresql.Driver",
-        }
 
     def log_action(
         self,
@@ -382,7 +378,7 @@ class AuditLogger:
             self._pg_url,
             "opslakehouse.audit_log",
             mode="append",
-            properties=self._pg_props,
+            properties=postgres_jdbc_properties("ghi opslakehouse.audit_log"),
         )
         log.info(f"Successfully wrote {len(self._records)} audit records.")
 

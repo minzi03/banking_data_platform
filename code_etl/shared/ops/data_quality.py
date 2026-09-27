@@ -447,9 +447,14 @@ def write_results_to_pg(results: list[dict[str, Any]]) -> None:
         return
 
     jdbc_url = "jdbc:postgresql://postgres:5432/banking_db"
+    # Không có mật khẩu mặc định: thiếu biến là lỗi to tiếng, không âm thầm dùng
+    # một credential đã commit (cùng cách contract_validation.py, #46).
+    missing = [name for name in ("POSTGRES_USER", "POSTGRES_PASSWORD") if not os.environ.get(name)]
+    if missing:
+        raise OSError(f"Thiếu biến môi trường {missing} để ghi kết quả DQ vào PostgreSQL.")
     props = {
-        "user": os.environ.get("POSTGRES_USER", "banking_admin"),
-        "password": os.environ.get("POSTGRES_PASSWORD", "BankingAdmin123"),
+        "user": os.environ["POSTGRES_USER"],
+        "password": os.environ["POSTGRES_PASSWORD"],
         "driver": "org.postgresql.Driver",
     }
 

@@ -15,12 +15,16 @@ superset db upgrade
 
 # ── Step 2: Create admin user ──────────────────────────────────────────────
 echo "[2/5] Creating admin user..."
+# Mật khẩu admin từ docker/.env — bản trước viết cứng một mật khẩu và bỏ qua
+# SUPERSET_ADMIN_PASSWORD dù biến đó đã có. Chỉ áp khi TẠO admin lần đầu; admin
+# đã có giữ mật khẩu cũ (đổi: superset fab reset-password --username admin).
+: "${SUPERSET_ADMIN_PASSWORD:?đặt SUPERSET_ADMIN_PASSWORD trong docker/.env}"
 superset fab create-admin \
     --username admin \
     --firstname Admin \
     --lastname User \
     --email admin@banking.local \
-    --password admin123 || echo "Admin user already exists, skipping."
+    --password "$SUPERSET_ADMIN_PASSWORD" || echo "Admin user already exists, skipping."
 
 # ── Step 3: Initialize Superset (roles, permissions) ────────────────────────
 echo "[3/5] Initializing roles and permissions..."
@@ -37,6 +41,6 @@ python /app/docker/superset/import_dashboards.py || echo "Dashboard import skipp
 echo "============================================="
 echo " Superset Init Complete!"
 echo " UI: http://localhost:8088"
-echo " Login: admin / admin123"
+echo " Login: admin / SUPERSET_ADMIN_PASSWORD (docker/.env)"
 echo " Dashboards: 5 pre-built (Loan, Customer 360, Transaction, Fraud, Executive)"
 echo "============================================="

@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from logging import getLogger
 
+from governance.credentials import postgres_jdbc_properties
+
 log = getLogger("lineage")
 
 
@@ -154,11 +156,6 @@ class LineageTracker:
     def __init__(self):
         self._records: list[LineageRecord] = []
         self._pg_url = "jdbc:postgresql://postgres:5432/banking_db"
-        self._pg_props = {
-            "user": os.environ.get("POSTGRES_USER", "banking_admin"),
-            "password": os.environ.get("POSTGRES_PASSWORD", "BankingAdmin123"),
-            "driver": "org.postgresql.Driver",
-        }
 
     def record_lineage(
         self,
@@ -304,7 +301,7 @@ class LineageTracker:
             self._pg_url,
             "opslakehouse.lineage_log",
             mode="append",
-            properties=self._pg_props,
+            properties=postgres_jdbc_properties("ghi opslakehouse.lineage_log"),
         )
         log.info(f"Successfully wrote {len(self._records)} lineage records.")
 

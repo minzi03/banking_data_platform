@@ -347,7 +347,49 @@ because:
 1. All credentials are local docker stack only
 2. They cannot access any external service
 3. Git history rewrite risks repository integrity and PR/branch references
-4. The docker stack itself generates new credentials on `docker compose up`
+4. ~~The docker stack itself generates new credentials on `docker compose up`~~ —
+   **wrong, corrected 2026-09-27.** Postgres and MinIO take their credentials from
+   `docker/.env`, and `docker/.env.example` ships concrete values. A stack built from
+   the example runs on the published passwords.
+
+### Hard-coded defaults in runtime code (2026-09-27)
+
+The files were removed in 2026-09, but the same passwords survived as **fallbacks
+in code**: `os.environ.get("POSTGRES_PASSWORD", "<the dev password>")`. With the
+variable unset, the code silently used a committed password. Superset also
+hard-coded its admin password (`init.sh`), which ignored the `SUPERSET_ADMIN_PASSWORD`
+already set in `docker/.env`. It also had a default `SECRET_KEY`, which signs
+session cookies.
+
+Fixed: every PostgreSQL / CDC / Superset secret now comes from the environment with
+no default, and a missing variable fails loudly.
+- `governance/credentials.py` (audit, lineage), `data_quality.py`, `generate_all.py`,
+  `reconcile_cdc.py`, `test_jdbc.py`, `insert_missing_data.py`, `register_connectors.py`,
+  the CDC connectors DAG, `superset_config.py`, `init.sh`, and compose (`${…:?}` for
+  Superset).
+- Makefile Bronze targets read the worker's own environment (`sh -c '…$$POSTGRES_PASSWORD…'`)
+  instead of passing the password on the command line. Makefile no longer prints
+  passwords.
+- `tests/governance/test_no_hardcoded_secrets.py` scans runtime code, comments and
+  docstrings included, for known literals and for any PASSWORD/SECRET/KEY variable
+  read with a default. It fails on a reintroduced default (tested).
+
+Verified on the stack: the Gold DQ job wrote its 20 results through the worker's
+environment; Superset init ran with the required variables (exit 0).
+
+**Still open — declared in `KNOWN_DEBT`, which may only shrink:**
+- **MinIO keys (group B).** `spark_session.py` and the CDC scripts still default
+  `MINIO_*`. `docker/spark/conf/spark-defaults.conf` and
+  `docker/init_trino/catalog/iceberg.properties` carry the MinIO keys in plain text,
+  and the Spark worker receives no MinIO variables. Fixing this means passing MinIO
+  credentials to Spark and Trino from the environment (Trino supports `${ENV:…}`) and
+  removing them from both config files.
+- **Terraform (group D).** `terraform/terraform.tfvars` is committed with passwords;
+  `variables.tf` has password defaults.
+- **Rotation.** Removing fallbacks rotates nothing. Change the values in
+  `docker/.env` if they are still the ones from the example. An existing Superset
+  admin keeps its old password (`superset fab reset-password`).
+- CI-only values (CI compose, workflow env) are throwaway and stay as they are.
 
 ---
 

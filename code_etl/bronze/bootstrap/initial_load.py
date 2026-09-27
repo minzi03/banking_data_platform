@@ -11,8 +11,8 @@ Usage:
     --master spark://spark-master:7077 \\
     code_etl/bronze/bootstrap/initial_load.py \\
     --jdbc_url "jdbc:postgresql://postgres:5432/banking_db" \\
-    --db_user banking_admin \\
-    --db_password BankingAdmin123 \\
+    --db_user "$POSTGRES_USER" \\
+    --db_password "$POSTGRES_PASSWORD" \\
     --cob_dt 2025-01-01
 """
 
