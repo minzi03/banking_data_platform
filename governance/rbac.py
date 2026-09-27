@@ -6,9 +6,9 @@ Nguồn sự thật duy nhất cho quyền truy cập lakehouse **qua Trino**.
 từ ROLES/USERS ở đây; test chặn drift giữa hai bên. Sửa quyền ở file này rồi
 sinh lại — đừng sửa tay rules.json.
 
-Chưa có xác thực: Trino tin tên user mà client tự khai (header X-Trino-User).
-Luật ở đây chặn truy cập *nhầm* và che PII cho các client làm đúng, nhưng
-không chặn người cố ý khai tên `admin`. Xem RUNBOOK.md § "Trino access control".
+Xác thực: mỗi user ở đây có một mật khẩu (scripts/bootstrap_trino_auth.py sinh
+password file từ USERS), Trino chỉ nhận HTTPS + mật khẩu và cấm mạo danh
+(ADR-0016). Thêm user ở đây → chạy lại bootstrap để user đó đăng nhập được.
 
 Không phủ: Spark ghi thẳng vào Iceberg REST + MinIO, không đi qua Trino, nên
 không chịu luật này. PostgreSQL nguồn có GRANT riêng (05_security.sql).

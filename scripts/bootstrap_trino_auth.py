@@ -40,10 +40,24 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
-from governance.rbac import USERS  # noqa: E402
+
+def _load_users() -> dict:
+    """USERS từ governance/rbac.py, nạp THẲNG file — không qua governance/__init__.py.
+
+    Package governance import cả contracts (pydantic); job CI dựng stack chỉ cài
+    pytest + pyyaml, và bootstrap phải chạy ở đó TRƯỚC khi dựng Trino.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_rbac_for_bootstrap", REPO_ROOT / "governance" / "rbac.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # @dataclass cần module có trong sys.modules
+    spec.loader.exec_module(module)
+    return module.USERS
+
+
+USERS = _load_users()
 
 SECRETS_DIR = REPO_ROOT / "docker" / "secrets" / "trino"
 TRINO_IMAGE = "trinodb/trino:443"
@@ -149,23 +163,43 @@ def problems(env: dict[str, str]) -> list[str]:
     return found
 
 
+def keytool_command(args: list[str]) -> list[str]:
+    """`docker run` chạy keytool của image Trino, ghi vào SECRETS_DIR.
+
+    Trên POSIX chạy dưới uid:gid của máy chủ: image mặc định chạy user `trino`
+    (uid 1000), còn thư mục mount do runner CI tạo thuộc uid khác — keytool không
+    ghi được (CI đỏ 2026-09-27). Docker Desktop trên Windows không có vấn đề này.
+    """
+    cmd = ["docker", "run", "--rm", "-v", f"{SECRETS_DIR.resolve()}:/out", "-e", "KS_PASS"]
+    if hasattr(os, "getuid"):
+        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    return [*cmd, "--entrypoint", KEYTOOL, TRINO_IMAGE, *args]
+
+
+def _keytool(args: list[str], keystore_password: str) -> None:
+    env = {**os.environ, "KS_PASS": keystore_password, "MSYS_NO_PATHCONV": "1"}
+    result = subprocess.run(keytool_command(args), env=env, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        # keytool in lỗi ra STDOUT ("keytool error: …"), không phải stderr — đo 2026-09-27.
+        # Không chứa mật khẩu: mật khẩu đi qua biến môi trường KS_PASS.
+        output = (result.stdout + result.stderr).strip()[-600:]
+        raise RuntimeError(f"keytool {args[0]} thất bại (exit {result.returncode}): {output}")
+
+
 def generate_keystore(keystore_password: str) -> None:
     """Keystore PKCS12 + cert PEM, bằng keytool của image Trino đã pin."""
     for name in ("keystore.p12", "trino.pem"):
         (SECRETS_DIR / name).unlink(missing_ok=True)
-    mount = f"{SECRETS_DIR.resolve()}:/out"
-    base = ["docker", "run", "--rm", "-v", mount, "-e", "KS_PASS", "--entrypoint", KEYTOOL, TRINO_IMAGE]
-    env = {**os.environ, "KS_PASS": keystore_password, "MSYS_NO_PATHCONV": "1"}
-    subprocess.run(
-        [*base, "-genkeypair", "-alias", "trino", "-keyalg", "RSA", "-keysize", "2048", "-validity", "825",
+    _keytool(
+        ["-genkeypair", "-alias", "trino", "-keyalg", "RSA", "-keysize", "2048", "-validity", "825",
          "-dname", "CN=trino", "-ext", "SAN=dns:trino,dns:localhost,ip:127.0.0.1",
          "-keystore", "/out/keystore.p12", "-storetype", "PKCS12", "-storepass:env", "KS_PASS"],
-        check=True, env=env, capture_output=True,
+        keystore_password,
     )  # fmt: skip
-    subprocess.run(
-        [*base, "-exportcert", "-rfc", "-alias", "trino", "-keystore", "/out/keystore.p12",
+    _keytool(
+        ["-exportcert", "-rfc", "-alias", "trino", "-keystore", "/out/keystore.p12",
          "-storepass:env", "KS_PASS", "-file", "/out/trino.pem"],
-        check=True, env=env, capture_output=True,
+        keystore_password,
     )  # fmt: skip
 
 
@@ -194,7 +228,9 @@ def main(argv: list[str] | None = None) -> int:
     for path, values in service_env_files(env).items():
         if read_env(path) != values:
             _write(path, values, f"Chỉ mật khẩu cho {path.stem}")
-    if args.rotate or KEYSTORE_PASSWORD_VAR in updates or not (SECRETS_DIR / "keystore.p12").exists():
+    # Thiếu MỘT trong hai (keystore hoặc cert) là sinh lại cả cặp: cert phải khớp keystore.
+    keypair_missing = not all((SECRETS_DIR / n).exists() for n in ("keystore.p12", "trino.pem"))
+    if args.rotate or KEYSTORE_PASSWORD_VAR in updates or keypair_missing:
         generate_keystore(env[KEYSTORE_PASSWORD_VAR])
     db = SECRETS_DIR / "password.db"
     if args.rotate or updates or not db.exists() or any("password.db" in p or "hash" in p for p in problems(env)):

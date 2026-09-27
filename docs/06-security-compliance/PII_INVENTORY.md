@@ -29,12 +29,12 @@ ai đó mang mẫu này sang hệ thống có dữ liệu thật — đúng cả
 | Silver có được che? | **Lưu gốc, che lúc đọc qua Trino** — `silver.dim_customer` vẫn *lưu* `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
 | Gold có được che? | **Có** — chỉ còn `full_name_masked`, không còn `cccd`/`phone`/`email` |
 | Tầng serving có được che? | **Có**, bằng cách thừa hưởng từ Gold (`select *`) |
-| Lakehouse có kiểm soát truy cập? | **Có ở Trino, chưa có xác thực** — Spark và MinIO không đi qua lớp này (§7) |
+| Lakehouse có kiểm soát truy cập? | **Có ở Trino, có xác thực mật khẩu** (ADR-0016) — Spark và MinIO không đi qua lớp này (§7) |
 | Có phân loại dữ liệu ở dạng máy đọc được? | **Không** (§9) |
 
 Câu quan trọng nhất: **bản gốc vẫn được lưu nguyên; lớp bảo vệ là Trino che lúc
-đọc — và Trino tin tên user mà client tự khai.** Client làm đúng không còn thấy
-`cccd` gốc; người cố ý khai tên `admin`, hoặc đọc thẳng MinIO bằng Spark, thì vẫn
+đọc, sau khi xác thực mật khẩu (ADR-0016).** Qua Trino, khai tên `admin` không còn đủ —
+phải có mật khẩu của admin; người đọc thẳng MinIO bằng Spark thì vẫn
 thấy.
 
 ---
@@ -177,9 +177,9 @@ silver.dim_customer  (cccd, phone, email nguyên bản)
 
 Đây là lựa chọn hợp lý **khi** có kiểm soát truy cập theo schema. Từ PR #39,
 Trino có lớp đó (§7): tầng tiêu thụ chỉ đọc được `serving`, và role phân tích đọc
-Silver thì thấy PII đã che. Nhưng lớp này chưa có xác thực, và không phủ Spark —
-nên bản gốc được bảo vệ trước truy cập *nhầm*, chưa được bảo vệ trước truy cập
-*cố ý*.
+Silver thì thấy PII đã che. Từ ADR-0016 lớp này có xác thực mật khẩu, nhưng không
+phủ Spark và MinIO — nên qua Trino bản gốc được bảo vệ cả trước truy cập *cố ý*;
+qua MinIO thì chưa.
 
 `SECURITY.md` nói cùng điều này: che **lúc ghi** chỉ áp ở Gold/serving; Bronze và
 Silver vẫn *lưu* giá trị gốc, và chỉ được che **lúc đọc** qua Trino.
@@ -250,7 +250,7 @@ Cách đặt salt, và hệ quả khi xoay vòng nó: [`RUNBOOK.md`](../../RUNBO
 
 ---
 
-## 7. Kiểm soát truy cập: có ở Trino, chưa có xác thực
+## 7. Kiểm soát truy cập: có ở Trino, có xác thực mật khẩu
 
 > **Cập nhật 2026-09-23 (PR #39).** Hai bản trước của mục này ghi "lakehouse không
 > có kiểm soát truy cập", rồi đính chính rằng file luật Trino có tồn tại nhưng không
@@ -293,7 +293,7 @@ bằng lệnh ở §11.
 
 | Khoảng trống | Hệ quả |
 |---|---|
-| **Chưa có xác thực** | Trino tin tên user mà client tự khai (`X-Trino-User`). Ai kết nối được cổng 8080/8085 đều khai được `admin` và đọc `cccd` gốc. Luật chặn truy cập *nhầm*, không chặn truy cập *cố ý* |
+| ~~Chưa có xác thực~~ **Đã có (ADR-0016)** | Trước 2026-09-27 Trino tin tên user client tự khai. Giờ: HTTP 403, HTTPS đòi mật khẩu, mạo danh bị chặn — đo trên stack. Còn lại: cert tự ký, mật khẩu trong file trên máy dev |
 | **Spark và MinIO không đi qua Trino** | Job Spark đọc ghi thẳng Iceberg REST + MinIO. Ai có credential MinIO đọc được file Parquet gốc |
 | **Nhóm nhạy cảm "Trung bình" chưa che** | `account_no`, `device_id`, `ip_address`, `latitude`/`longitude` (§3) đọc được nguyên bản bởi mọi role đọc được bảng chứa chúng |
 | PostgreSQL nguồn | Có kiểm soát riêng — `docker/init_postgres/05_security.sql` tạo role và `GRANT`. Không liên quan tới luật Trino |
@@ -458,7 +458,7 @@ Nếu mọi kiểm tra "phải bị chặn" lại *thành công*, Trino không n
 
 | Thiếu | Ảnh hưởng |
 |---|---|
-| Xác thực người dùng Trino | §7 — tên user do client tự khai; ai khai `admin` cũng đọc được `cccd` gốc |
+| ~~Xác thực người dùng Trino~~ | Đã làm — ADR-0016 (2026-09-27) |
 | Kiểm soát truy cập ở Spark / MinIO | §7 — đường đọc ghi trực tiếp, không qua luật Trino |
 | Che nhóm nhạy cảm "Trung bình" | §7 — `account_no`, `device_id`, `ip_address`, lat/long chưa che |
 | Trường `classification` trong data contract | §9 — thêm cột PII mới không làm gì đỏ |
@@ -482,7 +482,7 @@ che ở serving    có, thừa hưởng từ Gold qua select *
 bản sao đã che   2 bảng trong lakehouse.sandbox, tạo lại 08:00 hằng ngày
 salt cccd_hash   Airflow Variable, đọc lúc render task, không có giá trị dự phòng
 quy tắc che      3 quy tắc khác nhau cho cùng trường full_name
-kiểm soát        Trino: có, chưa xác thực · Spark/MinIO: không · PostgreSQL nguồn: có
+kiểm soát        Trino: có, xác thực mật khẩu · Spark/MinIO: không · PostgreSQL nguồn: có
 phân loại máy đọc  không
 time travel      PII đã xoá còn đọc được ≥ 7 ngày và ≥ 3 snapshot
 ```

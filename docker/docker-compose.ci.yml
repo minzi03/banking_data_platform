@@ -192,10 +192,21 @@ services:
     image: trinodb/trino:443
     container_name: ci-trino
     hostname: trino
+    # Keystore password, shared secret, mật khẩu `trino` cho CLI — sinh bởi
+    # scripts/bootstrap_trino_auth.py trong bước CI trước khi dựng stack (ADR-0016).
+    env_file:
+      - ./secrets/trino/env/trino-server.env
     ports:
       - "8085:8080"
     volumes:
       - ./init_trino/catalog:/etc/trino/catalog
+      # Xác thực: CÙNG cấu hình với môi trường chính (ADR-0016).
+      - ./init_trino/config.properties:/etc/trino/config.properties:ro
+      - ./init_trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
+      # Mọi `docker exec ci-trino trino …` trong ci.yml / integration test chạy
+      # nguyên văn: CLI tự nói HTTPS với localhost bằng mật khẩu của `trino`.
+      - ./init_trino/trino-cli.properties:/home/trino/.trino_config:ro
+      - ./secrets/trino:/etc/trino/secrets:ro
       # CI chạy CÙNG luật với môi trường chính, để bước "Trino access control
       # enforced" trong ci.yml kiểm đúng thứ sẽ chạy thật.
       - ./init_trino/access-control.properties:/etc/trino/access-control.properties
@@ -220,7 +231,13 @@ services:
     depends_on:
       trino:
         condition: service_healthy
-    # --server trino:8080 là BẮT BUỘC. CLI Trino mặc định nối localhost:8080,
+    # Mật khẩu `trino` + cert để verify HTTPS (ADR-0016). --truststore-path nhận
+    # PEM và verify thật — hostname `trino` nằm trong SAN của cert (đo 2026-09-27).
+    env_file:
+      - ./secrets/trino/env/trino.env
+    volumes:
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
+    # --server là BẮT BUỘC (từ ADR-0016: https://trino:8443). CLI Trino mặc định nối localhost,
     # mà container này KHÔNG chạy Trino server — nó chỉ mượn image để lấy CLI.
     # Thiếu cờ đó thì cả 5 lệnh đều `ConnectException: Failed to connect to
     # localhost:8080`, và vì lệnh cuối của `sh -c` là `echo` nên container vẫn
@@ -231,11 +248,11 @@ services:
     entrypoint: >
       /bin/sh -ec "
         echo 'Creating schemas...';
-        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
-        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
-        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
-        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
-        trino --server trino:8080 --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
+        trino --server https://trino:8443 --truststore-path /etc/trino-ca/trino.pem --user trino --password --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS bronze';
+        trino --server https://trino:8443 --truststore-path /etc/trino-ca/trino.pem --user trino --password --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver';
+        trino --server https://trino:8443 --truststore-path /etc/trino-ca/trino.pem --user trino --password --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS gold';
+        trino --server https://trino:8443 --truststore-path /etc/trino-ca/trino.pem --user trino --password --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS silver_cdc';
+        trino --server https://trino:8443 --truststore-path /etc/trino-ca/trino.pem --user trino --password --catalog iceberg --execute 'CREATE SCHEMA IF NOT EXISTS serving';
         echo 'Schemas created successfully';
       "
     networks:

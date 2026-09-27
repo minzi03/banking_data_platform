@@ -42,7 +42,7 @@ Mọi client (dbt, Superset, API, Streamlit, ba job ML, freshness exporter, scri
 
 **5. User `trino` có quyền admin.** Đây là user mặc định của Trino CLI khi chạy `docker exec <trino> trino`, cách CI, benchmark và RUNBOOK đang dùng. Ai exec được vào container Trino thì đã kiểm soát server (sửa được `rules.json`), nên cấp admin cho tên này không mở thêm quyền gì.
 
-**6. Chưa xác thực trong ADR này.** Password auth bắt buộc HTTPS, nên phải có cert và đổi khoảng 12 client. Việc đó được tách ra làm thay đổi riêng.
+**6. Chưa xác thực trong ADR này** — *đã làm ở [ADR-0016](0016-trino-password-authentication.md), 2026-09-27.* Password auth bắt buộc HTTPS, nên phải có cert và đổi khoảng 12 client. Việc đó được tách ra làm thay đổi riêng.
 
 ## Consequences
 
@@ -55,7 +55,7 @@ Mọi client (dbt, Superset, API, Streamlit, ba job ML, freshness exporter, scri
 
 **Mất**
 
-- **Chưa phải bảo mật trước người cố ý.** Trino tin tên user trong header `X-Trino-User`, nên ai kết nối được cổng 8080/8085 đều khai được `admin`. Luật chặn truy cập nhầm và thể hiện least privilege, nhưng không thay được xác thực.
+- **Chưa phải bảo mật trước người cố ý** — *đến ADR-0016 (xác thực mật khẩu).* Trino tin tên user trong header `X-Trino-User`, nên ai kết nối được cổng 8080/8085 đều khai được `admin`. Luật chặn truy cập nhầm và thể hiện least privilege, nhưng không thay được xác thực.
 - **Spark không đi qua Trino.** Job Spark đọc ghi thẳng Iceberg REST và MinIO, và ai có credential MinIO đọc được file Parquet gốc. Luật này chỉ phủ đường Trino.
 - **Catalog `system` luôn mở.** Trino 443 tự nối một luật ẩn "mọi user → `system` ALL" vào cuối danh sách. User lạ vào được catalog nhưng không có luật bảng nào, nên không đọc được bảng nào.
 - **Luật che mới phủ nhóm nhạy cảm "Cao nhất" và "Cao" trên bảng khách hàng.** `account_no`, `device_id`, lat/long, tên nhân viên chưa che.

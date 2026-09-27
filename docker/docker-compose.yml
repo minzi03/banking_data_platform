@@ -429,11 +429,24 @@ services:
   trino:
     image: trinodb/trino:443
     container_name: banking-trino
+    # keystore password, shared secret, mật khẩu `trino` cho CLI trong container — sinh bởi scripts/bootstrap_trino_auth.py (ADR-0016).
+    env_file:
+      - ./secrets/trino/env/trino-server.env
     hostname: trino
     ports:
+      # HTTPS, đòi mật khẩu (ADR-0016). Trong mạng docker: trino:8443. Trên host:
+      # 8453 — 8443 thường bị dịch vụ khác chiếm (trên máy dev đầu tiên: một
+      # container OpenEMR), cùng kiểu 8085→8080 bên dưới.
+      # 8085→8080 vẫn mở nhưng trả 403 cho mọi truy vấn client.
+      - "8453:8443"
       - "8085:8080"
     volumes:
       - ./init_trino/catalog:/etc/trino/catalog:ro
+      - ./init_trino/config.properties:/etc/trino/config.properties:ro
+      - ./init_trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
+      - ./init_trino/trino-cli.properties:/home/trino/.trino_config:ro
+      # Keystore + password file: sinh bởi scripts/bootstrap_trino_auth.py, gitignore.
+      - ./secrets/trino:/etc/trino/secrets:ro
       # Access control: Trino chỉ đọc đúng /etc/trino/access-control.properties.
       # Thiếu mount này thì Trino chạy access control `default` — cho phép tất cả.
       - ./init_trino/access-control.properties:/etc/trino/access-control.properties:ro
@@ -445,6 +458,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_REGION: us-east-1
     healthcheck:
+      # /v1/info vẫn trả lời qua HTTP khi đã bật xác thực (đo trên Trino 443).
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/info || exit 1"]
       interval: 10s
       timeout: 5s
@@ -690,11 +704,20 @@ services:
       context: ../streamlit
       dockerfile: Dockerfile
     container_name: banking-streamlit
+    # Chỉ mật khẩu Trino của `streamlit` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/streamlit.env
     hostname: streamlit
     ports:
       - "8501:8501"
+    environment:
+      - TRINO_HOST=trino
+      - TRINO_PORT=8443
+      - TRINO_USER=streamlit
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - ../streamlit:/app
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')\" || exit 1"]
@@ -711,16 +734,18 @@ services:
       context: ../dbt
       dockerfile: Dockerfile
     container_name: banking-dbt
+    # Chỉ mật khẩu Trino của `dbt` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/dbt.env
     hostname: dbt
     volumes:
       - ../dbt:/usr/src/dbt
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     working_dir: /usr/src/dbt
+    # profiles.yml (target docker) đọc hai biến này (ADR-0016). Các biến DBT_*
+    # cũ (user admin, catalog lakehouse, cổng 8085) không được profile nào đọc.
     environment:
-      - DBT_HOST=trino
-      - DBT_PORT=8085
-      - DBT_CATALOG=lakehouse
-      - DBT_SCHEMA=semantic
-      - DBT_USER=admin
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     mem_limit: 1g
     networks:
       - lakehouse_net
@@ -740,16 +765,22 @@ services:
       context: ../api
       dockerfile: Dockerfile
     container_name: banking-api
+    # Chỉ mật khẩu Trino của `customer_api` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/customer_api.env
     hostname: api
     ports:
       - "8000:8000"
     environment:
       - TRINO_HOST=trino
-      - TRINO_PORT=8080
+      - TRINO_PORT=8443
       - TRINO_USER=customer_api
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
       - TRINO_CATALOG=iceberg
       - TRINO_SCHEMA=serving
       - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import httpx; httpx.get('http://localhost:8000/health').raise_for_status()\""]
@@ -771,6 +802,9 @@ services:
       context: ./superset
       dockerfile: Dockerfile
     container_name: banking-superset
+    # Chỉ mật khẩu Trino của `superset` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/superset.env
     hostname: superset
     ports:
       - "8088:8088"
@@ -785,9 +819,12 @@ services:
       - SUPERSET_ENV=production
       - SUPERSET_HOME=/app/superset_home
       - TZ=Asia/Ho_Chi_Minh
+      - TRINO_USER=superset
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - superset-home:/app/superset_home
       - ./superset/dashboards:/app/dashboards:ro
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 1024m
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8088/health || exit 1"]
@@ -806,6 +843,9 @@ services:
       context: ./superset
       dockerfile: Dockerfile
     container_name: banking-superset-init
+    # Chỉ mật khẩu Trino của `superset` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/superset.env
     hostname: superset-init
     environment:
       - SUPERSET_SECRET_KEY=${SUPERSET_SECRET_KEY:-banking_platform_secret_key_2025}
@@ -817,9 +857,12 @@ services:
       - FLASK_APP=superset
       - SUPERSET_HOME=/app/superset_home
       - TZ=Asia/Ho_Chi_Minh
+      - TRINO_USER=superset
+      - TRINO_CA_CERT=/etc/trino-ca/trino.pem
     volumes:
       - superset-home:/app/superset_home
       - ./superset/dashboards:/app/dashboards:ro
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     entrypoint: /bin/bash
     command: ["/app/docker/init.sh"]
     depends_on:
@@ -927,13 +970,20 @@ services:
       context: ./monitoring/exporters
       dockerfile: Dockerfile
     container_name: banking-freshness-exporter
+    # Chỉ mật khẩu Trino của `freshness_exporter` (ADR-0016) — không nạp docker/.env.
+    env_file:
+      - ./secrets/trino/env/freshness_exporter.env
     hostname: freshness-exporter
     ports:
       - "9119:9119"
     environment:
       TRINO_HOST: trino
-      TRINO_PORT: "8080"
+      TRINO_PORT: "8443"
+      TRINO_USER: freshness_exporter
+      TRINO_CA_CERT: /etc/trino-ca/trino.pem
       PORT: "9119"
+    volumes:
+      - ./secrets/trino/trino.pem:/etc/trino-ca/trino.pem:ro
     mem_limit: 128m
     depends_on:
       - trino

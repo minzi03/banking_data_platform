@@ -34,9 +34,12 @@ def _auth_headers() -> dict:
         token = base64.b64encode(f"{TRINO_USER}:{TRINO_PASSWORD}".encode()).decode()
         headers["Authorization"] = f"Basic {token}"
     return headers
+# Catalog PHÍA TRINO là `iceberg` (ADR-0002). `lakehouse` là tên phía Spark —
+# bản trước dùng nó, mọi truy vấn fail "Catalog 'lakehouse' not found", nên
+# cdc_freshness_seconds chưa từng được xuất và alert của nó không thể kích hoạt.
 FRESHNESS_TABLES = [
-    "lakehouse.silver.dim_customer_current",
-    "lakehouse.silver.dim_account_current",
+    "iceberg.silver.dim_customer_current",
+    "iceberg.silver.dim_account_current",
 ]
 
 # Cache to avoid hammering Trino
@@ -84,7 +87,7 @@ def query_trino(sql: str) -> list:
                 next_uri,
                 headers=_auth_headers(),
             )
-            with urllib.request.urlopen(next_req, timeout=30) as resp:
+            with urllib.request.urlopen(next_req, timeout=30, context=_SSL_CONTEXT) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
 
         if state == "FAILED":
@@ -107,10 +110,11 @@ def get_freshness_data() -> dict:
 
     try:
         # Check Trino is up
+        # Cùng scheme với truy vấn: khi đã bật xác thực TRINO_PORT là cổng HTTPS.
         info_req = urllib.request.Request(
-            f"http://{TRINO_HOST}:{TRINO_PORT}/v1/info",
+            f"{TRINO_SCHEME}://{TRINO_HOST}:{TRINO_PORT}/v1/info",
         )
-        with urllib.request.urlopen(info_req, timeout=5):
+        with urllib.request.urlopen(info_req, timeout=5, context=_SSL_CONTEXT):
             metrics["up"] = 1
     except Exception:
         _cache["data"] = metrics
@@ -148,7 +152,7 @@ def get_freshness_data() -> dict:
     try:
         sql = """
             SELECT COUNT(*) as total_events
-            FROM lakehouse.bronze.core_customer_cdc
+            FROM iceberg.bronze.core_customer_cdc
             WHERE __cdc_timestamp_ms > CAST(
                 (TO_UNIXTIME(CURRENT_TIMESTAMP) - 3600) * 1000 AS BIGINT
             )

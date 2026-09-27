@@ -1,6 +1,6 @@
 # ADR-0016 — Trino xác thực bằng mật khẩu qua HTTPS, mỗi client một credential
 
-**Status**: Accepted — triển khai hai bước (PR-A: client và bootstrap; PR-B: bật trên server)
+**Status**: Accepted — đã bật (PR-A #64: client và bootstrap; PR-B: server, compose, CI)
 **Ngày**: 2026-09-27
 **Liên quan**: [`0015`](0015-trino-access-control-generated-from-rbac.md) · [`RBAC_MATRIX.md`](../../06-security-compliance/RBAC_MATRIX.md) §5 · TD-3 · TD-15
 
@@ -98,3 +98,37 @@ vi, và PR-B chỉ còn là bật server + truyền biến môi trường.
 - **Mật khẩu nằm trong file trên đĩa** (`docker/secrets/trino/`) — bảo vệ bằng quyền
   file của máy dev, không bằng secret manager. Airflow có docker socket nên đọc được
   env của mọi container; ADR này không đổi điều đó.
+
+## Kiểm chứng trên stack (2026-09-27, sau khi bật)
+
+```text
+từ host      HTTP 8085 khai admin → 403 · HTTPS 8453 không/sai mật khẩu → 401 / 401
+             HTTPS 8453 đúng mật khẩu, verify cert (không -k) → 200
+verifier     scripts/verify_trino_access_control.py: 27/27 — gồm HTTP bị đóng, sai mật
+             khẩu, user lạ, superset mạo danh admin; RBAC + mask như trước, mỗi user
+             chạy bằng mật khẩu CỦA NÓ
+dbt          build serving 117/117, 163 truy vấn dưới user `dbt`
+manifest     45 truy vấn dưới `manifest_collector`, 0 lỗi
+API          /customer/1/overview 200 · Streamlit: 10.000 dòng dưới `streamlit`
+exporter     exporter_up 1, cdc_freshness_seconds được xuất
+Superset     engine của chính Superset: current_user = superset, serving đọc được,
+             silver bị từ chối
+CLI          `docker exec banking-trino trino --execute …` chạy nguyên văn (user `trino`)
+```
+
+HTTPS ra host ở **8453**, không phải 8443: trên máy dev đầu tiên 8443 đã thuộc một
+container không liên quan (OpenEMR).
+
+## Lỗi có từ trước, lộ ra khi kiểm từng client
+
+Mỗi client phải thực sự truy vấn được qua xác thực — và ba client hoá ra chưa từng
+truy vấn được, kể cả trước ADR này:
+
+- **Freshness exporter** truy vấn catalog `lakehouse` (tên phía Spark, ADR-0002) —
+  mọi truy vấn fail, `cdc_freshness_seconds` chưa từng được xuất, alert của nó không
+  thể kích hoạt.
+- **Superset**: script tạo kết nối gọi `create_app("superset")` (tham số là tên
+  module cấu hình → `KeyError: 'DATA_DIR'`) và import `get_or_create_db` từ sai
+  module; `init.sh` nuốt lỗi bằng `|| echo`. Kết nối chưa từng được tạo bằng script,
+  và URI của nó dùng catalog `lakehouse`.
+- **Streamlit** nối `trino:8085` — cổng của HOST — từ trong mạng docker.

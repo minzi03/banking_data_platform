@@ -429,7 +429,6 @@ CLIENT_USERS = [
     # ADR-0016: client đọc user từ TRINO_USER, mặc định là user của chính nó.
     ("docker/superset/add_trino_connection.py", r'"TRINO_USER",\s*"([^"]+)"', "superset"),
     ("api/main.py", r'"TRINO_USER",\s*"([^"]+)"', "customer_api"),
-    ("docker/docker-compose.yml", r"TRINO_USER=(\S+)", "customer_api"),
     ("streamlit/app.py", r'"TRINO_USER",\s*"([^"]+)"', "streamlit"),
     ("ml/pipeline/churn_prediction.py", r'"TRINO_USER",\s*"([^"]+)"', "ml"),
     ("ml/pipeline/credit_scoring.py", r'"TRINO_USER",\s*"([^"]+)"', "ml"),
@@ -446,6 +445,40 @@ class TestClientsUseTheirOwnUser:
         assert found, f"{path}: không tìm thấy khai báo user Trino"
         assert set(found) == {expected}, f"{path}: {found}"
         assert expected in USERS, f"{expected} chưa khai trong governance/rbac.py"
+
+    # Service compose → user Trino của nó. Mỗi service nạp ĐÚNG file mật khẩu của
+    # user đó (ADR-0016): nếu api nạp nhầm env/admin.env, nó đăng nhập được với
+    # quyền admin dù vẫn khai TRINO_USER=customer_api — Trino chỉ tin mật khẩu.
+    COMPOSE_CLIENTS = {
+        "api": "customer_api",
+        "streamlit": "streamlit",
+        "superset": "superset",
+        "superset-init": "superset",
+        "dbt": "dbt",
+        "freshness-exporter": "freshness_exporter",
+    }
+
+    @pytest.mark.parametrize(("service", "user"), sorted(COMPOSE_CLIENTS.items()))
+    def test_compose_client_loads_only_its_own_password(self, service, user):
+        compose = yaml.safe_load((REPO_ROOT / "docker" / "docker-compose.yml").read_text(encoding="utf-8"))
+        svc = compose["services"][service]
+        env = svc.get("environment") or {}
+        env = env if isinstance(env, dict) else dict(e.split("=", 1) for e in env if "=" in e)
+        assert env.get("TRINO_USER", user) == user, f"{service}: TRINO_USER={env.get('TRINO_USER')}"
+        assert "TRINO_PASSWORD" not in env, f"{service}: mật khẩu phải đến từ env_file, không nội suy từ docker/.env"
+        assert svc.get("env_file") == [f"./secrets/trino/env/{user}.env"], f"{service}: env_file={svc.get('env_file')}"
+        assert user in USERS
+
+    def test_no_compose_service_loads_another_services_password(self):
+        compose = yaml.safe_load((REPO_ROOT / "docker" / "docker-compose.yml").read_text(encoding="utf-8"))
+        loaders = {
+            name: files
+            for name, svc in compose["services"].items()
+            for files in [[f for f in (svc.get("env_file") or []) if "secrets/trino/env/" in str(f)]]
+            if files
+        }
+        assert set(loaders) == set(self.COMPOSE_CLIENTS) | {"trino"}, sorted(loaders)
+        assert loaders["trino"] == ["./secrets/trino/env/trino-server.env"]
 
     def test_no_hardcoded_trino_header_user(self):
         text = (REPO_ROOT / "docker/monitoring/exporters/freshness_exporter.py").read_text(encoding="utf-8")

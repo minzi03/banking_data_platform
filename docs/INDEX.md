@@ -77,6 +77,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [0013](02-architecture/adr/0013-declared-sources-match-sql.md) | Khai báo nguồn phải khớp với SQL |
 | [0014](02-architecture/adr/0014-kimball-over-data-vault.md) | Kimball star schema, Data Vault chỉ ở mức ánh xạ |
 | [0015](02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) | Access control của Trino sinh từ `rbac.py`, danh tính do client tự khai |
+| [0016](02-architecture/adr/0016-trino-password-authentication.md) | Trino xác thực bằng mật khẩu qua HTTPS, mỗi client một credential | Accepted |
 
 > **Chưa có**: `DATA_FLOW.md`, và **ADR-0001** (Iceberg vs Delta) — lý do chọn chưa được ghi ở đâu, cần tác giả xác nhận. Xem [`adr/README.md`](02-architecture/adr/README.md).
 
@@ -134,12 +135,12 @@ Hai tài liệu trên trả lời hai câu hỏi khác nhau: *"chạy cái này 
 | Tài liệu | Nội dung |
 |---|---|
 | [`PII_INVENTORY.md`](06-security-compliance/PII_INVENTORY.md) | **31 bảng chứa dữ liệu cá nhân**, cột nào ở tầng nào, ba cơ chế che và chỗ chúng lệch nhau — và kiểm soát truy cập ở Trino phủ tới đâu |
-| [`RBAC_MATRIX.md`](06-security-compliance/RBAC_MATRIX.md) | **Sinh từ `governance/rbac.py`**: 8 role, 14 user, quyền theo schema, ai thấy PII gốc ở bảng nào — và những gì ma trận KHÔNG bảo đảm (chưa xác thực, Spark/MinIO đi vòng) |
+| [`RBAC_MATRIX.md`](06-security-compliance/RBAC_MATRIX.md) | **Sinh từ `governance/rbac.py`**: 8 role, 14 user, quyền theo schema, ai thấy PII gốc ở bảng nào — và những gì ma trận KHÔNG bảo đảm (cert tự ký, Spark/MinIO đi vòng) |
 | [`AI_GOVERNANCE_FRAMEWORK.md`](06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md) | Khung quản trị cho thành phần AI/ML |
 
 > **Chưa có**: `AUDIT_TRAIL.md`, `REGULATORY_MAPPING.md` (BCBS 239 / SBV → bảng, cột, job nào đáp ứng). Với ngân hàng, nhóm này là bắt buộc chứ không phải tuỳ chọn.
 >
-> `PII_INVENTORY.md` §7 ghi giới hạn của lớp kiểm soát truy cập hiện có — chưa xác thực, không phủ Spark/MinIO — đọc trước nếu bạn định mang mẫu này sang hệ thống có dữ liệu thật.
+> `PII_INVENTORY.md` §7 ghi giới hạn của lớp kiểm soát truy cập hiện có — có xác thực mật khẩu (ADR-0016) nhưng không phủ Spark/MinIO — đọc trước nếu bạn định mang mẫu này sang hệ thống có dữ liệu thật.
 
 ## 7. Nghiên cứu & định hướng
 

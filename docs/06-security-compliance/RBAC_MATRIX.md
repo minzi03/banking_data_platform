@@ -121,9 +121,9 @@ Danh mục đầy đủ bảng/cột chứa PII: [`PII_INVENTORY.md`](PII_INVENT
 
 ## 5. Ma trận này KHÔNG bảo đảm gì
 
-1. **Chưa có xác thực.** Trino tin tên user mà client tự khai. Ai kết nối được tới cổng
-   Trino và khai `admin` thì nhận quyền admin. Ma trận phân quyền đúng cho client **trung
-   thực** — nó chặn nhầm lẫn và lộ PII vô ý, không chặn người cố ý.
+1. **Xác thực bằng mật khẩu, qua cert tự ký** ([ADR-0016](../02-architecture/adr/0016-trino-password-authentication.md)).
+   Mỗi user một mật khẩu; HTTP trả 403, mạo danh bị chặn — đã đo trên stack. Nhưng cert
+   tự ký, không có PKI; mật khẩu nằm trong file trên máy dev, không trong secret manager.
 2. **Spark không đi qua Trino.** Job Spark đọc/ghi Iceberg trực tiếp qua REST catalog và
    MinIO — không luật nào ở đây áp cho nó.
 3. **MinIO và Postgres ngoài phạm vi.** Ai có credential MinIO đọc được file Parquet gốc,
