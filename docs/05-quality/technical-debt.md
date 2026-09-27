@@ -395,13 +395,42 @@ no default, and a missing variable fails loudly.
 Verified on the stack: the Gold DQ job wrote its 20 results through the worker's
 environment; Superset init ran with the required variables (exit 0).
 
-**Still open — declared in `KNOWN_DEBT`, which may only shrink:**
-- **MinIO keys (group B).** `spark_session.py` and the CDC scripts still default
-  `MINIO_*`. `docker/spark/conf/spark-defaults.conf` and
-  `docker/init_trino/catalog/iceberg.properties` carry the MinIO keys in plain text,
-  and the Spark worker receives no MinIO variables. Fixing this means passing MinIO
-  credentials to Spark and Trino from the environment (Trino supports `${ENV:…}`) and
-  removing them from both config files.
+**MinIO keys (group B), fixed 2026-09-27.** `spark-defaults.conf` and the Trino
+catalog `iceberg.properties` had the MinIO keys written into the committed files.
+`spark_session.py` and the three CDC scripts fell back to the same keys when a
+variable was missing. The fix gives both engines one credential source: the standard
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` variables, set by compose from
+`docker/.env`.
+
+- Spark: the key lines are gone from `spark-defaults.conf`. Iceberg's S3FileIO reads
+  the variables through the AWS SDK's default chain. The S3A provider list is
+  `SimpleAWSCredentialsProvider` (keys set on the session) followed by
+  `EnvironmentVariableCredentialsProvider`. `spark-master`, `spark-worker-1` and
+  `iceberg-init` now receive the variables. Airflow already did.
+- Trino: `hive.s3.aws-access-key=${ENV:AWS_ACCESS_KEY_ID}` (and the secret key the same
+  way). The container already had the variables.
+- `get_spark_session()` raises when `ICEBERG_CATALOG_URI` is set without
+  `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`. The CDC scripts no longer set keys at all.
+- CI compose declares its throwaway MinIO credentials once, as a YAML anchor merged
+  into the Spark and Trino services.
+- The guard now also scans `.conf` / `.properties` files. A key or secret there must
+  be a `${ENV:…}` reference. `Minioadmin123` joined the forbidden literals. With the
+  list empty, `KNOWN_DEBT` and its test were removed.
+
+Verified on the stack after recreating `spark-master`, `spark-worker-1` and `trino`:
+
+```text
+Trino    reads Gold data files                  1,200,000 rows, night_flag 4.35 %
+Spark    S3A list s3a://lakehouse/lakehouse/    5 entries
+Spark    S3FileIO read on executors             silver.fact_txn_account 1,200,000
+Spark    S3FileIO write (Gold fraud_risk_txn)   exit 0, new snapshot, same data
+negative S3A with AWS_* unset in the driver     NoAuthWithAWSException from both providers
+```
+
+The CDC scripts were not run: the Kafka/Debezium services were not up. They now rely
+on the same `spark-defaults.conf` credential path as every batch job.
+
+**Other groups:**
 - **Terraform (group D), fixed 2026-09-27.** `terraform/terraform.tfvars` was
   committed with the Postgres and MinIO passwords, and `variables.tf` used the same
   values as defaults. `.gitignore` also missed `terraform.tfstate`, where Terraform
@@ -415,9 +444,13 @@ environment; Superset init ran with the required variables (exit 0).
   `tests/governance/test_terraform_secrets.py` (5 of 6 tests fail on the old files).
   Not run: `terraform validate` or `plan`, because no Terraform binary is available
   here.
-- **Rotation.** Removing fallbacks rotates nothing. Change the values in
-  `docker/.env` if they are still the ones from the example. An existing Superset
-  admin keeps its old password (`superset fab reset-password`).
+- **Rotation.** Removing fallbacks rotates nothing, and every secret in the local
+  `docker/.env` is in Git history (1–12 commits each, 2026-09-27).
+  `scripts/rotate_local_secrets.py` (RUNBOOK §11) rotates the Postgres, CDC and
+  MinIO values and locks the group roles; it refuses to run until this MinIO change
+  is on the checked-out branch. Superset, Airflow and OpenMetadata secrets need their
+  services running. An existing Superset admin keeps its old password
+  (`superset fab reset-password`).
 - CI-only values (CI compose, workflow env) are throwaway and stay as they are.
 
 ---
