@@ -169,3 +169,49 @@ def _benchmark_policy_violations() -> dict[str, str | None]:
 def test_scheduled_benchmark_measures_without_mutating_the_repository(rule):
     violation = _benchmark_policy_violations()[rule]
     assert violation is None, violation
+
+
+def _daily_hour(cron: str | None) -> int | None:
+    m = re.fullmatch(r"\d+ (\d+) \* \* \*", cron or "")
+    return int(m.group(1)) if m else None
+
+
+def _dag_schedules() -> dict[str, tuple[str, str | None, list[str]]]:
+    """DAG_ID → (file, schedule_interval, các job_name mà sensor của nó chờ cờ)."""
+    dags = {}
+    for path in DAG_FILES:
+        text = path.read_text(encoding="utf-8")
+        dag_id = re.search(r'^DAG_ID\s*=\s*"(\w+)"', text, re.MULTILINE)
+        if not dag_id:
+            continue
+        sched = re.search(r"""schedule_interval\s*=\s*(?:"([^"]*)"|'([^']*)'|None)""", text)
+        cron = (sched.group(1) or sched.group(2)) if sched else None
+        dags[dag_id.group(1)] = (_dag_id(path), cron, sorted(set(re.findall(r"job_name = '(\w+)'", text))))
+    return dags
+
+
+class TestFlagWaitingDagsAreScheduled:
+    """
+    DAG chờ cờ `flag_job_etl` của DAG khác cho `{{ ds }}` phải TỰ chạy, và chạy SAU DAG nó chờ.
+
+    `ops_lineage_dag` có đủ sensor chờ silver/gold nhưng `schedule_interval=None` và không
+    DAG nào trigger nó — lineage_log chỉ có dữ liệu khi có người bấm tay (TD-13).
+    """
+
+    DAGS = _dag_schedules()
+    WAITERS = sorted(d for d, (_, _, waits) in DAGS.items() if waits)
+
+    def test_waiters_are_found(self):
+        assert {"ops_lineage_dag", "ops_data_quality_dag"} <= set(self.WAITERS)
+
+    @pytest.mark.parametrize("dag_id", WAITERS)
+    def test_waiter_runs_daily_after_what_it_waits_for(self, dag_id):
+        path, cron, waits = self.DAGS[dag_id]
+        hour = _daily_hour(cron)
+        assert hour is not None, f"{path}: chờ cờ {waits} nhưng không có lịch hằng ngày (schedule_interval={cron!r})"
+        for upstream in waits:
+            if upstream not in self.DAGS:
+                continue  # cờ không phải của một DAG (vd. SERVING_COMPLETE)
+            up_hour = _daily_hour(self.DAGS[upstream][1])
+            if up_hour is not None:
+                assert hour >= up_hour, f"{path} chạy {hour}h, trước {upstream} ({up_hour}h) mà nó chờ"
