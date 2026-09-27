@@ -1,8 +1,14 @@
--- =============================================================================
--- CDC Setup — Banking Data Platform
--- Enable logical replication for Debezium CDC connector
--- =============================================================================
+#!/bin/bash
+# =============================================================================
+# CDC Setup — Banking Data Platform (chạy một lần khi Postgres khởi tạo)
+# =============================================================================
+# Từng là 05-cdc-setup.sql với mật khẩu cdc_user viết cứng. Thành .sh để mật
+# khẩu đến từ CDC_DB_PASSWORD (docker/.env, container postgres nhận qua env_file).
+# Thiếu biến (vd. compose CI) thì role tồn tại nhưng NOLOGIN — không có mặc định.
+# File được docker-entrypoint SOURCE: không dùng `exit`.
 
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+-- Enable logical replication for Debezium CDC connector
 ALTER SYSTEM SET wal_level = logical;
 ALTER SYSTEM SET max_replication_slots = 4;
 ALTER SYSTEM SET max_wal_senders = 4;
@@ -10,10 +16,21 @@ ALTER SYSTEM SET max_wal_senders = 4;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'cdc_user') THEN
-        CREATE ROLE cdc_user WITH REPLICATION LOGIN PASSWORD 'CDCPassword123';
+        -- NOLOGIN, không mật khẩu. LOGIN + mật khẩu chỉ được đặt bên dưới, từ
+        -- CDC_DB_PASSWORD. Bản cũ viết cứng mật khẩu ngay tại đây.
+        CREATE ROLE cdc_user WITH REPLICATION NOLOGIN;
     END IF;
 END
 $$;
+
+-- psql không thay biến trong khối $$…$$, nên mật khẩu đặt ngoài DO. \getenv đọc
+-- env mà không đưa giá trị lên dòng lệnh; :'cdc_pw' tự quote đúng.
+\getenv cdc_pw CDC_DB_PASSWORD
+\if :{?cdc_pw}
+ALTER ROLE cdc_user WITH LOGIN PASSWORD :'cdc_pw';
+\else
+\echo 'CDC_DB_PASSWORD chưa đặt: cdc_user giữ NOLOGIN — Debezium sẽ không đăng nhập được.'
+\endif
 
 GRANT USAGE ON SCHEMA core_banking TO cdc_user;
 GRANT USAGE ON SCHEMA card_crm TO cdc_user;
@@ -92,3 +109,4 @@ END
 $$;
 
 COMMENT ON ROLE cdc_user IS 'CDC user for Debezium connector with replication privileges';
+SQL
