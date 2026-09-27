@@ -62,10 +62,7 @@ def build_rewrite_sql(target: str, columns: list, cob_dt: str) -> str:
     ≥ 2 cột → zorder(...). 1 cột → sort tuyến tính: z-order một chiều chính là sort.
     """
     catalog, table = target.split(".", 1)
-    if len(columns) > 1:
-        sort_order = f"zorder({','.join(columns)})"
-    else:
-        sort_order = f"{columns[0]} ASC NULLS LAST"
+    sort_order = f"zorder({','.join(columns)})" if len(columns) > 1 else f"{columns[0]} ASC NULLS LAST"
     return (
         f"CALL {catalog}.system.rewrite_data_files("
         f"table => '{table}', "
