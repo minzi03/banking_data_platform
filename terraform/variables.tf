@@ -65,9 +65,8 @@ variable "postgres_user" {
 }
 
 variable "postgres_password" {
-  description = "PostgreSQL password"
+  description = "PostgreSQL password — không có mặc định: đặt trong terraform.tfvars (gitignore) hoặc TF_VAR_postgres_password"
   type        = string
-  default     = "BankingAdmin123"
   sensitive   = true
 }
 
@@ -85,9 +84,8 @@ variable "minio_access_key" {
 }
 
 variable "minio_secret_key" {
-  description = "MinIO secret key"
+  description = "MinIO secret key — không có mặc định: đặt trong terraform.tfvars (gitignore) hoặc TF_VAR_minio_secret_key"
   type        = string
-  default     = "Minioadmin123"
   sensitive   = true
 }
 

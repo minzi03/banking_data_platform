@@ -309,6 +309,24 @@ has to be queried from the platform.
 
 **Status:** fixed (2026-09-14)
 
+**Postgres init roles (2026-09-27).** `docker/init_postgres/` created four `LOGIN`
+roles with passwords written into the SQL. `cdc_user` was in `05-cdc-setup.sql`;
+`etl_user`, `analytics_user` and `readonly_user` were in `05_security.sql`. The
+runtime secret scan did not read `.sql`, so it did not see them. No service logs in
+as the last three: they are permission groups, and they are now `NOLOGIN`.
+`cdc_user` does need to log in (Debezium). `05-cdc-setup.sh` sets its password from
+`CDC_DB_PASSWORD` with psql's `\getenv`; if the variable is unset, the role is
+`NOLOGIN`, so there is no default. Checked on a throwaway Postgres 15 container:
+
+- With the variable, `cdc_user` logs in over scram, and a wrong password is
+  rejected.
+- Without it, `cdc_user` is `NOLOGIN`.
+- The three group roles have `rolcanlogin = false` in both cases.
+
+Guard: `tests/governance/test_postgres_init_roles.py`, 3 of 4 tests fail on the old
+files. These scripts run only on a fresh data directory, so **an existing stack
+keeps the old `LOGIN` roles and passwords until they are rotated.**
+
 **Risk assessment (after investigation):**
 
 ```text
@@ -412,12 +430,27 @@ negative S3A with AWS_* unset in the driver     NoAuthWithAWSException from both
 The CDC scripts were not run: the Kafka/Debezium services were not up. They now rely
 on the same `spark-defaults.conf` credential path as every batch job.
 
-**Still open:**
-- **Terraform (group D).** `terraform/terraform.tfvars` is committed with passwords;
-  `variables.tf` has password defaults.
-- **Rotation.** Removing fallbacks rotates nothing. Change the values in
-  `docker/.env` if they are still the ones from the example. An existing Superset
-  admin keeps its old password (`superset fab reset-password`).
+**Other groups:**
+- **Terraform (group D), fixed 2026-09-27.** `terraform/terraform.tfvars` was
+  committed with the Postgres and MinIO passwords, and `variables.tf` used the same
+  values as defaults. `.gitignore` also missed `terraform.tfstate`, where Terraform
+  stores secrets in plain text. Now `postgres_password` and `minio_secret_key` are
+  `sensitive` with no default, so a missing value stops `terraform plan`. Only
+  `terraform.tfvars.example` (secrets `CHANGE_ME`) is committed. The real tfvars,
+  the state, `.terraform/` and the lock file are ignored; the local tfvars stays on
+  disk, untracked. The old tfvars was also missing `alertmanager` in `ports`, an
+  object with 13 required attributes, so `terraform plan` with it had been broken
+  unnoticed, because CI never runs Terraform. Guard:
+  `tests/governance/test_terraform_secrets.py` (5 of 6 tests fail on the old files).
+  Not run: `terraform validate` or `plan`, because no Terraform binary is available
+  here.
+- **Rotation.** Removing fallbacks rotates nothing, and every secret in the local
+  `docker/.env` is in Git history (1–12 commits each, 2026-09-27).
+  `scripts/rotate_local_secrets.py` (RUNBOOK §11) rotates the Postgres, CDC and
+  MinIO values and locks the group roles; it refuses to run until this MinIO change
+  is on the checked-out branch. Superset, Airflow and OpenMetadata secrets need their
+  services running. An existing Superset admin keeps its old password
+  (`superset fab reset-password`).
 - CI-only values (CI compose, workflow env) are throwaway and stay as they are.
 
 ---
@@ -1524,19 +1557,25 @@ churn tier 'Active'                     0      9,655
   (prefix, suffix) pair. 2,000 merchants against a capacity of 2,322 names.
   CI seeds 1% (20 merchants) and never reaches it. `merchant`,
   `source_table_registry` and the AML tables stayed empty. No pipeline reads
-  them, which is why the rebuild still worked.
+  them, which is why the rebuild still worked. **Observed fixed (2026-09-27):**
+  the full-size seed finishes in 153 s with `merchant` 2,000,
+  `source_table_registry` 19, `aml_rule` 14, `aml_alert` 500 and
+  `aml_customer_risk` 200.
 - **CRM ended 7 months before the newest transaction**, so
   `interaction_count_90d` was 0 for everyone even after anchoring. The CRM,
   support-ticket and device-`last_seen` windows now end at `as_of`, keeping a
-  two-year span. Tested in the generator; **not yet observed on the stack,
-  which needs another re-seed.**
+  two-year span. **Observed on the stack (2026-09-27, second re-seed, see
+  TD-17):** the newest CRM interaction is 2026-09-22 in business time, and
+  4,647 / 10,000 customers have `interaction_count_90d > 0` (it was 0). The
+  Gold sum (6,278) equals the 90-day count taken directly on Silver (6,278).
 
 ---
 
 ## TD-17 — Business hours were UTC hours, and two bugs hid each other
 
-**Status:** fixed in code (2026-09-27). Needs a user-run re-seed to reach the stack
-(below). Found while doing TD-16.
+**Status:** fixed and verified on the stack (2026-09-27). The stack was re-seeded
+with `--as-of 2026-09-22` and rebuilt: Bronze → Silver → Gold → dbt (below).
+Found while doing TD-16.
 
 ### Two bugs that cancel out
 
@@ -1587,12 +1626,28 @@ transactions with `risk_level >= 1` go from 7.09 % to 27.44 %.
   (Spark): runs the `night_flag` expression taken from the YAML at 15:59:59, 16:00,
   22:59:59, 23:00 and 03:00 UTC.
 
+### Verified on the stack (2026-09-27, cob_dt 2026-09-22)
+
+The data was re-seeded with the new generator, then Bronze (17/17) → Silver
+(16/16) → Gold (14/14) → dbt, all with exit code 0. `dbt build` gave PASS=130:
+13 models and 117 tests.
+
+```text
+                                  before re-seed   SQL-only fix   now
+peak hours (Vietnam time)             16–18h          16–18h       10h, 9h, 11h
+night share, Postgres source             —               —          4.35 %
+night share, Silver (Trino)          25.35 %         25.35 %        4.35 %
+fraud_risk_txn.night_flag             4.42 %         25.35 %        4.35 %
+risk_level >= 1                       7.09 %         27.44 %        7.03 %
+transactions after cob_dt                0               —           0
+```
+
+The three layers are measured independently: Postgres with
+`AT TIME ZONE 'Asia/Ho_Chi_Minh'`, Silver with Trino, and Gold with the Spark SQL.
+They agree. The newest transaction is 2026-09-22 16:59 UTC, which is 23:59 in
+Vietnam.
+
 ### Not done here
 
-- **Re-seed.** The stack still holds data seeded with the old generator. Until it is
-  re-seeded, rebuilding Gold with the new SQL gives the 25 % above. Run
-  `generate_all.py --truncate --as-of <cob_dt>`, then Bronze → Silver → Gold. After
-  that, `night_flag` should be about 4.5 % and the peak should be 9–11h in Vietnam
-  time.
 - `aml_alert.txn_date` uses a uniform hour of day, so it has no peaks to shift.
   `_random_datetime` (uniform over the day) is also unaffected.

@@ -1,5 +1,7 @@
 # =============================================================================
-# Banking Data Platform — Terraform Values
+# Banking Data Platform — Terraform Values (MẪU)
+# Chép thành terraform.tfvars (gitignore) rồi điền secret. Secret không có
+# mặc định trong variables.tf: thiếu thì terraform plan dừng lại.
 # =============================================================================
 
 environment  = "dev"
@@ -15,12 +17,12 @@ superset_memory      = "1024m"
 
 # ── Database ───────────────────────────────────────────────────────────────
 postgres_user     = "banking_admin"
-postgres_password = "BankingAdmin123"
+postgres_password = "CHANGE_ME"
 postgres_db       = "banking_db"
 
 # ── Object Storage ─────────────────────────────────────────────────────────
 minio_access_key = "minioadmin"
-minio_secret_key = "Minioadmin123"
+minio_secret_key = "CHANGE_ME"
 minio_bucket     = "lakehouse"
 
 # ── Ports ──────────────────────────────────────────────────────────────────
@@ -37,4 +39,6 @@ ports = {
   streamlit        = 8501
   prometheus       = 9095
   grafana          = 3000
+  # Bắt buộc: `ports` là object đủ 13 thuộc tính; bản cũ thiếu dòng này.
+  alertmanager     = 9093
 }

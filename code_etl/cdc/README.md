@@ -30,11 +30,13 @@ This module implements real-time Change Data Capture (CDC) using:
 
 ## Components
 
-### 1. PostgreSQL Configuration (`docker/init_postgres/05-cdc-setup.sql`)
+### 1. PostgreSQL Configuration (`docker/init_postgres/05-cdc-setup.sh`)
 
 Enables CDC on PostgreSQL:
 - Sets `wal_level = logical`
-- Creates `cdc_user` with replication privileges
+- Creates `cdc_user` with replication privileges. Its password comes from
+  `CDC_DB_PASSWORD` in `docker/.env`. If the variable is unset, the role is
+  created `NOLOGIN`: there is no default password.
 - Creates publication for Debezium
 
 ### 2. Debezium Connector (`code_etl/cdc/register_connectors.py`)
