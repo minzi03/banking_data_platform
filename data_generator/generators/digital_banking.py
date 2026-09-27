@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from .amounts import amount_sampler
+from .timeline import shift
 
 
 OS_OPTIONS = ["iOS", "Android", "Windows", "macOS", "Linux"]
@@ -62,8 +63,8 @@ def generate_devices(count: int, config: dict, customer_ids: list[int]) -> list[
         fingerprint = str(uuid.uuid4())[:16]
         ip = f"{random.randint(1, 223)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
         is_trusted = 1 if random.random() < trusted_rate else 0
-        first_seen = _random_datetime("2022-01-01", "2024-12-31")
-        last_seen = _random_datetime(first_seen.strftime("%Y-%m-%d"), "2025-12-31")
+        first_seen = _random_datetime(shift("2022-01-01"), shift("2024-12-31"))
+        last_seen = _random_datetime(first_seen.strftime("%Y-%m-%d"), shift("2025-12-31"))
 
         rows.append((
             i,
@@ -187,7 +188,7 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
             fraud_reason = "+".join(sorted(triggered_reasons)) or "UNSPECIFIED"
 
         # Use seasonal datetime
-        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
+        txn_date = _random_datetime_seasonal(shift("2025-06-01"), shift("2026-08-01"))
 
         rows.append((
             i,
@@ -232,7 +233,7 @@ def generate_support_tickets(count: int, config: dict, customer_ids: list[int]) 
         status = random.choices(statuses, weights=s_weights)[0]
         subject = random.choice(ISSUE_SUBJECTS.get(issue, ["General inquiry"]))
 
-        date_opened = _random_datetime("2024-01-01", "2025-12-31")
+        date_opened = _random_datetime(shift("2024-01-01"), shift("2025-12-31"))
         date_resolved = None
         resolution_hrs = None
         satisfaction = None
@@ -421,6 +422,12 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
     else:
         while dt.weekday() != 6:
             dt = dt + timedelta(days=1)
+
+    # Dời sang thứ Bảy / Chủ nhật / thứ Hai chỉ đi TỚI, nên có thể vượt `end` tới
+    # 6 ngày. Khi `end` là cob_dt (timeline) thì đó là giao dịch trong tương lai.
+    # Lùi đúng một tuần: giữ thứ trong tuần, không vượt mốc.
+    if dt > end:
+        dt -= timedelta(days=7)
 
     hour_weights = {
         0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,

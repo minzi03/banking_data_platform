@@ -37,7 +37,9 @@ gửi tiết kiệm, vay, dùng thẻ và giao dịch qua quầy, ATM, internet 
 | Giao dịch online | 500.000 | có nhãn gian lận, tỷ lệ ~0,8% |
 | Nhân viên | 1.800 | |
 
-- **Khoảng thời gian:** 2020-01-01 → 2025-12-31 (6 năm).
+- **Khoảng thời gian:** neo vào `--as-of` (mặc định: hôm nay) — giao dịch trải **14 tháng** tới
+  đúng `as_of`; ngày mở tài khoản, phát hành thẻ, tuyển nhân viên lùi xa hơn, cùng độ lệch.
+  Seed với `as_of` = `cob_dt` sẽ nạp (TD-16).
 - **Việt Nam hoá:** họ tên tiếng Việt, số CCCD 12 chữ số, số điện thoại `0xxxxxxxxx`, tiền VND,
   10 thành phố lớn, mã MCC theo ISO 18245, thương hiệu thẻ gồm cả NAPAS.
 - **Số tiền** rút theo phân phối **log-normal** (từ PR #21), không phải phân phối đều: đa số giao
@@ -304,7 +306,7 @@ số, lệch là lỗi (`branch_monthly_cross_engine_reconciles`).
 
 | Vấn đề | Hệ quả |
 |---|---|
-| Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng: KPI 30 ngày của Customer 360 bằng 0 cho cả 10.000 khách, không khách nào ở mức churn "Active" |
+| Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng. **Đã sửa trong generator (TD-16)** — ngày neo vào `--as-of`; stack local đang chạy vẫn mang dữ liệu cũ cho tới khi seed lại |
 | `gold_job.py` chạy `OPTIMIZE … ZORDER BY` — cú pháp Delta Lake, Iceberg không có | Bước tối ưu thất bại ở mọi job Gold, bị bắt thành WARNING; dữ liệu vẫn ghi đúng |
 
 ---

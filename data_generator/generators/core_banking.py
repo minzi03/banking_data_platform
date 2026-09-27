@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .amounts import amount_sampler
+from .timeline import shift, shift_dt
 
 # Vietnamese names — expanded pool for 10K+ customer uniqueness
 FIRST_NAMES_MALE = [
@@ -107,7 +108,7 @@ def generate_branches(count: int, config: dict) -> list[tuple]:
         city_districts = CITY_DISTRICTS.get(city, DEFAULT_DISTRICTS)
         district = random.choice(city_districts)
         status = random.choices(statuses, weights=s_weights)[0]
-        open_date = _random_date("2000-01-01", "2024-12-31")
+        open_date = _random_date(shift("2000-01-01"), shift("2024-12-31"))
         manager = _random_name("M") if random.random() < 0.8 else None
 
         rows.append((
@@ -138,7 +139,7 @@ def generate_products(config: dict) -> list[tuple]:
             p["type"],
             p["currency"],
             1,  # is_active
-            _random_date("2015-01-01", "2024-12-31"),
+            _random_date(shift("2015-01-01"), shift("2024-12-31")),
             datetime.now(),
         ))
     return rows
@@ -173,7 +174,7 @@ def generate_customers(count: int, config: dict, branch_codes: list[str],
     for i in range(1, count + 1):
         gender = random.choices(["M", "F", "O"], weights=[0.52, 0.46, 0.02])[0]
         name = _random_name(gender)
-        dob = _random_date("1955-01-01", "2005-12-31")
+        dob = _random_date(shift("1955-01-01"), shift("2005-12-31"))
         city = random.choice(cities)
         cccd = f"{random.randint(100000000000, 999999999999)}"
         phone = f"0{random.choice([3, 5, 7, 8, 9])}{random.randint(10000000, 99999999)}"
@@ -204,7 +205,7 @@ def generate_customers(count: int, config: dict, branch_codes: list[str],
             branch,
             segment,
             kyc,
-            _random_date("2015-01-01", "2025-06-30"),
+            _random_date(shift("2015-01-01"), shift("2025-06-30")),
             1 if random.random() < active_rate else 0,
             datetime.now(),
         ))
@@ -237,10 +238,10 @@ def generate_accounts(count: int, config: dict, customer_ids: list[int],
         else:
             balance = random.randint(10000000, 1000000000)
 
-        open_date = _random_date("2018-01-01", "2025-06-30")
+        open_date = _random_date(shift("2018-01-01"), shift("2025-06-30"))
         close_date = None
         if status == "CLOSED":
-            close_date = _random_date(open_date, "2025-12-31")
+            close_date = _random_date(open_date, shift("2025-12-31"))
 
         rows.append((
             i,
@@ -277,7 +278,7 @@ def generate_deposits(count: int, config: dict, customer_ids: list[int],
         term = random.choice(terms)
         rate = round(random.uniform(rate_range[0], rate_range[1]), 2)
         principal = random.randint(principal_range[0], principal_range[1])
-        open_date = _random_date("2020-01-01", "2025-06-30")
+        open_date = _random_date(shift("2020-01-01"), shift("2025-06-30"))
         open_dt = datetime.strptime(open_date, "%Y-%m-%d")
         maturity_date = (open_dt + timedelta(days=term * 30)).strftime("%Y-%m-%d")
         status = random.choices(statuses, weights=s_weights)[0]
@@ -317,7 +318,7 @@ def generate_loans(count: int, config: dict, customer_ids: list[int],
         rate = round(random.uniform(rate_range[0], rate_range[1]), 2)
         term = random.choice(terms)
         status = random.choices(statuses, weights=s_weights)[0]
-        disb_date = _random_date("2020-01-01", "2025-03-31")
+        disb_date = _random_date(shift("2020-01-01"), shift("2025-03-31"))
         disb_dt = datetime.strptime(disb_date, "%Y-%m-%d")
         mat_date = (disb_dt + timedelta(days=term * 30)).strftime("%Y-%m-%d")
 
@@ -390,7 +391,7 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
         channel = random.choices(channels, weights=ch_weights)[0]
         amount = sample_amount()
         # Use seasonal datetime for realistic patterns
-        txn_date = _random_datetime_seasonal("2025-06-01", "2026-08-01")
+        txn_date = _random_datetime_seasonal(shift("2025-06-01"), shift("2026-08-01"))
 
         # Balance simulation
         if running_balances:
@@ -446,7 +447,7 @@ def generate_employees(count: int, config: dict, branch_codes: list[str]) -> lis
         role = random.choices(roles, weights=r_weights)[0]
         salary = random.randint(salary_range[0], salary_range[1])
         status = "ACTIVE" if random.random() < active_rate else "TERMINATED"
-        hire_date = _random_date("2010-01-01", "2025-06-30")
+        hire_date = _random_date(shift("2010-01-01"), shift("2025-06-30"))
 
         rows.append((
             i,
@@ -509,7 +510,7 @@ def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
             monthly_payment = principal * (monthly_rate * factor) / (factor - 1)
 
         # Generate payments up to current date (or full term for CLOSED loans)
-        today = datetime(2026, 8, 1)
+        today = shift_dt(datetime(2026, 8, 1))
         if loan_status == "CLOSED":
             months_to_generate = term_months
         else:
@@ -644,7 +645,7 @@ def generate_standing_orders(count: int, config: dict,
         else:  # LOAN_PAYMENT
             amount = round(random.uniform(2000000, 30000000), 2)    # Loan payment 2M-30M
 
-        created_date = _random_date("2022-01-01", "2025-12-31")
+        created_date = _random_date(shift("2022-01-01"), shift("2025-12-31"))
         created_dt = datetime.strptime(created_date, "%Y-%m-%d")
 
         # next_execute_date: based on frequency
@@ -738,6 +739,13 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
         # Sunday
         while dt.weekday() != 6:
             dt = dt + timedelta(days=1)
+
+    # Dời sang thứ Bảy / Chủ nhật / thứ Hai chỉ đi TỚI, nên có thể vượt `end` tới
+    # 6 ngày — dữ liệu cũ kết thúc 2026-08-03 với end = 2026-08-01. Khi `end` là
+    # cob_dt (timeline.as_of) thì đó là giao dịch trong tương lai. Lùi đúng một
+    # tuần: giữ thứ trong tuần, không vượt mốc.
+    if dt > end:
+        dt -= timedelta(days=7)
 
     # Hour distribution: peaks at 9-11am and 7-9pm
     hour_weights = {

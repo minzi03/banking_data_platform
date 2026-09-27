@@ -17,6 +17,7 @@ import os
 import sys
 import time
 import yaml
+from datetime import date
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -37,6 +38,7 @@ from generators.digital_banking import (
     generate_support_tickets, generate_mcc_codes, generate_merchants,
 )
 from generators.ops_metadata import generate_source_registry
+from generators.timeline import current_as_of, set_as_of
 from generators.aml_generator import (
     generate_aml_rules, generate_aml_alerts, generate_aml_customer_risk,
     get_aml_rules_columns, get_aml_alerts_columns, get_aml_customer_risk_columns,
@@ -106,7 +108,12 @@ def main():
                         help="Scale factor applied to every table's row_count "
                              "(e.g. 0.01 for CI smokes). Ratios between tables are preserved. "
                              "Reference tables keep at least 10 rows.")
+    parser.add_argument("--as-of", default=os.environ.get("SEED_AS_OF", date.today().isoformat()),
+                        help="Ngày giao dịch mới nhất (YYYY-MM-DD), mặc định hôm nay. Đặt bằng "
+                             "cob_dt sẽ nạp — mọi ngày sinh ra được dời theo mốc này, nên cửa sổ "
+                             "'30 ngày gần nhất' của Gold có dữ liệu. Xem generators/timeline.py.")
     args = parser.parse_args()
+    set_as_of(date.fromisoformat(args.as_of))
 
     logger.info("=" * 60)
     logger.info(" Banking Data Platform — Seed Data Generator")
@@ -115,6 +122,7 @@ def main():
     logger.info("Target: %s@%s:%d/%s", args.user, args.host, args.port, args.dbname)
     if args.scale != 1.0:
         logger.info("Scale factor: %s (small-volume mode)", args.scale)
+    logger.info("As-of: %s (giao dịch mới nhất; nên bằng cob_dt sẽ nạp)", current_as_of())
 
     config = load_config(args.config)
     if args.scale != 1.0:

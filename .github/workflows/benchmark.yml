@@ -378,7 +378,8 @@ jobs:
           python -m pip install -r requirements-ci-seed.txt
 
           echo "=== Generating seed data ==="
-          python data_generator/generate_all.py
+          # --as-of: giao dịch mới nhất = cob_dt sẽ nạp (data_generator/generators/timeline.py).
+          python data_generator/generate_all.py --as-of "$BENCHMARK_COB_DT"
 
           # Post-condition trên chính source, không tin generator tự báo.
           # `> 0` chứ không ghim số: khối lượng do seed_config.yaml quyết định,

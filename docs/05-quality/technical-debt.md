@@ -1344,3 +1344,67 @@ multi-arch indexes; only the cached `linux/amd64` manifest could be pushed.
     maintained image, or replace MinIO (SeaweedFS, Garage…)
 [ ] guard against the next upstream image disappearing
 ```
+
+---
+
+## TD-16 — Generated transaction dates drift away from `cob_dt`, so 30-day KPIs read zero
+
+**Status:** fixed in the generator and guarded in CI (2026-09-27). **Open: the
+running local stack still holds the old seed until it is re-seeded.**
+
+Measured on the stack for `cob_dt` 2026-09-22 (2026-09-26):
+
+```text
+silver.fact_txn_account   txn_date 2025-05-30 → 2026-08-03   (50 days short of cob_dt)
+mart_customer_360         customers with txn_count_30d > 0:   0 / 10,000
+churn_prediction          'Active' tier:                       0
+```
+
+Every table stayed full, every grain check passed; only the numbers were empty.
+
+### Cause
+
+- The generator hard-coded its windows: transactions `"2025-06-01"` → `"2026-08-01"`,
+  CRM `"2024-01-01"` → `"2025-12-31"`, and so on, in about 30 literals. None of them
+  was tied to `cob_dt`, and `seed_config.yaml`'s `data.start_date` / `end_date` are
+  not read by any code.
+- `cob_dt` is chosen separately: the day the pipeline runs locally, `2026-01-01` in CI.
+  So the gap has two shapes. Locally, the data ends before `cob_dt` and the 30-day
+  windows are empty. In CI, the data runs **past** `cob_dt` — the stack's leftover
+  `2026-01-01` snapshot holds **600,372** account transactions dated after it. Gold
+  filters `txn_date <= cob_dt`, so CI's numbers were right, but the snapshot was not
+  one a bank could have taken on that day.
+- `_random_datetime_seasonal` moves days forward to reach a Saturday, Sunday or
+  Monday, and could land up to 6 days past `end`. That is why the old data ended on
+  08-03 with `end` = 08-01.
+
+### Fix
+
+- `data_generator/generators/timeline.py`: `--as-of` (env `SEED_AS_OF`, default today)
+  sets an offset from the reference date the literals were written around (2026-08-01).
+  Every literal goes through `shift()`, so relative order is kept — cards issued before
+  their transactions, loans disbursed before their repayments — and the newest
+  transaction lands on `as_of`.
+- The seasonal helper steps back a week if it passes `end`, in all three copies.
+- CI and the benchmark seed with `--as-of "$BENCHMARK_COB_DT"`. `make seed` takes `AS_OF=`.
+
+### Guards
+
+- `tests/data_generator/test_timeline.py`: for three `as_of` values, the newest
+  transaction is within a week of `as_of` and never after it, the 30-day window is
+  non-empty, and no date literal in the generators escapes `shift()`. On the old
+  generator: the newest transaction is 2026-08-03 for `as_of` 2026-08-01, and the
+  30-day window is empty.
+- CI, after Silver: no transaction dated after `cob_dt`. CI, after Gold: at least one
+  customer has `txn_count_30d > 0`. Both queries were run on the stack before they
+  went in: 600,372 rows after `cob_dt` in the leftover 2026-01-01 snapshot, and 0
+  customers with 30-day activity at 2026-09-22 — each would have failed.
+
+### Acceptance
+
+```text
+[x] generated dates anchored to --as-of; newest transaction = as_of, never after
+[x] CI seeds with as_of = the cob_dt it loads, and asserts both properties
+[ ] local stack re-seeded with --as-of = cob_dt and the pipeline re-run;
+    txn_count_30d > 0 and a non-empty 'Active' tier observed
+```
