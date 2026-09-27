@@ -51,6 +51,20 @@ TRINO_CATALOG = os.environ.get("TRINO_CATALOG", "iceberg")
 TRINO_SCHEMA = os.environ.get("TRINO_SCHEMA", "serving")
 
 
+def trino_auth_kwargs(user: str) -> dict:
+    """ADR-0016: có TRINO_PASSWORD → HTTPS + mật khẩu (verify bằng TRINO_CA_CERT); không có → HTTP như trước."""
+    password = os.environ.get("TRINO_PASSWORD")
+    if not password:
+        return {}
+    from trino.auth import BasicAuthentication
+
+    return {
+        "http_scheme": "https",
+        "auth": BasicAuthentication(user, password),
+        "verify": os.environ.get("TRINO_CA_CERT") or True,
+    }
+
+
 # ── Database Connection ─────────────────────────────────────────────────────
 def get_trino_connection():
     """Create a Trino connection."""
@@ -60,6 +74,7 @@ def get_trino_connection():
         user=TRINO_USER,
         catalog=TRINO_CATALOG,
         schema=TRINO_SCHEMA,
+        **trino_auth_kwargs(TRINO_USER),
     )
 
 

@@ -25,9 +25,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import json
+import os
 import re
+import ssl
 import subprocess
 import sys
 import urllib.request
@@ -509,20 +512,54 @@ class MetricQueryError(RuntimeError):
         self.query_id = query.id
 
 
+def trino_credentials(user: str) -> tuple[str | None, str | None]:
+    """(mật khẩu, cert CA) cho Trino — ADR-0016.
+
+    Chỉ dùng mật khẩu khi TRINO_PASSWORD được đặt TƯỜNG MINH. Không tự đọc
+    docker/.env: máy đã chạy bootstrap_trino_auth.py có sẵn mật khẩu ở đó, và tự
+    chuyển sang HTTPS sẽ gãy với một Trino chưa bật xác thực.
+    """
+    password = os.environ.get("TRINO_PASSWORD")
+    if not password:
+        return None, None
+    ca_cert = os.environ.get("TRINO_CA_CERT")
+    default_pem = Path(__file__).resolve().parents[1] / "docker" / "secrets" / "trino" / "trino.pem"
+    if not ca_cert and default_pem.exists():
+        ca_cert = str(default_pem)
+    return password, ca_cert
+
+
 class TrinoClient:
     """Client tối thiểu qua REST API. Test inject fake thay cho class này."""
 
-    def __init__(self, host: str = "localhost", port: int = 8085, user: str = "manifest_collector"):
-        self.url = f"http://{host}:{port}/v1/statement"
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int | None = None,
+        user: str = "manifest_collector",
+        password: str | None = None,
+        ca_cert: str | None = None,
+    ):
+        # ADR-0016: có mật khẩu → HTTPS 8443 + Basic auth, verify bằng cert của stack.
+        # Không có → HTTP 8085 như trước (Trino chưa bật xác thực).
+        scheme = "https" if password else "http"
+        port = port or (8443 if password else 8085)
+        self.url = f"{scheme}://{host}:{port}/v1/statement"
         self.user = user
+        self.headers = {"X-Trino-User": user}
+        self.ssl_context = None
+        if password:
+            token = base64.b64encode(f"{user}:{password}".encode()).decode()
+            self.headers["Authorization"] = f"Basic {token}"
+            self.ssl_context = ssl.create_default_context(cafile=ca_cert)
 
     def query(self, sql: str) -> list[dict]:
         request = urllib.request.Request(
             self.url, data=sql.encode("utf-8"),
-            headers={"Content-Type": "text/plain", "X-Trino-User": self.user},
+            headers={"Content-Type": "text/plain", **self.headers},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
+        with urllib.request.urlopen(request, timeout=120, context=self.ssl_context) as response:
             result = json.loads(response.read().decode("utf-8"))
 
         columns, rows = [], []
@@ -536,8 +573,9 @@ class TrinoClient:
             if not next_uri:
                 break
             with urllib.request.urlopen(
-                urllib.request.Request(next_uri, headers={"X-Trino-User": self.user}),
+                urllib.request.Request(next_uri, headers=self.headers),
                 timeout=120,
+                context=self.ssl_context,
             ) as response:
                 result = json.loads(response.read().decode("utf-8"))
 
@@ -821,7 +859,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Thu evidence + ghi run artifact, KHÔNG promote canonical")
     parser.add_argument("--output", type=Path, help="Ghi kết quả ra file này thay vì canonical")
     parser.add_argument("--trino-host", default="localhost")
-    parser.add_argument("--trino-port", type=int, default=8085)
+    parser.add_argument("--trino-port", type=int, default=None, help="mặc định 8443 khi có mật khẩu, 8085 khi không")
     args = parser.parse_args(argv)
 
     manifest = load_contract()
@@ -856,7 +894,8 @@ def main(argv: list[str] | None = None) -> int:
     build = collect_build_metadata()
     queries = [q for q in render_query_bundle(manifest, args.cob_dt) if _in_scope(q.id, skips)]
 
-    client = TrinoClient(args.trino_host, args.trino_port)
+    password, ca_cert = trino_credentials("manifest_collector")
+    client = TrinoClient(args.trino_host, args.trino_port, password=password, ca_cert=ca_cert)
     try:
         runtime, query_failures = collect_trino_metrics(
             queries, client, args.cob_dt, continue_on_error=args.continue_on_error
