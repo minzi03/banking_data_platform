@@ -29,8 +29,8 @@ from utils.yaml_loader import load_config
 # Danh sách loại job hợp lệ trong tầng Gold
 VALID_JOB_TYPES = {"mart360", "segment", "time_analytics", "risk"}
 
-# Z-Ordering columns for frequently queried tables
-# Key: table name, Value: list of columns to Z-Order by
+# Cột sắp xếp lại file sau khi ghi, cho các bảng query nhiều.
+# Key: tên bảng, Value: danh sách cột (xem build_rewrite_sql)
 ZORDER_COLUMNS = {
     "mart_customer_360": ["customer_id"],
     "rfm_segment": ["rfm_segment", "customer_id"],
@@ -48,39 +48,65 @@ ZORDER_COLUMNS = {
 }
 
 
-def _run_zorder_if_needed(spark, target: str, job_type: str, logger):
-    """
-    Run OPTIMIZE ZORDER for frequently queried tables.
-    This co-locates data by the specified columns, improving read performance.
-    Only runs for tables with < 1M rows to avoid long optimization times.
-    """
-    # Extract table name from full path (e.g., "lakehouse.gold.mart_customer_360" -> "mart_customer_360")
-    table_name = target.split(".")[-1] if "." in target else target
+# Marker cố định trong log khi bước tối ưu thất bại — grep / alert theo chuỗi này.
+OPTIMIZE_FAILED_MARKER = "OPTIMIZE_FAILED"
 
-    # Check if this table needs Z-Ordering
-    if table_name not in ZORDER_COLUMNS:
-        return
 
+def build_rewrite_sql(target: str, columns: list, cob_dt: str) -> str:
+    """
+    CALL rewrite_data_files của Iceberg, giới hạn trong partition cob_dt vừa ghi.
+
+    Không dùng `OPTIMIZE … ZORDER BY`: đó là cú pháp Delta Lake, Spark + Iceberg
+    trả PARSE_SYNTAX_ERROR (lỗi này từng bị nuốt thành WARNING ở mọi job Gold).
+
+    ≥ 2 cột → zorder(...). 1 cột → sort tuyến tính: z-order một chiều chính là sort.
+    """
+    catalog, table = target.split(".", 1)
+    if len(columns) > 1:
+        sort_order = f"zorder({','.join(columns)})"
+    else:
+        sort_order = f"{columns[0]} ASC NULLS LAST"
+    return (
+        f"CALL {catalog}.system.rewrite_data_files("
+        f"table => '{table}', "
+        f"strategy => 'sort', "
+        f"sort_order => '{sort_order}', "
+        f"where => \"cob_dt = '{cob_dt}'\", "
+        # rewrite-all: partition nhỏ (1–2 file) vẫn phải được sắp xếp lại —
+        # mặc định Iceberg bỏ qua nhóm dưới 5 file.
+        f"options => map('rewrite-all', 'true'))"
+    )
+
+
+def optimize_written_partition(spark, target: str, cob_dt: str, job_type: str, logger) -> bool:
+    """
+    Sắp xếp lại (z-order / sort) file của partition cob_dt vừa ghi.
+
+    Chạy sau mỗi lần ghi nhưng chỉ trên partition vừa ghi, nên chi phí tỉ lệ với
+    một ngày dữ liệu chứ không phải cả bảng.
+
+    Chính sách lỗi: KHÔNG làm job fail — dữ liệu đã commit đúng, bảng chỉ đọc
+    chậm hơn. Nhưng không im lặng: log WARNING mang marker OPTIMIZE_FAILED kèm
+    bảng, cob_dt và loại lỗi; trả về False.
+    Bảng không có trong ZORDER_COLUMNS → bỏ qua, trả về True.
+    """
+    columns = ZORDER_COLUMNS.get(target.split(".")[-1])
+    if not columns:
+        return True
+
+    sql = build_rewrite_sql(target, columns, cob_dt)
+    logger.info(f"[{job_type}] Tối ưu partition cob_dt={cob_dt} của {target}: {sql}")
     try:
-        # Check table row count - skip Z-Order for large tables (> 1M rows)
-        row_count = spark.table(target).count()
-        if row_count > 1_000_000:
-            logger.info(f"[{job_type}] Skipping Z-Order for {target} ({row_count} rows > 1M)")
-            return
-
-        zorder_cols = ZORDER_COLUMNS[table_name]
-        cols_str = ", ".join(zorder_cols)
-        logger.info(f"[{job_type}] Running OPTIMIZE ZORDER BY ({cols_str}) on {target}")
-
-        spark.sql(f"""
-            OPTIMIZE {target}
-            ZORDER BY ({cols_str})
-        """)
-        logger.info(f"[{job_type}] Z-Order completed for {target}")
-
+        row = spark.sql(sql).first()
     except Exception as e:
-        # Z-Order failure is non-fatal, log warning and continue
-        logger.warning(f"[{job_type}] Z-Order failed for {target}: {e}")
+        logger.warning(
+            f"[{job_type}] {OPTIMIZE_FAILED_MARKER} table={target} cob_dt={cob_dt} "
+            f"error={type(e).__name__}: {e} — dữ liệu đã ghi đúng, file chưa được sắp xếp lại"
+        )
+        return False
+
+    logger.info(f"[{job_type}] Tối ưu xong {target} cob_dt={cob_dt}: {row.asDict() if row else None}")
+    return True
 
 
 def _qualify(ref: str, catalog: str) -> str:
@@ -167,8 +193,8 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     - Không ảnh hưởng dữ liệu các ngày khác
     - Idempotent: chạy lại cùng ngày cho ra kết quả như nhau
 
-    Sau khi ghi, thực hiện Z-Ordering cho các cột thường xuyên query
-    để cải thiện performance khi đọc dữ liệu.
+    Sau khi ghi, sắp xếp lại file của partition vừa ghi
+    (optimize_written_partition) — lỗi ở bước này không làm job fail.
 
     Trước khi transform: assert snapshot nguồn tồn tại (fail loud).
     Trước khi ghi: assert kết quả không rỗng (nếu config yêu cầu).
@@ -193,9 +219,7 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     result_df.writeTo(target).overwritePartitions()
     logger.info(f"[{job_type}] Ghi hoàn tất cho {target}")
 
-    # Run Z-Ordering for frequently queried columns (only for key tables)
-    # This improves read performance by co-locating related data
-    _run_zorder_if_needed(spark, target, job_type, logger)
+    optimize_written_partition(spark, target, cob_dt, job_type, logger)
 
 
 def main():

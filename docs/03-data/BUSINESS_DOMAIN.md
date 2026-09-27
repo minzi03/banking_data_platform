@@ -300,12 +300,18 @@ số, lệch là lỗi (`branch_monthly_cross_engine_reconciles`).
 `tests/gold/test_risk_mart_semantics.py` chặn tái phát: literal `debit_credit` chỉ được là `'D'` /
 `'C'`, không CTE nào được khai mà không đọc, `npl_proxy` không tính từ `total_outstanding`.
 
+**Đã sửa (2026-09-27):** `gold_job.py` (và `iceberg_maintenance.py`) chạy `OPTIMIZE … ZORDER BY` — cú
+pháp Delta Lake, Iceberg trả `PARSE_SYNTAX_ERROR`; lỗi bị bắt thành WARNING nên **chưa bảng Gold nào
+từng được sắp xếp lại**. Nay Gold job gọi `CALL lakehouse.system.rewrite_data_files(strategy => 'sort',
+sort_order => 'zorder(...)', where => cob_dt vừa ghi)` ngay sau khi ghi (1 cột → sort thường). Lỗi ở bước
+này **không** làm job fail (dữ liệu đã commit) nhưng log WARNING có marker `OPTIMIZE_FAILED` kèm bảng và
+`cob_dt`. Maintenance DAG không còn bước z-order riêng.
+
 **Còn mở:**
 
 | Vấn đề | Hệ quả |
 |---|---|
 | Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng: KPI 30 ngày của Customer 360 bằng 0 cho cả 10.000 khách, không khách nào ở mức churn "Active" |
-| `gold_job.py` chạy `OPTIMIZE … ZORDER BY` — cú pháp Delta Lake, Iceberg không có | Bước tối ưu thất bại ở mọi job Gold, bị bắt thành WARNING; dữ liệu vẫn ghi đúng |
 
 ---
 
