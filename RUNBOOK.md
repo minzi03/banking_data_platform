@@ -370,6 +370,56 @@ Existing rows read `NULL` for the new columns until the Gold job reruns for
 their `cob_dt`. Running an `ALTER` a second time fails with
 `FIELDS_ALREADY_EXISTS` and leaves schema and data unchanged — verified.
 
+### 11. Rotate local secrets
+
+The secret-hygiene PRs (#67, #71, #72, #73) stop new secrets from entering the repo.
+They do not change the values the stack already runs on, and those values are in Git
+history. As measured on 2026-09-27, every secret in `docker/.env` appeared in 1–12
+commits. `scripts/rotate_local_secrets.py` changes them without printing any value.
+
+Plan first. This shows key names, how many commits contain each current value, and
+whether the preconditions are met:
+
+```bash
+py -3 scripts/rotate_local_secrets.py
+```
+
+Precondition: `spark-defaults.conf` and the Trino catalog must read MinIO credentials
+from the environment (#71). If they still hold the keys, rotating MinIO breaks Spark.
+The script checks this and refuses to run if it is not met.
+
+Apply:
+
+```bash
+py -3 scripts/rotate_local_secrets.py --apply
+```
+
+- Backs up `docker/.env` to `docker/secrets/rotation/` (gitignored) and prints the path.
+- Changes `POSTGRES_PASSWORD` and `CDC_DB_PASSWORD` with `ALTER ROLE`. It sends a
+  SCRAM-SHA-256 verifier over psql's stdin, so the server never sees a plaintext
+  password. The verifier function matches Postgres 15 byte for byte (tested).
+- Sets `etl_user`, `analytics_user` and `readonly_user` to `NOLOGIN` with no password.
+- Changes `MINIO_ROOT_PASSWORD` and recreates the running services that read these
+  values: minio, iceberg-rest, spark-master, spark-worker-1, trino.
+- Verifies that the new passwords log in, the old ones are rejected, and Trino still
+  reads Iceberg (metadata through iceberg-rest, data files from MinIO).
+
+If a check fails, restore with the path it printed:
+
+```bash
+py -3 scripts/rotate_local_secrets.py --rollback docker/secrets/rotation/<file>.bak
+```
+
+Not covered, because the service must be running and use its own tool. The script
+lists these at the end:
+
+- Superset: `SECRET_KEY` needs `superset re-encrypt-secrets`; the admin password
+  needs `fab reset-password`.
+- Airflow: Fernet key rotation, the admin password, and the `postgres` connection
+  that `airflow-init` stored with the old password.
+- OpenMetadata's MySQL passwords.
+- Debezium connectors registered with the old `CDC_DB_PASSWORD`.
+
 ---
 
 ## 🐛 Troubleshooting
