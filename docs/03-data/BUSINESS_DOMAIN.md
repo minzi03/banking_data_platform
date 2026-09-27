@@ -314,6 +314,7 @@ này **không** làm job fail (dữ liệu đã commit) nhưng log WARNING có m
 | Vấn đề | Hệ quả |
 |---|---|
 | Giao dịch trong snapshot 2026-09-22 chỉ tới **2026-08-03** — cách `cob_dt` 50 ngày | Mọi cửa sổ "30 ngày gần nhất" rỗng. **Đã sửa (TD-16)** — ngày neo vào `--as-of`. Seed lại trên stack: 9.657 / 10.000 khách có giao dịch 30 ngày, 9.655 khách Active |
+| Giờ giao dịch sinh ra là giờ VN nhưng lưu như UTC: cao điểm thật rơi vào 16–18h; `night_flag` đọc giờ UTC | Hai lỗi bù nhau nên `night_flag` vẫn ~4,4%. **Đã sửa trong code (TD-17)**: generator đổi sang UTC, `night_flag` dùng giờ VN. Cần seed lại stack |
 
 ---
 

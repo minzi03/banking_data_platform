@@ -1413,7 +1413,7 @@ written as local wall-clock hours, but the values are stored as UTC. In business
 time (ICT) the peaks actually fall at 16–18h and 02–04h. `fraud_risk_txn.night_flag`
 (`HOUR(txn_date) < 6 OR > 22`) also reads the UTC hour, so it measures 06:00–13:00
 ICT. Fixing this means converting generated local times to UTC, and it changes
-hour-based features. That is its own decision.
+hour-based features. That is its own decision. **Fixed in TD-17.**
 
 ### Acceptance
 
@@ -1459,3 +1459,69 @@ churn tier 'Active'                     0      9,655
   support-ticket and device-`last_seen` windows now end at `as_of`, keeping a
   two-year span. Tested in the generator; **not yet observed on the stack,
   which needs another re-seed.**
+
+---
+
+## TD-17 — Business hours were UTC hours, and two bugs hid each other
+
+**Status:** fixed in code (2026-09-27). Needs a user-run re-seed to reach the stack
+(below). Found while doing TD-16.
+
+### Two bugs that cancel out
+
+- **Generator.** The three `_random_datetime_seasonal` helpers draw an hour from
+  a weight table written as Vietnam wall-clock time: peaks at 9–11h and 19–21h,
+  quiet 23h–05h. The value was then stored as-is, and storage is UTC (ADR-0004).
+  Every generated transaction is 7 hours early in business time.
+- **Gold.** `fraud_risk_txn.night_flag` was `HOUR(<txn_date>) < 6 OR > 22`. Under the UTC
+  session that is the UTC hour, i.e. 06:00–12:59 in Vietnam.
+
+The two bugs cancel out. The SQL reads the UTC hour, which is exactly the local hour
+the generator wrote into the UTC field. So `night_flag` came out right, but only
+because both sides are wrong, and fixing either one alone breaks it:
+
+```text
+                                          night_flag share   peak hours (VN time)
+old generator + old SQL   (stack, 09-22)        4.42 %            16–18h
+new generator + old SQL   (20k rows, local)    54.5  %             9–11h
+old generator + new SQL   (stack, Spark)       25.35 %            16–18h
+new generator + new SQL   (20k rows, local)     4.5  %             9–11h
+```
+
+On the stack, Trino computes the same 25.35 % independently, with
+`hour(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh')` on Silver. It is the share of
+transactions whose Vietnam-time hour is 23–05h. With the new SQL on the old data,
+transactions with `risk_level >= 1` go from 7.09 % to 27.44 %.
+
+### Fix (both sides at once)
+
+- `timeline.business_to_utc()` converts Vietnam wall-clock time to UTC with a fixed
+  +7h offset (Vietnam has no daylight saving time). All three helpers return
+  `business_to_utc(result)`. This also replaces TD-16's "latest instant" clamp:
+  the day is `<= end`, so the latest instant is 23:59:59 on `end` in Vietnam time
+  (16:59:59 UTC) by construction.
+- `night_flag` is `HOUR(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh'))`, the
+  same explicit derivation already used for business dates. Like that expression,
+  it is correct only under the UTC session, which `get_spark_session()` enforces.
+
+### Guards (each run against the old code, each fails there)
+
+- `tests/data_generator/test_timeline.py::test_hour_peaks_fall_in_business_hours`:
+  the peak hour in Vietnam time is 9–11h and fewer than 10 % of transactions fall at
+  23–05h. The old code gives a 17h peak and about 25 % at night.
+- `tests/gold/test_gold_sql_invariants.py::…::test_no_naive_time_part_on_event_timestamps`:
+  no bare `HOUR` / `DAYOFWEEK` / `MONTH` / `DATE_FORMAT` / `EXTRACT` … on
+  `txn_date`, `transaction_date` or `interaction_date` in Gold SQL, comments included.
+- `tests/gold/test_business_date_semantics.py::TestNightFlagUsesBusinessHour`
+  (Spark): runs the `night_flag` expression taken from the YAML at 15:59:59, 16:00,
+  22:59:59, 23:00 and 03:00 UTC.
+
+### Not done here
+
+- **Re-seed.** The stack still holds data seeded with the old generator. Until it is
+  re-seeded, rebuilding Gold with the new SQL gives the 25 % above. Run
+  `generate_all.py --truncate --as-of <cob_dt>`, then Bronze → Silver → Gold. After
+  that, `night_flag` should be about 4.5 % and the peak should be 9–11h in Vietnam
+  time.
+- `aml_alert.txn_date` uses a uniform hour of day, so it has no peaks to shift.
+  `_random_datetime` (uniform over the day) is also unaffected.

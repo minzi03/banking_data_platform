@@ -16,6 +16,7 @@ import random
 import re
 import subprocess
 import sys
+from collections import Counter
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -92,6 +93,19 @@ def test_last_30_days_are_populated():
     for kind, dates in _txn_dates(as_of).items():
         recent = sum(1 for d in dates if as_of - timedelta(days=30) <= _business_date(d) <= as_of)
         assert recent > 0, f"{kind}: không có giao dịch nào trong 30 ngày trước as_of"
+
+
+def test_hour_peaks_fall_in_business_hours():
+    """
+    Cao điểm 9–11h và "đêm" thưa là giờ VN. Trước đây giờ VN bị ghi như UTC:
+    cao điểm đo được theo giờ VN là 16–18h và ~25% giao dịch rơi vào 23–05h.
+    """
+    for kind, dates in _txn_dates(date(2026, 9, 22)).items():
+        hours = Counter((d + ICT).hour for d in dates)
+        peak = hours.most_common(1)[0][0]
+        night = sum(v for h, v in hours.items() if h < 6 or h > 22) / len(dates)
+        assert peak in (9, 10, 11), f"{kind}: cao điểm giờ VN là {peak}h, phải là 9–11h"
+        assert night < 0.10, f"{kind}: {night:.1%} giao dịch vào 23–05h giờ VN"
 
 
 def test_no_generator_keeps_an_unanchored_date_literal():

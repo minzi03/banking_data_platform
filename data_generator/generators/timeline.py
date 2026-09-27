@@ -42,3 +42,17 @@ def shift(date_str: str) -> str:
 def shift_dt(value: datetime) -> datetime:
     """Dời một datetime literal (vd. `today` của lịch trả nợ) theo mốc hiện tại."""
     return value + _state["offset"]
+
+
+# ICT = UTC+7 cố định — Việt Nam không có giờ mùa hè.
+BUSINESS_UTC_OFFSET = timedelta(hours=7)
+
+
+def business_to_utc(local: datetime) -> datetime:
+    """
+    Giờ đồng hồ Việt Nam → instant UTC để lưu (ADR-0004).
+
+    Phân bố giờ trong generator ("cao điểm 9–11h") là giờ VN. Trước đây giá trị
+    đó được ghi thẳng như UTC, nên cao điểm thật rơi vào 16–18h giờ VN.
+    """
+    return local - BUSINESS_UTC_OFFSET

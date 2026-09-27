@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .amounts import amount_sampler
-from .timeline import shift
+from .timeline import business_to_utc, shift
 
 
 MERCHANT_NAMES = [
@@ -333,7 +333,7 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
     if dt > end:
         dt -= timedelta(days=7)
 
-    # Hour peaks: 9-11am and 7-9pm for card spending
+    # Hour peaks (giờ VN): 9-11am and 7-9pm for card spending
     hour_weights = {
         0: 0.01, 1: 0.005, 2: 0.005, 3: 0.005, 4: 0.005, 5: 0.01,
         6: 0.02, 7: 0.04, 8: 0.08,
@@ -348,11 +348,7 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
     hour = random.choices(hours, weights=h_weights)[0]
 
     result = dt.replace(hour=hour, minute=random.randint(0, 59), second=random.randint(0, 59))
-    # Timestamp lưu ở UTC, ngày nghiệp vụ là giờ Việt Nam (ADR-0004). 18:00 UTC
-    # ngày `end` đã là ngày hôm sau theo giờ VN — với `end` = cob_dt, đó là giao
-    # dịch trong tương lai (CI bắt được 2 dòng như vậy). Mốc muộn nhất là
-    # 23:59:59 giờ VN của `end` = 16:59:59 UTC; vượt thì lùi đúng một tuần.
-    latest = end + timedelta(hours=16, minutes=59, seconds=59)
-    if result > latest:
-        result -= timedelta(days=7)
-    return result
+    # `result` là giờ đồng hồ Việt Nam; timestamp lưu ở UTC (ADR-0004). Đổi ở
+    # đây. Vì dt <= end, instant muộn nhất là 23:59:59 giờ VN ngày `end`
+    # (= 16:59:59 UTC) — không cần kẹp thêm như khi giờ VN bị ghi như UTC.
+    return business_to_utc(result)

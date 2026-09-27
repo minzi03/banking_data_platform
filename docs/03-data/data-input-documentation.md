@@ -210,7 +210,7 @@ Schema `core_banking` — 10 bảng, ~1,530,930 rows. Trung tâm của toàn b�
 - Channel: BRANCH 5%, ATM 15%, INTERNET_BANKING 25%, MOBILE_BANKING 50%, POS 5%
 - Amount: 10K–500M VND
 
-**Seasonality:** 65% weekday, giờ cao điểm 9–11h sáng và 19–21h tối. Balance simulation chạy parallel theo account.
+**Seasonality:** 65% weekday, giờ cao điểm (giờ VN, lưu dưới dạng UTC — TD-17) 9–11h sáng và 19–21h tối. Balance simulation chạy parallel theo account.
 
 ### 3.10. employee — Nhân viên
 
@@ -662,7 +662,7 @@ Step 11: source_table_registry (19) ── manual seed
 | Rule | Mô tả | Bảng ảnh hưởng |
 |------|-------|---------------|
 | **Balance simulation** | Running balance_per_account, cập nhật sau mỗi txn | txn_account.balance_after |
-| **Seasonal datetime** | 65% weekday, hour peaks 9–11h/19–21h | txn_account, card_txn, online_transaction |
+| **Seasonal datetime** | 65% weekday, hour peaks 9–11h/19–21h (giờ VN, lưu UTC) | txn_account, card_txn, online_transaction |
 | **Credit limit conditional** | CHỈ credit card mới có credit_limit | card |
 | **Fraud correlation** | 35% fraud发生在 high-risk locations, amount bias | online_transaction |
 | **Late payment pattern** | 5% late (penalty + days_late), 2% missed (amount=0) | loan_payment |
