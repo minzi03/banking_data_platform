@@ -29,6 +29,15 @@ from generators import card_crm, core_banking, digital_banking, timeline  # noqa
 
 CONFIG = yaml.safe_load((REPO_ROOT / "data_generator" / "config" / "seed_config.yaml").read_text(encoding="utf-8"))
 
+# Timestamp lưu ở UTC; ngày nghiệp vụ là giờ Việt Nam (ADR-0004). "Mới nhất là
+# as_of" phải đúng theo NGÀY NGHIỆP VỤ — 18:00 UTC ngày as_of là 01:00 ngày sau.
+ICT = timedelta(hours=7)
+
+
+def _business_date(ts: datetime) -> date:
+    return (ts + ICT).date()
+
+
 # Vị trí txn_date trong tuple mỗi generator trả về (đo từ generator, không phải
 # từ DDL — phần tử cuối là last_updated = now(), không phải ngày nghiệp vụ).
 TXN_DATE_INDEX = {"account": 3, "card": 3, "online": 12}
@@ -69,9 +78,9 @@ def test_reference_as_of_is_the_identity():
 
 @pytest.mark.parametrize("as_of", [date(2026, 1, 1), date(2026, 9, 22), date(2026, 8, 1)])
 def test_newest_transaction_is_at_as_of_never_after(as_of):
-    """Giao dịch mới nhất rơi sát `as_of` — và không có giao dịch nào sau nó."""
+    """Giao dịch mới nhất rơi sát `as_of` — và không có giao dịch nào sau nó, theo ngày nghiệp vụ."""
     for kind, dates in _txn_dates(as_of).items():
-        newest = max(d.date() for d in dates)
+        newest = max(_business_date(d) for d in dates)
         assert newest <= as_of, f"{kind}: giao dịch {newest} nằm SAU as_of {as_of}"
         assert newest >= as_of - timedelta(days=7), f"{kind}: giao dịch mới nhất {newest} cách as_of quá xa"
 
@@ -80,7 +89,7 @@ def test_last_30_days_are_populated():
     """Đúng triệu chứng cũ: cửa sổ 30 ngày trước as_of phải có giao dịch."""
     as_of = date(2026, 9, 22)
     for kind, dates in _txn_dates(as_of).items():
-        recent = sum(1 for d in dates if as_of - timedelta(days=30) <= d.date() <= as_of)
+        recent = sum(1 for d in dates if as_of - timedelta(days=30) <= _business_date(d) <= as_of)
         assert recent > 0, f"{kind}: không có giao dịch nào trong 30 ngày trước as_of"
 
 

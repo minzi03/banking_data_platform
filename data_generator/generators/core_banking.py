@@ -763,7 +763,15 @@ def _random_datetime_seasonal(start_str: str, end_str: str) -> datetime:
     minute = random.randint(0, 59)
     second = random.randint(0, 59)
 
-    return dt.replace(hour=hour, minute=minute, second=second)
+    result = dt.replace(hour=hour, minute=minute, second=second)
+    # Timestamp lưu ở UTC, ngày nghiệp vụ là giờ Việt Nam (ADR-0004). 18:00 UTC
+    # ngày `end` đã là ngày hôm sau theo giờ VN — với `end` = cob_dt, đó là giao
+    # dịch trong tương lai (CI bắt được 2 dòng như vậy). Mốc muộn nhất là
+    # 23:59:59 giờ VN của `end` = 16:59:59 UTC; vượt thì lùi đúng một tuần.
+    latest = end + timedelta(hours=16, minutes=59, seconds=59)
+    if result > latest:
+        result -= timedelta(days=7)
+    return result
 
 
 def _random_date_seasonal_month(start_str: str, end_str: str) -> str:

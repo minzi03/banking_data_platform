@@ -1386,6 +1386,11 @@ Every table stayed full, every grain check passed; only the numbers were empty.
   their transactions, loans disbursed before their repayments — and the newest
   transaction lands on `as_of`.
 - The seasonal helper steps back a week if it passes `end`, in all three copies.
+  "Passes" is measured in **business date**. Stored timestamps are UTC (ADR-0004),
+  so 18:00 UTC on `as_of` is already the next day in Vietnam. The first version
+  clamped the UTC date. This PR's own CI check caught it: *2 transactions after
+  `cob_dt` 2026-01-01*. The test compared UTC dates too, which is why it missed
+  this. Both now use the ICT date: the latest instant allowed is `as_of 16:59:59 UTC`.
 - CI and the benchmark seed with `--as-of "$BENCHMARK_COB_DT"`. `make seed` takes `AS_OF=`.
 
 ### Guards
@@ -1399,6 +1404,15 @@ Every table stayed full, every grain check passed; only the numbers were empty.
   customer has `txn_count_30d > 0`. Both queries were run on the stack before they
   went in: 600,372 rows after `cob_dt` in the leftover 2026-01-01 snapshot, and 0
   customers with 30-day activity at 2026-09-22 — each would have failed.
+
+### Found on the way, not fixed here
+
+The generator's hour peaks — "9–11am salary/payments, 7–9pm mobile banking" — are
+written as local wall-clock hours, but the values are stored as UTC. In business
+time (ICT) the peaks actually fall at 16–18h and 02–04h. `fraud_risk_txn.night_flag`
+(`HOUR(txn_date) < 6 OR > 22`) also reads the UTC hour, so it measures 06:00–13:00
+ICT. Fixing this means converting generated local times to UTC, and it changes
+hour-based features. That is its own decision.
 
 ### Acceptance
 
