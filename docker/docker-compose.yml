@@ -350,6 +350,9 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      # Heap cố định dưới mem_limit 256m. Mặc định của image là -Xmx512M: heap gấp đôi
+      # giới hạn container (đo 2026-09-27, TD-19).
+      KAFKA_HEAP_OPTS: "-Xms64m -Xmx128m"
     ports:
       - "2181:2181"
     mem_limit: 256m
@@ -378,6 +381,9 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Mặc định -Xmx1G = đúng mem_limit 1024m: không còn chỗ cho page cache, direct
+      # buffer, thread stack (TD-19).
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx640m"
     mem_limit: 1024m
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
@@ -402,6 +408,9 @@ services:
       OFFSET_STORAGE_TOPIC: connect-offsets
       STATUS_STORAGE_TOPIC: connect-status
       BOOTSTRAP_SERVERS: kafka:9092
+      # debezium/connect chép HEAP_OPTS sang KAFKA_HEAP_OPTS. Mặc định -Xmx2G = đúng
+      # mem_limit 2048m; đo 1.88 GiB RSS trong lúc snapshot (TD-19).
+      HEAP_OPTS: "-Xms256m -Xmx1280m"
     mem_limit: 2048m
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
