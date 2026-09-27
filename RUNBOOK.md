@@ -404,6 +404,17 @@ py -3 scripts/rotate_local_secrets.py --apply
 - Verifies that the new passwords log in, the old ones are rejected, and Trino still
   reads Iceberg (metadata through iceberg-rest, data files from MinIO).
 
+Compose gives shell variables priority over `docker/.env`. §2 has you set
+`$env:POSTGRES_PASSWORD` for seeding. On the first real run (2026-09-27), that stale
+value reached iceberg-rest, which exited with `password authentication failed`. The
+script now passes the new values to compose explicitly and warns about stale shell
+variables. After rotating, clear them in any shell that still has them, then read the
+new values again when you need them (§2):
+
+```powershell
+Remove-Item Env:POSTGRES_PASSWORD, Env:POSTGRES_USER -ErrorAction SilentlyContinue
+```
+
 If a check fails, restore with the path it printed:
 
 ```bash

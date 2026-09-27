@@ -451,6 +451,17 @@ on the same `spark-defaults.conf` credential path as every batch job.
   is on the checked-out branch. Superset, Airflow and OpenMetadata secrets need their
   services running. An existing Superset admin keeps its old password
   (`superset fab reset-password`).
+  **Run on the local stack on 2026-09-27.** `POSTGRES_PASSWORD`, `CDC_DB_PASSWORD` and
+  `MINIO_ROOT_PASSWORD` were rotated, and the group roles set to `NOLOGIN`.
+  - The first `--apply` stopped at the recreate step. The user's shell still had the
+    old `$env:POSTGRES_PASSWORD` from seeding, compose preferred it over `.env`, and
+    iceberg-rest exited with `password authentication failed`. iceberg-rest,
+    spark-worker-1 and trino were then recreated from a clean shell.
+  - Measured afterwards: the new Postgres and CDC passwords log in and the old ones are
+    rejected; every container's variables match `.env`; Trino reads Gold; Spark lists
+    and reads through S3A/S3FileIO; the old MinIO credentials are rejected.
+  - The script now passes the new values to compose explicitly (tested with a stale
+    shell variable) and prints the rollback command when a step fails.
 - CI-only values (CI compose, workflow env) are throwaway and stay as they are.
 
 ---

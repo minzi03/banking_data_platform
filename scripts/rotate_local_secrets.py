@@ -34,6 +34,7 @@ import contextlib
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import subprocess
@@ -177,8 +178,10 @@ def sql_for(env: dict[str, str], *, lock_group_roles: bool) -> str:
 # ── Tác động lên stack ────────────────────────────────────────────────────────
 
 
-def _run(cmd: list[str], *, stdin: str | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    out = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", check=False)
+def _run(
+    cmd: list[str], *, stdin: str | None = None, check: bool = True, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess:
+    out = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", check=False, env=env)
     if check and out.returncode != 0:
         # stderr của docker/psql không chứa giá trị secret: SQL chỉ có verifier, qua stdin.
         raise RuntimeError(f"{' '.join(cmd[:4])} … exit {out.returncode}: {out.stderr.strip()[-400:]}")
@@ -205,9 +208,26 @@ def apply_postgres(sql: str) -> None:
     )
 
 
-def recreate(services: list[str]) -> None:
+def shell_overrides(target: dict[str, str]) -> list[str]:
+    """Tên các biến trong môi trường shell sẽ đè giá trị .env khi compose nội suy `${…}`."""
+    return sorted(k for k in (*ROTATED, "POSTGRES_USER") if k in os.environ and os.environ[k] != target.get(k))
+
+
+def compose_env(target: dict[str, str]) -> dict[str, str]:
+    """Môi trường cho `docker compose`: giá trị mục tiêu TƯỜNG MINH, thắng mọi biến còn sót trong shell.
+
+    Compose ưu tiên biến shell hơn docker/.env. Lần --apply đầu tiên (2026-09-27): shell
+    PowerShell còn $env:POSTGRES_PASSWORD cũ (đặt để seed, theo RUNBOOK §2), nên
+    iceberg-rest được tạo lại với mật khẩu cũ và thoát "password authentication failed".
+    """
+    env = dict(os.environ)
+    env.update({k: target[k] for k in (*ROTATED, "POSTGRES_USER") if k in target})
+    return env
+
+
+def recreate(services: list[str], target: dict[str, str]) -> None:
     if services:
-        _run([*COMPOSE, "up", "-d", "--no-deps", "--force-recreate", *services])
+        _run([*COMPOSE, "up", "-d", "--no-deps", "--force-recreate", *services], env=compose_env(target))
 
 
 def wait_healthy(services: list[str], timeout_s: int = 240) -> list[str]:
@@ -281,7 +301,14 @@ def rotate_to(target: dict[str, str], current: dict[str, str], *, lock_group_rol
     )
     print("  ✓ docker/.env đã cập nhật")
 
-    recreate(services)
+    stale = shell_overrides(target)
+    if stale:
+        print(f"  ! shell đang có {stale} khác .env — compose sẽ nhận giá trị mới tường minh, không dùng chúng")
+    try:
+        recreate(services, target)
+    except RuntimeError as exc:
+        print(f"  ✗ tạo lại service thất bại: {exc}")
+        return 1
     stuck = wait_healthy(services)
     if stuck:
         print(f"  ✗ chưa healthy: {stuck}")
@@ -330,6 +357,10 @@ def main(argv: list[str] | None = None) -> int:
 
     target = dict(env) | {key: new_secret() for key in ROTATED}
     code = rotate_to(target, env, lock_group_roles=True)
+    if code:
+        print(
+            f"\nChưa xong. Quay lại trạng thái cũ: py -3 {Path(__file__).name} --rollback {backup_path.relative_to(REPO_ROOT)}"
+        )
 
     print("\nCòn chờ (service chưa chạy, cần công cụ của chính nó):")
     for key, how in PENDING.items():
