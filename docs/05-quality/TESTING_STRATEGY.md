@@ -296,6 +296,23 @@ pytest --collect-only -q tests/            1758   (1723 + 35)
 py -3 -m pytest -q -m "not integration"    1689 passed, 1 skipped, 68 deselected
 ```
 
+Rồi bỏ secret viết cứng (#67) và giờ nghiệp vụ (TD-17, #68) thêm **8 hàm → 15 node**, đo bằng
+diff ID node giữa commit merge #66 và #68:
+
+| File | Hàm | Node |
+|---|---:|---:|
+| `tests/governance/test_no_hardcoded_secrets.py` — `KNOWN_DEBT` parametrize 5 chỗ | +5 | +9 |
+| `test_worker_python_compat.py` — tự parametrize thêm `governance/credentials.py` | 0 | +3 |
+| `tests/data_generator/test_timeline.py::test_hour_peaks_fall_in_business_hours` | +1 | +1 |
+| `tests/gold/test_gold_sql_invariants.py::…::test_no_naive_time_part_on_event_timestamps` | +1 | +1 |
+| `tests/gold/test_business_date_semantics.py::TestNightFlagUsesBusinessHour` (integration) | +1 | +1 |
+
+```text
+def test_* count                            861   (853 + 8)
+pytest --collect-only -q tests/            1773   (1758 + 15)
+py -3 -m pytest -q -m "not integration"    1703 passed, 1 skipped, 69 deselected
+```
+
 Ghi ở đây thay vì sửa tay các con số trên, đúng theo đoạn ngay trên: collector
 là định nghĩa, không phải bàn tay người soạn tài liệu.
 
@@ -591,10 +608,10 @@ Ghi ra để không ai tưởng suite này phủ nhiều hơn thực tế.
 ## 13. Trạng thái hiện tại
 
 ```text
-pytest      1758 node · 853 hàm · 1690 node chạy không cần hạ tầng   (2026-09-27)
-suite       1689 passed · 1 skipped (có chủ ý) · 68 deselected · ~19s
-coverage    76% (76,45%) trên governance + code_etl/shared · fail_under 60 đang áp
-manifest    đã promote 853 / 1758 — mọi delta ở §3 giờ nằm trong manifest
+pytest      1773 node · 861 hàm · 1704 node chạy không cần hạ tầng   (2026-09-27)
+suite       1703 passed · 1 skipped (có chủ ý) · 69 deselected · ~19s
+coverage    76% (76,16%) trên governance + code_etl/shared · fail_under 60 đang áp
+manifest    đã promote 861 / 1773 — mọi delta ở §3 giờ nằm trong manifest
 marker      1 đăng ký (integration dùng 66 lần) · configfile: pyproject.toml
 dbt         110 generic + 7 singular = 117 (khớp PASS=117 của dbt build)
 DQ runtime  9 loại check (CHECK_DISPATCH)
