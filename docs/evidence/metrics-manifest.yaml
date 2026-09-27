@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 6b3de51c2ca66ed74a278921231a8c1af1800831
-    git_branch: chore/refresh-manifest-after-75
+    git_commit: 0e748bccacd18bb3ea3cebcb304b2b8a776e8ae3
+    git_branch: chore/refresh-manifest-after-78
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-27T12:59:46Z'
+    generated_at_utc: '2026-09-27T15:57:03Z'
     requested_cob_dt: '2026-09-22'
     verification_scope: full
   environment:
@@ -544,13 +544,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 886
+        value: 889
         declared: 889
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 1794
+        value: 1802
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
