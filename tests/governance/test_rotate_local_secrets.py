@@ -120,3 +120,29 @@ def test_plan_mode_prints_no_secret_value(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "POSTGRES_PASSWORD" in out and "commits=  3" in out
     assert "value-one-9f2c" not in out and "value-two-7a1b" not in out
+
+
+def test_compose_gets_the_new_values_even_with_stale_shell_variables(monkeypatch):
+    """Lần --apply đầu tiên: $env:POSTGRES_PASSWORD cũ trong shell đè .env, iceberg-rest nhận mật khẩu cũ."""
+    monkeypatch.setenv("POSTGRES_PASSWORD", "stale-shell-value")
+    monkeypatch.delenv("MINIO_ROOT_PASSWORD", raising=False)
+    target = {
+        "POSTGRES_USER": "banking_admin",
+        "POSTGRES_PASSWORD": "n1",
+        "CDC_DB_PASSWORD": "n2",
+        "MINIO_ROOT_PASSWORD": "n3",
+    }
+    env = rot.compose_env(target)
+    assert env["POSTGRES_PASSWORD"] == "n1"
+    assert env["MINIO_ROOT_PASSWORD"] == "n3"
+    assert rot.shell_overrides(target) == ["POSTGRES_PASSWORD"]
+
+
+def test_recreate_passes_the_explicit_environment_to_compose(monkeypatch):
+    monkeypatch.setenv("POSTGRES_PASSWORD", "stale-shell-value")
+    seen = {}
+    monkeypatch.setattr(rot, "_run", lambda cmd, **kw: seen.update(cmd=cmd, **kw))
+    target = {"POSTGRES_USER": "u", "POSTGRES_PASSWORD": "n1", "CDC_DB_PASSWORD": "n2", "MINIO_ROOT_PASSWORD": "n3"}
+    rot.recreate(["iceberg-rest"], target)
+    assert "--force-recreate" in seen["cmd"]
+    assert seen["env"]["POSTGRES_PASSWORD"] == "n1"
