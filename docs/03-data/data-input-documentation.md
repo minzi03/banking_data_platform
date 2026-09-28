@@ -285,16 +285,18 @@ OR (card_type <> 'CREDIT' AND credit_limit IS NULL)
 | Thuộc tính | Chi tiết |
 |-----------|---------|
 | **Rows** | 600,000 |
-| **Columns** | 16 (txn_id, card_id, customer_id, txn_date, txn_amount, txn_type, currency, merchant_name, merchant_category, mcc_code, channel, status, processing_time_ms, reference_number, created_ts, last_updated) |
+| **Columns** | 18 (txn_id, card_id, customer_id, txn_date, txn_amount, txn_type, currency, merchant_name, merchant_category, mcc_code, channel, status, entry_mode, decline_reason, processing_time_ms, reference_number, created_ts, last_updated) |
 | **PK** | `txn_id` BIGINT |
 | **FK** | card_id → card |
-| **CHECK** | txn_type IN ('PURCHASE','CASH_ADVANCE','REFUND','REVERSAL'), channel IN ('POS','ECOM','ATM') |
+| **CHECK** | txn_type IN ('PURCHASE','CASH_ADVANCE','REFUND','REVERSAL'), channel IN ('POS','ECOM','ATM'), entry_mode IN ('CHIP','SWIPE','ONLINE'), decline_reason có giá trị ⇔ status = 'FAILED' |
 | **Indexes** | idx_card_txn_card_date, idx_card_txn_cust_date, idx_card_txn_last_upd |
 
 **Phân bố:**
 - Type: PURCHASE 70%, CASH_ADVANCE 15%, REFUND 10%, REVERSAL 5%
 - Channel: POS 45%, ECOM 40%, ATM 15%
 - Status: SUCCESS 90%, FAILED 7%, PENDING 3%
+- Entry mode: ECOM → ONLINE; POS/ATM → CHIP ≈ 80% / SWIPE ≈ 20% (tỷ lệ chip:quẹt của bộ tham khảo Xóm Bank)
+- Decline reason (chỉ FAILED): trọng số = số lần đếm trong Xóm Bank, tách theo entry mode — lỗi PIN chỉ có khi có mặt thẻ, lỗi CVV / ngày hết hạn / số thẻ chỉ online; giữ lỗi tổ hợp (vd. `INSUFFICIENT_FUNDS,WRONG_PIN`). Xem `DECLINE_REASON_WEIGHTS` trong `data_generator/generators/card_crm.py`
 - Amount: 50K–50M VND
 - Merchant categories: GROCERY, RESTAURANT, TRAVEL, ECOM, FUEL, EDUCATION, HEALTHCARE, ENTERTAINMENT, UTILITIES
 

@@ -370,6 +370,26 @@ Existing rows read `NULL` for the new columns until the Gold job reruns for
 their `cob_dt`. Running an `ALTER` a second time fails with
 `FIELDS_ALREADY_EXISTS` and leaves schema and data unchanged — verified.
 
+The same applies to Bronze (`write_to_iceberg`) and Silver facts
+(`fact_txn.py`): both write with `overwritePartitions()` and no schema evolution.
+
+2026-09-29 — `card_txn.entry_mode` / `decline_reason` (SOURCE_DATA_BASELINE §2).
+The PostgreSQL source needs nothing by hand: `generate_all.py` applies
+`data_generator/migrations/*.sql` (idempotent) before writing. The lakehouse
+tables need one `ALTER` each:
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.bronze.core_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.silver.fact_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+Rows seeded before the change have `entry_mode` / `decline_reason` NULL in the
+source too — the migration adds the constraints `NOT VALID`, so old rows are not
+rechecked. Re-seed (`--truncate`) to get the columns filled for every row.
+
 ### 11. Rotate local secrets
 
 The secret-hygiene PRs (#67, #71, #72, #73) stop new secrets from entering the repo.
