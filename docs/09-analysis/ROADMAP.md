@@ -225,9 +225,11 @@ Dữ liệu đã seed trước thay đổi này vẫn mang nhãn cũ; nhãn mớ
 >
 > README trước đây không trỏ tới file này; đã thêm liên kết ở PR #35.
 >
-> Từ vựng đo lại trên 17 file JD (2026-09-22): `RCA`/root cause **63** ·
-> `incident response` **23** · `runbook` **9** · `RTO`/`RPO` **0**. Con số `runbook`
-> 37 ghi ở bản trước không tái lập được — dùng bảng đo mới, xem `JD_MARKET_ANALYSIS.md`.
+> Từ vựng đo lại 2026-09-29 bằng `scripts/measure_jd_corpus.py` trên 16 file JD
+> (raw / dedup): `RCA`/root cause **90 / 51** · `incident` **80 / 47** · `runbook`
+> **46 / 21** · `RTO`/`RPO` **0**. *Đính chính*: ghi chú cũ ở đây nói con số `runbook`
+> 37 "không tái lập được" và thay bằng 9 — script cho 36 trên đúng jd1–jd13, nên 37
+> mới là số đúng. Xem `JD_MARKET_ANALYSIS.md` §3.
 
 ### 2.6 BỔ SUNG — `dbt_expectations`
 
@@ -240,6 +242,10 @@ Repo có `dbt_utils`, `codegen`, `dbt_date` — chưa có `calogica/dbt_expectat
 ## 3. TƯƠNG LAI GẦN — mở rộng có căn cứ thị trường
 
 ### 3.1 BỔ SUNG — Feature store
+
+> **Hạ ưu tiên (2026-09-29).** Đo lại có bỏ dòng lặp: `feature store` 99 raw → **42 dedup**,
+> thấp hơn `semantic layer` (68 dedup, mục 3.8). Con số 81 cũ bị bài đăng lặp thổi phồng.
+> Làm sau 3.7 và 3.8.
 
 `feature store` = **81 lần** trong corpus JD (2,6/100k) — cao nhất trong nhóm khái niệm dự án chưa có, và **không giáo trình nào trong 6 khoá dạy nó**.
 
@@ -303,6 +309,29 @@ Mục **refund âm** đáng kiểm tra sớm: nếu mart đang cộng lẫn refu
 
 - **Size**: M
 
+### 3.7 BỔ SUNG — Mart nợ quá hạn: DPD, nhóm nợ, roll rate, vintage
+
+Nguồn: đo JD 2026-09-29 (`JD_MARKET_ANALYSIS.md` §5.3). Toàn bộ 11 lần `NPL/DPD/roll rate/vintage` và 12 lần `collection/thu hồi nợ` nằm trong nhóm JD mới (Mcredit, FE CREDIT, Talentnet Credit Platform, Zalopay, BIDV, Home Credit…); 0 trên 283 repo đối thủ.
+
+Hiện trạng: `gold.loan_portfolio_risk.npl_proxy` dựa trên `loan_status`. `silver.fact_loan_payment.days_late` **đã có** theo từng kỳ, nên DPD theo khoản vay suy ra được.
+
+Hai bước, **đúng thứ tự**:
+
+1. **Generator**: trạng thái trễ hạn nối tiếp giữa các kỳ. Hiện mỗi kỳ bốc ngẫu nhiên độc lập và `days_late` ≤ 90. Roll rate trên dữ liệu đó bằng phân phối không điều kiện, còn nhóm nợ 4–5 không bao giờ xuất hiện.
+2. **Mart** `loan_delinquency`: DPD theo khoản vay tại `cob_dt` → nhóm nợ theo Thông tư 11/2021/TT-NHNN (1: <10 · 2: 10–89 · 3: 90–179 · 4: 180–359 · 5: ≥360 ngày; NPL = nhóm 3–5) · roll-rate matrix tháng/tháng · vintage theo MOB. Thay `npl_proxy` bằng NPL đúng định nghĩa.
+
+- **Size**: M (generator) + M (mart)
+
+### 3.8 BỔ SUNG — Semantic layer (metric chuẩn)
+
+Tín hiệu bền ở cả hai mẫu JD độc lập (2,3× / 2,5× so với mẫu gốc; 68 lần sau dedup). Bốn JD nhóm mới ghép nó với AI agent / MCP (`JD_MARKET_ANALYSIS.md` §5.6).
+
+Việc cần làm: dbt semantic models (dbt-core 1.12 đã hỗ trợ) cho các metric đang tính rải rác trong Gold SQL, gồm `overdue_rate`, `late_payment_rate`, NPL ratio (sau 3.7) và CASA ratio. Mỗi metric một định nghĩa, cho dbt, Superset và API cùng dùng.
+
+MCP read-only trên lớp này là bước **sau**, phải đi qua Trino ACL (ADR-0016). Không làm trước khi có metric chuẩn.
+
+- **Size**: M
+
 ---
 
 ## 4. TƯƠNG LAI XA — và những gì KHÔNG nên làm
@@ -318,7 +347,8 @@ Mục **refund âm** đáng kiểm tra sớm: nếu mart đang cộng lẫn refu
 
 | Hạng mục | Số đo | Lý do |
 |---|---:|---|
-| **OBT / One Big Table** | **0** lần / 2.770.320 ký tự | Giáo trình dạy như topic chính; thị trường không nhắc một lần |
+| **OBT / One Big Table** | **0** lần / 3.310.578 ký tự (đo lại 2026-09-29) | Giáo trình dạy như topic chính; thị trường không nhắc một lần |
+| **IFRS 9 / ECL** | 1 lần / 3.310.578 ký tự | Nghe "ngân hàng" nhưng JD không hỏi (`JD_MARKET_ANALYSIS.md` §6.3) |
 | **Flink** | 8,2 | Trùng Spark Structured Streaming đã có; Spark Real-Time Mode đang xoá dần lý do |
 | **ClickHouse** | 5,2 | Thêm engine OLAP không giải quyết vấn đề nào hiện có |
 | **Snowpipe / Auto Loader / DLT / Snowpark** | 0–4 | Vendor-specific, không chuyển giao |
@@ -347,8 +377,9 @@ SẮP TỚI     2.1 · 2.2 · 2.5 · 2.6   (đóng vòng lặp tín hiệu + con
             2.3 ✅ · 2.4 ✅          (đã xong: ground truth + fraud_reason)
             Điều kiện: không thêm công nghệ mới
 
-TƯƠNG LAI   3.5 → 3.6 → 3.3 → 3.2 → 3.1 → 3.4
-            (rẻ và rõ trước; feature store và ML model sau)
+TƯƠNG LAI   3.5 → 3.6 → 3.7 → 3.8 → 3.3 → 3.1 → 3.4 → 3.2
+            (rẻ và rõ trước; 3.7/3.8 có căn cứ JD 2026-09-29;
+             feature store, ML model và CLV sau — xem JD_MARKET_ANALYSIS.md §6.2)
 ```
 
 **Hai ràng buộc không đổi trong mọi giai đoạn:**
