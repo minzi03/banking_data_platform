@@ -174,8 +174,9 @@ Schema `core_banking` — 10 bảng, ~1,530,930 rows. Trung tâm của toàn b�
 
 **Business rules:**
 - Standard amortization schedule: principal + interest components
-- Late payment rate: 5% (days_late > 0, penalty > 0)
-- Missed payment rate: 2% (amount_paid = 0)
+- Trạng thái trễ hạn **nối tiếp**: mỗi khoản vay đi qua chuỗi bucket DPD (0 / 1–29 / 30–59 / 60–89 / 90+) theo ma trận chuyển tháng `roll_rates` trong `seed_config.yaml` (giả định — không bộ tham khảo nào có dữ liệu để đo)
+- Kết quả kỳ theo bucket: 0 → PAID; 1–29 ngày → LATE (trả muộn + phí 2%); ≥30 ngày → MISSED (không trả, phí 5%, dư nợ giữ nguyên). Ở 90+ `days_late` tăng 30/tháng, nên nhóm nợ 3–5 có mặt
+- Khớp `loan_status`: CLOSED trả đúng hạn mọi kỳ; ACTIVE kỳ cuối đúng hạn; OVERDUE kỳ cuối quá hạn. WRITTEN_OFF không sinh lịch trả (như trước)
 - outstanding_after = running balance sau mỗi kỳ thanh toán
 
 ### 3.8. standing_order — Thanh toán định kỳ
@@ -665,7 +666,7 @@ Step 11: source_table_registry (19) ── manual seed
 | **Seasonal datetime** | 65% weekday, hour peaks 9–11h/19–21h (giờ VN, lưu UTC) | txn_account, card_txn, online_transaction |
 | **Credit limit conditional** | CHỈ credit card mới có credit_limit | card |
 | **Fraud correlation** | 35% fraud发生在 high-risk locations, amount bias | online_transaction |
-| **Late payment pattern** | 5% late (penalty + days_late), 2% missed (amount=0) | loan_payment |
+| **Late payment pattern** | Chuỗi bucket DPD có trí nhớ (roll / cure), khớp loan_status | loan_payment |
 | **MCC linkage** | card_txn.mcc_code → mcc_code, merchant.mcc_code → mcc_code | card_txn, merchant, mcc_code |
 | **Geographic consistency** | Customer城市的branch được assign bởi city→branch mapping | customer |
 | **Watermark ingestion** | last_updated trigger enables JDBC incremental extract | ALL tables (20/20) |

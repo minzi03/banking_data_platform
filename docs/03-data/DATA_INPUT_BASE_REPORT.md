@@ -185,8 +185,9 @@ monthly_payment = P × r(1+r)^n / ((1+r)^n - 1)
 Where P = principal, r = monthly rate, n = months.
 
 **Patterns**:
-- 5% late payment rate
-- 2% missed payment rate
+- Trạng thái trễ hạn **nối tiếp**: mỗi khoản vay đi qua chuỗi bucket DPD (0 / 1–29 / 30–59 / 60–89 / 90+) theo ma trận chuyển tháng `roll_rates` trong `seed_config.yaml` (giả định — không bộ tham khảo nào có dữ liệu để đo)
+- Kết quả kỳ theo bucket: 0 → PAID; 1–29 ngày → LATE (trả muộn + phí 2%); ≥30 ngày → MISSED (không trả, phí 5%, dư nợ giữ nguyên). Ở 90+ `days_late` tăng 30/tháng, nên nhóm nợ 3–5 có mặt
+- Khớp `loan_status`: CLOSED trả đúng hạn mọi kỳ; ACTIVE kỳ cuối đúng hạn; OVERDUE kỳ cuối quá hạn. WRITTEN_OFF không sinh lịch trả (như trước)
 - CLOSED loans: outstanding balance → 0
 - Payment methods: Vietnamese banking context (BANK_TRANSFER most common)
 
@@ -498,7 +499,7 @@ core_banking:
   branch: { row_count: 100, regions: [...], region_weights: [...] }
   customer: { row_count: 10000, gender_distribution: {...}, segment_distribution: {...} }
   txn_account: { row_count: 1200000, type_distribution: {...}, amount_range: [10000, 500000000] }
-  loan_payment: { late_payment_rate: 0.05, missed_payment_rate: 0.02 }
+  loan_payment: { roll_rates: <ma trận chuyển bucket DPD theo tháng> }
   standing_order: { row_count: 15000, frequency_distribution: {...} }
   # ...etc
 
