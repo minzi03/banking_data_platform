@@ -236,37 +236,105 @@ digital_banking:
     satisfaction_range: [1, 5]
 
   mcc_code:
-    row_count: 109
-    # Standard MCC codes for banking
+    # Mã MCC theo danh sách mã của Visa/Mastercard (ISO 18245). Số dòng = số mã
+    # khai ở đây — generator KHÔNG độn thêm. Bản trước khai 28 mã rồi độn 81 mã
+    # số ngẫu nhiên 1000–9999 cho đủ 109, nên 74% bảng là mã không tồn tại.
+    #
+    # Tập mã = 75 mã xuất hiện trong giao dịch thẻ thật của bộ tham khảo Xóm Bank
+    # (thamkhao/dataset_thamkhao/thamkhao/mcc_codes_*.csv) ∪ 8 mã generator đã dùng
+    # mà Xóm không có ∪ 7512 (thuê xe, thay mã chuỗi 3351). Mô tả viết lại theo
+    # danh sách mã thẻ, không lấy của Xóm nguyên trạng. Bỏ 34 mã của Xóm:
+    #   3000–3780  Xóm ghi "Steelworks", "Welding Repair"…; theo danh sách mã thẻ,
+    #              3000–3299 là từng hãng bay, 3351–3441 hãng thuê xe, 3501–3999
+    #              chuỗi khách sạn — dùng mã chung 4511 / 7512 / 7011 thay thế.
+    #   7801–7802  Xóm ghi "Athletic Fields", "Recreational Sports"; 7800–7802
+    #              là xổ số / casino trực tuyến / đua ngựa do chính phủ cấp phép.
+    # risk = 1: nhóm MCC các mạng thẻ xếp rủi ro cao (quasi-cash, rút tiền mặt,
+    # chuyển tiền, cá cược, hẹn hò, telemarketing).
     codes:
-      - {mcc: "5411", desc: "Grocery Stores", group: "RETAIL", risk: 0}
-      - {mcc: "5812", desc: "Eating Places, Restaurants", group: "FOOD", risk: 0}
-      - {mcc: "5814", desc: "Fast Food Restaurants", group: "FOOD", risk: 0}
-      - {mcc: "3000", desc: "Airlines", group: "TRAVEL", risk: 0}
-      - {mcc: "3351", desc: "Car Rental", group: "TRAVEL", risk: 0}
-      - {mcc: "3501", desc: "Hotels", group: "TRAVEL", risk: 0}
-      - {mcc: "4121", desc: "Taxi", group: "TRAVEL", risk: 0}
-      - {mcc: "5541", desc: "Gas Stations", group: "RETAIL", risk: 0}
-      - {mcc: "5999", desc: "Misc Retail Stores", group: "RETAIL", risk: 0}
+      - {mcc: "1711", desc: "Heating, Plumbing and Air Conditioning Contractors", group: "SERVICES", risk: 0}
+      - {mcc: "4111", desc: "Local and Suburban Commuter Passenger Transportation", group: "TRAVEL", risk: 0}
+      - {mcc: "4112", desc: "Passenger Railways", group: "TRAVEL", risk: 0}
+      - {mcc: "4121", desc: "Taxicabs and Limousines", group: "TRAVEL", risk: 0}
+      - {mcc: "4131", desc: "Bus Lines", group: "TRAVEL", risk: 0}
+      - {mcc: "4214", desc: "Motor Freight Carriers and Trucking", group: "SERVICES", risk: 0}
+      - {mcc: "4411", desc: "Cruise Lines", group: "TRAVEL", risk: 0}
+      - {mcc: "4511", desc: "Airlines and Air Carriers", group: "TRAVEL", risk: 0}
+      - {mcc: "4722", desc: "Travel Agencies and Tour Operators", group: "TRAVEL", risk: 0}
+      - {mcc: "4784", desc: "Tolls and Bridge Fees", group: "TRAVEL", risk: 0}
+      - {mcc: "4814", desc: "Telecommunication Services", group: "UTILITIES", risk: 0}
+      - {mcc: "4829", desc: "Wire Transfers and Money Orders", group: "SERVICES", risk: 1}
+      - {mcc: "4899", desc: "Cable, Satellite and Other Pay Television Services", group: "UTILITIES", risk: 0}
+      - {mcc: "4900", desc: "Utilities - Electric, Gas, Water, Sanitary", group: "UTILITIES", risk: 0}
+      - {mcc: "5045", desc: "Computers, Computer Peripheral Equipment, Software", group: "RETAIL", risk: 0}
+      - {mcc: "5094", desc: "Precious Stones and Metals, Watches and Jewelry", group: "RETAIL", risk: 0}
+      - {mcc: "5192", desc: "Books, Periodicals and Newspapers", group: "RETAIL", risk: 0}
+      - {mcc: "5193", desc: "Florists Supplies, Nursery Stock and Flowers", group: "RETAIL", risk: 0}
+      - {mcc: "5211", desc: "Lumber and Building Materials Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5251", desc: "Hardware Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5261", desc: "Lawn and Garden Supply Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5300", desc: "Wholesale Clubs", group: "RETAIL", risk: 0}
+      - {mcc: "5310", desc: "Discount Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5311", desc: "Department Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5411", desc: "Grocery Stores and Supermarkets", group: "RETAIL", risk: 0}
+      - {mcc: "5499", desc: "Miscellaneous Food Stores", group: "FOOD", risk: 0}
+      - {mcc: "5533", desc: "Automotive Parts and Accessories Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5541", desc: "Service Stations", group: "RETAIL", risk: 0}
+      - {mcc: "5621", desc: "Women's Ready-to-Wear Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5651", desc: "Family Clothing Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5655", desc: "Sports and Riding Apparel Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5661", desc: "Shoe Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5691", desc: "Men's and Women's Clothing Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5712", desc: "Furniture, Home Furnishings and Equipment Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5719", desc: "Miscellaneous Home Furnishing Specialty Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5722", desc: "Household Appliance Stores", group: "RETAIL", risk: 0}
       - {mcc: "5732", desc: "Electronics Stores", group: "RETAIL", risk: 0}
-      - {mcc: "5691", desc: "Apparel Stores", group: "RETAIL", risk: 0}
-      - {mcc: "5651", desc: "Family Clothing", group: "RETAIL", risk: 0}
-      - {mcc: "5912", desc: "Drug Stores", group: "RETAIL", risk: 0}
-      - {mcc: "7011", desc: "Hotels, Motels", group: "TRAVEL", risk: 0}
-      - {mcc: "7995", desc: "Gambling", group: "SERVICES", risk: 1}
-      - {mcc: "6011", desc: "Cash Disbursement", group: "SERVICES", risk: 1}
-      - {mcc: "6051", desc: "Quasi-Cash", group: "SERVICES", risk: 1}
-      - {mcc: "7273", desc: "Dating Services", group: "SERVICES", risk: 1}
-      - {mcc: "7993", desc: "Amusement, Cinemas", group: "SERVICES", risk: 0}
-      - {mcc: "8299", desc: "Schools, Education", group: "SERVICES", risk: 0}
-      - {mcc: "5967", desc: "Direct Marketing", group: "RETAIL", risk: 0}
-      - {mcc: "4814", desc: "Telecom Services", group: "UTILITIES", risk: 0}
-      - {mcc: "4899", desc: "Cable/Satellite TV", group: "UTILITIES", risk: 0}
-      - {mcc: "6300", desc: "Insurance", group: "SERVICES", risk: 0}
-      - {mcc: "8011", desc: "Physicians", group: "SERVICES", risk: 0}
-      - {mcc: "8021", desc: "Dentists", group: "SERVICES", risk: 0}
+      - {mcc: "5733", desc: "Music Stores - Musical Instruments", group: "RETAIL", risk: 0}
+      - {mcc: "5812", desc: "Eating Places and Restaurants", group: "FOOD", risk: 0}
+      - {mcc: "5813", desc: "Drinking Places (Alcoholic Beverages)", group: "FOOD", risk: 0}
+      - {mcc: "5814", desc: "Fast Food Restaurants", group: "FOOD", risk: 0}
+      - {mcc: "5815", desc: "Digital Goods - Media: Books, Movies, Music", group: "RETAIL", risk: 0}
+      - {mcc: "5816", desc: "Digital Goods - Games", group: "RETAIL", risk: 0}
+      - {mcc: "5912", desc: "Drug Stores and Pharmacies", group: "RETAIL", risk: 0}
+      - {mcc: "5921", desc: "Package Stores - Beer, Wine and Liquor", group: "RETAIL", risk: 0}
+      - {mcc: "5932", desc: "Antique Shops", group: "RETAIL", risk: 0}
+      - {mcc: "5941", desc: "Sporting Goods Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5942", desc: "Book Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5947", desc: "Gift, Card, Novelty and Souvenir Shops", group: "RETAIL", risk: 0}
+      - {mcc: "5967", desc: "Direct Marketing - Inbound Teleservices Merchant", group: "RETAIL", risk: 1}
+      - {mcc: "5970", desc: "Artist's Supply and Craft Shops", group: "RETAIL", risk: 0}
+      - {mcc: "5977", desc: "Cosmetic Stores", group: "RETAIL", risk: 0}
+      - {mcc: "5999", desc: "Miscellaneous and Specialty Retail Stores", group: "RETAIL", risk: 0}
+      - {mcc: "6011", desc: "Automated Cash Disbursements", group: "SERVICES", risk: 1}
+      - {mcc: "6051", desc: "Quasi Cash - Non-Financial Institutions", group: "SERVICES", risk: 1}
+      - {mcc: "6300", desc: "Insurance Sales, Underwriting and Premiums", group: "SERVICES", risk: 0}
+      - {mcc: "7011", desc: "Lodging - Hotels, Motels, Resorts", group: "TRAVEL", risk: 0}
+      - {mcc: "7210", desc: "Laundry, Cleaning and Garment Services", group: "SERVICES", risk: 0}
+      - {mcc: "7230", desc: "Barber and Beauty Shops", group: "SERVICES", risk: 0}
+      - {mcc: "7273", desc: "Dating and Escort Services", group: "SERVICES", risk: 1}
+      - {mcc: "7276", desc: "Tax Preparation Services", group: "SERVICES", risk: 0}
+      - {mcc: "7349", desc: "Cleaning, Maintenance and Janitorial Services", group: "SERVICES", risk: 0}
+      - {mcc: "7393", desc: "Detective Agencies, Protective Agencies, Security Services", group: "SERVICES", risk: 0}
+      - {mcc: "7512", desc: "Car Rental Agencies", group: "TRAVEL", risk: 0}
+      - {mcc: "7531", desc: "Automotive Body Repair Shops", group: "SERVICES", risk: 0}
+      - {mcc: "7538", desc: "Automotive Service Shops (Non-Dealer)", group: "SERVICES", risk: 0}
+      - {mcc: "7542", desc: "Car Washes", group: "SERVICES", risk: 0}
+      - {mcc: "7549", desc: "Towing Services", group: "SERVICES", risk: 0}
+      - {mcc: "7832", desc: "Motion Picture Theaters", group: "SERVICES", risk: 0}
+      - {mcc: "7922", desc: "Theatrical Producers and Ticket Agencies", group: "SERVICES", risk: 0}
+      - {mcc: "7993", desc: "Video Amusement Game Supplies", group: "SERVICES", risk: 0}
+      - {mcc: "7995", desc: "Betting, including Lottery Tickets and Casino Gaming Chips", group: "SERVICES", risk: 1}
+      - {mcc: "7996", desc: "Amusement Parks, Circuses and Carnivals", group: "SERVICES", risk: 0}
+      - {mcc: "8011", desc: "Doctors and Physicians", group: "SERVICES", risk: 0}
+      - {mcc: "8021", desc: "Dentists and Orthodontists", group: "SERVICES", risk: 0}
       - {mcc: "8041", desc: "Chiropractors", group: "SERVICES", risk: 0}
+      - {mcc: "8043", desc: "Opticians, Optical Goods and Eyeglasses", group: "SERVICES", risk: 0}
+      - {mcc: "8049", desc: "Podiatrists and Chiropodists", group: "SERVICES", risk: 0}
       - {mcc: "8062", desc: "Hospitals", group: "SERVICES", risk: 0}
-
+      - {mcc: "8099", desc: "Medical Services and Health Practitioners", group: "SERVICES", risk: 0}
+      - {mcc: "8111", desc: "Legal Services and Attorneys", group: "SERVICES", risk: 0}
+      - {mcc: "8299", desc: "Schools and Educational Services", group: "SERVICES", risk: 0}
+      - {mcc: "8931", desc: "Accounting, Auditing and Bookkeeping Services", group: "SERVICES", risk: 0}
+      - {mcc: "9402", desc: "Postal Services - Government Only", group: "SERVICES", risk: 0}
   merchant:
     row_count: 2000
