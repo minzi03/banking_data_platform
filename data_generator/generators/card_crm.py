@@ -48,6 +48,23 @@ SUBJECTS_RETENTION = [
     "Account closure survey", "Service recovery",
 ]
 
+# merchant_category của card_txn → MCC. Mọi mã phải có trong mcc_code.codes của
+# seed_config (tests/data_generator/test_mcc_code_uniqueness.py kiểm). Bản trước
+# có 5422 (không có trong bảng MCC) và 3000/3351/3501 — mã riêng của MỘT hãng
+# bay / hãng thuê xe / chuỗi khách sạn, không phải mã nhóm ngành.
+CARD_CATEGORY_MCC = {
+    "GROCERY": ["5411", "5499"],
+    "RESTAURANT": ["5812", "5814"],
+    "TRAVEL": ["4511", "7512", "7011", "4121"],
+    "ECOM": ["5999", "5732"],
+    "FUEL": ["5541"],
+    "EDUCATION": ["8299"],
+    "HEALTHCARE": ["8011", "8041", "8062"],
+    "ENTERTAINMENT": ["7832", "7996", "7995"],
+    "UTILITIES": ["4814", "4899"],
+    "FASHION": ["5691", "5651"],
+}
+
 
 def generate_cards(count: int, config: dict, customer_ids: list[int],
                    account_ids: list[int], product_codes: list[str]) -> list[tuple]:
@@ -153,20 +170,6 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
     statuses = list(status_dist.keys())
     s_weights = list(status_dist.values())
 
-    # Merchant category → MCC code mapping (subset of 109 codes)
-    cat_mcc_map = {
-        "GROCERY": ["5411", "5422"],
-        "RESTAURANT": ["5812", "5814"],
-        "TRAVEL": ["3000", "3351", "3501", "4121"],
-        "ECOM": ["5999", "5732"],
-        "FUEL": ["5541"],
-        "EDUCATION": ["8299"],
-        "HEALTHCARE": ["8011", "8041", "8062"],
-        "ENTERTAINMENT": ["7993", "7995"],
-        "UTILITIES": ["4814", "4899"],
-        "FASHION": ["5691", "5651"],
-    }
-
     for i in range(1, count + 1):
         card_id, cust_id = random.choice(active_cards) if active_cards else (1, 1)
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
@@ -181,14 +184,13 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
         if txn_type in ("REFUND", "REVERSAL"):
             amount = -amount
 
-        # MCC code: pick from category mapping or use a random valid MCC
+        # MCC khớp merchant_category. Bản trước có 20% giao dịch bốc MCC bất kỳ dù
+        # category đã có mã — MCC mâu thuẫn category là dữ liệu sai, không phải
+        # nhiễu thực tế. Chỉ category chưa có mã mới lấy mã bất kỳ trong bảng.
         mcc = None
         if mcc_codes:
-            cat_mcns = cat_mcc_map.get(merchant_cat, [])
-            if cat_mcns and random.random() < 0.8:
-                mcc = random.choice(cat_mcns)
-            else:
-                mcc = random.choice(mcc_codes)
+            cat_mcns = CARD_CATEGORY_MCC.get(merchant_cat, [])
+            mcc = random.choice(cat_mcns) if cat_mcns else random.choice(mcc_codes)
 
         # Processing time: POS fastest (50-200ms), ECOM slower (200-2000ms), ATM medium
         if channel == "POS":

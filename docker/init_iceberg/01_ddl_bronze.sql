@@ -314,7 +314,7 @@ USING iceberg
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
--- 16. CORE_MCC_CODE (dimension — 109 rows)
+-- 16. CORE_MCC_CODE (dimension — 84 rows)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_mcc_code (
     mcc_code            STRING,

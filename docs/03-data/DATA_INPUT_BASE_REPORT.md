@@ -44,12 +44,12 @@ PostgreSQL (Source)
 │   ├── card_txn (600,000)
 │   └── crm_interaction (50,000)
 │
-├── digital_banking (6 tables) ──── 582,109 rows
+├── digital_banking (6 tables) ──── 582,084 rows
 │   ├── device (50,000)
 │   ├── location (5,000)
 │   ├── online_transaction (500,000)
 │   ├── support_ticket (25,000)
-│   ├── mcc_code (109)
+│   ├── mcc_code (84)
 │   └── merchant (2,000)               ← NEW
 │
 └── opslakehouse (1 table) ──────── 19 rows
@@ -364,13 +364,13 @@ Where P = principal, r = monthly rate, n = months.
 
 ---
 
-### 3.18 digital_banking.mcc_code (109 rows, 5 columns)
+### 3.18 digital_banking.mcc_code (84 rows, 5 columns)
 
 **Mục đích**: Master data — MCC (Merchant Category Code)
 
-- 28 codes from config (standard banking MCCs)
-- 81 auto-generated codes (pool sampling, no duplicates)
-- Risk flags: gambling (7995), cash disbursement (6011), quasi-cash (6051), dating (7273)
+- 84 mã thật theo danh sách mã thẻ (ISO 18245), khai toàn bộ trong `seed_config.yaml`; generator không độn thêm
+- Trước 2026-09-29: 28 mã khai + 81 mã số ngẫu nhiên độn cho đủ 109 — 74% bảng là mã không tồn tại
+- Risk flags: gambling (7995), cash disbursement (6011), quasi-cash (6051), dating (7273), money transfer (4829), telemarketing (5967)
 
 ---
 
