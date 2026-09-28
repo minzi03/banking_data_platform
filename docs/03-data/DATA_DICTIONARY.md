@@ -8,13 +8,13 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**87 bảng · 980 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
+**89 bảng · 1003 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 22 | 303 |
+| [bronze](#bronze) | 24 | 326 |
 | [silver](#silver) | 17 | 217 |
 | [gold](#gold) | 14 | 222 |
 | [meta](#meta) | 1 | 4 |
@@ -392,6 +392,25 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
 
+### `lakehouse.bronze.core_merchant`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `merchant_id` | `BIGINT` |  |  |
+| `merchant_name` | `STRING` |  |  |
+| `merchant_category` | `STRING` |  |  |
+| `mcc_code` | `STRING` |  |  |
+| `city` | `STRING` |  |  |
+| `state` | `STRING` |  |  |
+| `risk_category` | `STRING` |  |  |
+| `is_active` | `INT` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
 ### `lakehouse.bronze.core_online_transaction`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -430,6 +449,28 @@ _Chưa có data contract trong `governance/datasets/`._
 | `currency` | `STRING` |  |  |
 | `is_active` | `INT` |  |  |
 | `launch_date` | `DATE` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
+### `lakehouse.bronze.core_standing_order`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `order_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `order_type` | `STRING` |  |  |
+| `beneficiary_name` | `STRING` |  |  |
+| `beneficiary_account` | `STRING` |  |  |
+| `amount` | `DECIMAL(18,2)` |  |  |
+| `frequency` | `STRING` |  |  |
+| `next_execute_date` | `DATE` |  |  |
+| `status` | `STRING` |  |  |
+| `created_date` | `DATE` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
 

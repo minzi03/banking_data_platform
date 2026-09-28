@@ -1,8 +1,13 @@
 # Source Table Registry — Maps PostgreSQL source tables to Iceberg Bronze targets
-# Used by Airflow DAGs for dynamic task generation
+#
+# Tài liệu tham chiếu, KHÔNG phải cấu hình chạy: DAG Bronze glob thẳng
+# code_etl/bronze/<schema>/*.yml, còn bootstrap dùng BRONZE_CONFIGS. Vì không
+# code nào đọc file này nên nó từng lệch âm thầm (thiếu loan_payment, ghi
+# txn_account là incremental). tests/governance/test_bronze_source_registry.py
+# giờ giữ nó khớp với các workload thật.
 
 tables:
-  # === core_banking (8 tables) ===
+  # === core_banking (10 tables) ===
   - source_schema: core_banking
     source_table: branch
     target_schema: bronze
@@ -49,13 +54,27 @@ tables:
     source_table: txn_account
     target_schema: bronze
     target_table: core_txn_account
-    load_strategy: incremental
+    load_strategy: full_snapshot
     partitioned: true
 
   - source_schema: core_banking
     source_table: employee
     target_schema: bronze
     target_table: core_employee
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: loan_payment
+    target_schema: bronze
+    target_table: core_loan_payment
+    load_strategy: full_snapshot
+    partitioned: true
+
+  - source_schema: core_banking
+    source_table: standing_order
+    target_schema: bronze
+    target_table: core_standing_order
     load_strategy: full_snapshot
     partitioned: false
 
@@ -71,7 +90,7 @@ tables:
     source_table: card_txn
     target_schema: bronze
     target_table: core_card_txn
-    load_strategy: incremental
+    load_strategy: full_snapshot
     partitioned: true
 
   - source_schema: card_crm
@@ -81,7 +100,7 @@ tables:
     load_strategy: full_snapshot
     partitioned: false
 
-  # === digital_banking (5 tables) ===
+  # === digital_banking (6 tables) ===
   - source_schema: digital_banking
     source_table: device
     target_schema: bronze
@@ -100,7 +119,7 @@ tables:
     source_table: online_transaction
     target_schema: bronze
     target_table: core_online_transaction
-    load_strategy: incremental
+    load_strategy: full_snapshot
     partitioned: true
 
   - source_schema: digital_banking
@@ -114,5 +133,12 @@ tables:
     source_table: mcc_code
     target_schema: bronze
     target_table: core_mcc_code
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: digital_banking
+    source_table: merchant
+    target_schema: bronze
+    target_table: core_merchant
     load_strategy: full_snapshot
     partitioned: false

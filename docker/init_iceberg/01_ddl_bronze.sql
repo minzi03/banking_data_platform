@@ -326,3 +326,42 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_mcc_code (
 )
 USING iceberg
 TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 17. CORE_STANDING_ORDER (dimension — 15K rows)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_standing_order (
+    order_id            BIGINT,
+    account_id          BIGINT,
+    customer_id         BIGINT,
+    order_type          STRING,
+    beneficiary_name    STRING,
+    beneficiary_account STRING,
+    amount              DECIMAL(18,2),
+    frequency           STRING,
+    next_execute_date   DATE,
+    status              STRING,
+    created_date        DATE,
+    last_updated        TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 18. CORE_MERCHANT (dimension — 2K rows)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_merchant (
+    merchant_id         BIGINT,
+    merchant_name       STRING,
+    merchant_category   STRING,
+    mcc_code            STRING,
+    city                STRING,
+    state               STRING,
+    risk_category       STRING,
+    is_active           INT,
+    last_updated        TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');

@@ -73,9 +73,9 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 - `card_crm.*` → `core_{table}` (e.g., core_card, core_card_txn)
 - `digital_banking.*` → `core_{table}` (e.g., core_device, core_online_transaction)
 
-### 3.1. Batch Tables (16 tables)
+### 3.1. Batch Tables (19 tables)
 
-#### 3.1.1. core_banking Domain (8 tables)
+#### 3.1.1. core_banking Domain (10 tables)
 
 | Bronze Table | Source | Rows | Columns | Type |
 |-------------|--------|------|---------|------|
@@ -86,6 +86,8 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 | core_deposit | core_banking.deposit | 15,000 | 11 | Dimension |
 | core_loan | core_banking.loan | 5,000 | 12 | Dimension |
 | core_employee | core_banking.employee | 1,800 | 8 | Dimension |
+| core_loan_payment | core_banking.loan_payment | ~250,000 | 14 | **Fact** |
+| core_standing_order | core_banking.standing_order | 15,000 | 12 | Dimension |
 | core_txn_account | core_banking.txn_account | 1,200,000 | 13 | **Fact** |
 
 **core_customer — Cross-schema FK:** branch_code → core_branch. PII columns: cccd, full_name, phone, email, address. Indexed on branch_code, customer_segment, last_updated.
@@ -95,6 +97,8 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 **core_deposit — Nullable FK:** account_id can be NULL (standalone savings). FKs: customer_id → core_customer, product_code → core_product.
 
 **core_loan — Multi-FK:** customer_id → core_customer, product_code → core_product, branch_code → core_branch.
+
+**core_standing_order:** Lệnh thanh toán định kỳ (BILL_PAYMENT / TRANSFER / LOAN_PAYMENT). Chưa có Silver/Gold consumer. `beneficiary_name` ở dữ liệu sinh là tên tổ chức; với dữ liệu thật phải xếp vào PII_INVENTORY.
 
 **core_txn_account — Largest Bronze table (1.2M rows):** Contains denormalized customer_id for query performance. Indexed on (account_id, txn_date) and (customer_id, txn_date) for incremental ingestion and customer-level queries.
 
@@ -112,7 +116,7 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 
 **core_crm_interaction:** 5 channels (CALL/EMAIL/CHAT/BRANCH/SMS), 5 categories. Indexed on (customer_id, interaction_date).
 
-#### 3.1.3. digital_banking Domain (5 tables)
+#### 3.1.3. digital_banking Domain (6 tables)
 
 | Bronze Table | Source | Rows | Columns | Type |
 |-------------|--------|------|---------|------|
@@ -121,6 +125,9 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 | core_online_transaction | digital_banking.online_transaction | 500,000 | 15 | **Fact** |
 | core_support_ticket | digital_banking.support_ticket | 25,000 | 10 | Dimension |
 | core_mcc_code | digital_banking.mcc_code | 109 | 5 | Dimension |
+| core_merchant | digital_banking.merchant | 2,000 | 9 | Dimension |
+
+**core_merchant:** Danh bạ merchant, `mcc_code` FK → core_mcc_code. Chưa có Silver/Gold consumer — `card_txn` vẫn mang `merchant_name` dạng text, chưa có `merchant_id`.
 
 **core_online_transaction:** Contains is_fraud flag (0.8% rate), fraud_reason, high-risk location correlation. Indexed on (customer_id, transaction_date), (account_id, transaction_date), is_fraud.
 
