@@ -80,6 +80,9 @@ DIM_TABLES = [
     "lakehouse.bronze.core_mcc_code",
     "lakehouse.bronze.core_standing_order",
     "lakehouse.bronze.core_merchant",
+    "lakehouse.bronze.core_aml_rule",
+    "lakehouse.bronze.core_aml_alert",
+    "lakehouse.bronze.core_aml_customer_risk",
     "lakehouse.silver.dim_customer",
     "lakehouse.silver.dim_account",
 ]

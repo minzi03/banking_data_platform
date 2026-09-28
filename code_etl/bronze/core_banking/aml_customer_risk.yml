@@ -1,0 +1,40 @@
+# Bronze Ingestion: aml_customer_risk (dimension — full snapshot)
+#
+# Hồ sơ rủi ro AML theo khách hàng (1 dòng / khách được đánh giá).
+#
+# DỮ LIỆU TUÂN THỦ: cờ PEP / sanctions / adverse media, EDD và nguồn gốc tài sản
+# là kết quả sàng lọc KYC — role `observer` thấy các cột này bị che
+# (governance/rbac.py). risk_level / risk_score để mở cho giám sát vận hành.
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_aml_customer_risk
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    customer_id,
+    risk_level,
+    risk_score,
+    peps_flag,
+    sanctions_flag,
+    adverse_media_flag,
+    total_alerts,
+    open_alerts,
+    last_alert_date,
+    last_review_date,
+    next_review_date,
+    edd_required,
+    edd_reason,
+    source_of_wealth,
+    expected_activity,
+    created_at,
+    updated_at
+  FROM core_banking.aml_customer_risk

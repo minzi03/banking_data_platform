@@ -27,7 +27,7 @@ nên thuộc đúng một khối luật.
 | `data_steward` | Manage data governance, contracts, and quality — kế thừa `analytics` | `data_steward_user` |
 | `serving_builder` | dbt: đọc Gold, tạo/thay bảng trong serving | `dbt` |
 | `serving_consumer` | Superset, API, Streamlit, ML: chỉ đọc serving | `customer_api`, `ml`, `streamlit`, `superset` |
-| `observer` | Freshness exporter, metrics manifest: đọc mọi tầng, PII bị che | `freshness_exporter`, `manifest_collector` |
+| `observer` | Freshness exporter, metrics manifest: đọc mọi tầng, PII và dữ liệu tuân thủ AML bị che | `freshness_exporter`, `manifest_collector` |
 
 ## 2. Role × schema
 
@@ -66,21 +66,34 @@ vẫn là bản gốc.
 
 ### 3.1 Ai thấy PII gốc
 
-| Role | `bronze.core_customer` | `bronze.core_customer_cdc` | `silver.dim_customer` | `silver.dim_customer_current` |
-|---|---|---|---|---|
-| `admin` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
-| `etl_user` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
-| `analytics` | không đọc được | không đọc được | che 6 cột | che 6 cột |
-| `readonly` | không đọc được | không đọc được | không đọc được | không đọc được |
-| `data_steward` | không đọc được | không đọc được | che 6 cột | che 6 cột |
-| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được |
-| `serving_consumer` | không đọc được | không đọc được | không đọc được | không đọc được |
-| `observer` | che 6 cột | che 6 cột | che 6 cột | che 6 cột |
+| Role | `bronze.core_aml_alert` | `bronze.core_aml_customer_risk` | `bronze.core_customer` | `bronze.core_customer_cdc` | `silver.dim_customer` | `silver.dim_customer_current` |
+|---|---|---|---|---|---|---|
+| `admin` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
+| `etl_user` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
+| `analytics` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột |
+| `readonly` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `data_steward` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột |
+| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `serving_consumer` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `observer` | che 6 cột | che 7 cột | che 6 cột | che 6 cột | che 6 cột | che 6 cột |
 
 ### 3.2 Biểu thức che
 
 | Bảng | Cột | Biểu thức Trino | Áp cho role |
 |---|---|---|---|
+| `bronze.core_aml_alert` | `description` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_alert` | `evidence_json` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_alert` | `notes` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_alert` | `sar_filed` | `CAST(NULL AS INTEGER)` | `observer` |
+| `bronze.core_aml_alert` | `sar_reference` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_alert` | `status` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_customer_risk` | `adverse_media_flag` | `CAST(NULL AS INTEGER)` | `observer` |
+| `bronze.core_aml_customer_risk` | `edd_reason` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_customer_risk` | `edd_required` | `CAST(NULL AS INTEGER)` | `observer` |
+| `bronze.core_aml_customer_risk` | `expected_activity` | `CAST(NULL AS VARCHAR)` | `observer` |
+| `bronze.core_aml_customer_risk` | `peps_flag` | `CAST(NULL AS INTEGER)` | `observer` |
+| `bronze.core_aml_customer_risk` | `sanctions_flag` | `CAST(NULL AS INTEGER)` | `observer` |
+| `bronze.core_aml_customer_risk` | `source_of_wealth` | `CAST(NULL AS VARCHAR)` | `observer` |
 | `bronze.core_customer` | `address` | `CAST('[REDACTED]' AS VARCHAR)` | `observer` |
 | `bronze.core_customer` | `cccd` | `concat('***********', substr(cccd, -4))` | `observer` |
 | `bronze.core_customer` | `date_of_birth` | `date_trunc('year', date_of_birth)` | `observer` |

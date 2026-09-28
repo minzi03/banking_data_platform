@@ -116,6 +116,29 @@ như Bronze tương ứng, vì Bronze là bản sao trung thực của nguồn.
 hại ở bảng này thành dữ liệu nhạy cảm sau một phép join. Bản kiểm kê ghi cột;
 đánh giá rủi ro phải theo **đường dùng**.
 
+### 3.1 Dữ liệu tuân thủ AML — một trục nhạy cảm khác PII
+
+`bronze.core_aml_alert` và `bronze.core_aml_customer_risk` (nạp từ 2026-09-29)
+mang dữ liệu **không định danh ai** nhưng nhạy cảm hơn PII. Để lộ nó là vi phạm
+quy định cấm tiết lộ, không chỉ là lộ thông tin cá nhân.
+
+| Mức | Cột | Vì sao |
+|---|---|---|
+| **Tuân thủ** | `core_aml_alert`: `status` · `sar_filed` · `sar_reference` | Cho biết giao dịch đã bị báo cáo đáng ngờ (STR/SAR). `status` có giá trị `STR_FILED`, nên che riêng hai cột SAR là không đủ |
+| **Tuân thủ** | `core_aml_alert`: `description` · `evidence_json` · `notes` | Nội dung hồ sơ điều tra |
+| **Tuân thủ** | `core_aml_customer_risk`: `peps_flag` · `sanctions_flag` · `adverse_media_flag` · `edd_required` · `edd_reason` · `source_of_wealth` · `expected_activity` | Kết quả sàng lọc KYC / PEP / cấm vận |
+| Mở | `risk_level` · `risk_score` · `alert_type` · `risk_category` · ngày tháng | Cần cho giám sát vận hành; không tiết lộ kết quả báo cáo hay sàng lọc |
+
+Cơ chế: mask Trino **trả NULL đúng kiểu** cho role `observer` (`governance/rbac.py`,
+`_BRONZE_AML_MASKS`). NULL chứ không phải giá trị giả, vì `'CLOSED'` thay cho
+`STR_FILED` là số liệu sai chứ không phải số liệu bị che. Chỉ `admin` và
+`etl_user` đọc nguyên bản; chưa có role "compliance" riêng.
+
+Bất biến `test_no_one_outside_admin_and_etl_reads_aml_compliance_data` nhận diện
+bảng AML theo **cột** (`sar_filed`, `sanctions_flag`…), nên một bảng AML mới ở
+Silver/Gold sẽ tự bị kiểm. `scripts/verify_trino_access_control.py` kiểm lúc chạy:
+observer đếm ra 0 giá trị, admin đếm ra > 0.
+
 ---
 
 ## 4. Ba cơ chế che, ba quy tắc khác nhau

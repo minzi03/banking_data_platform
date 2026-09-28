@@ -275,6 +275,8 @@ class TestMasksTargetRealColumns:
                 assert mask.startswith("date_trunc("), f"{schema}.{table}.{column}: {mask}"
             elif col_type in {"BIGINT", "LONG"}:
                 assert re.search(r"AS\s+BIGINT\)$", mask), f"{schema}.{table}.{column}: {mask}"
+            elif col_type in {"INT", "INTEGER"}:
+                assert re.search(r"AS\s+INTEGER\)$", mask), f"{schema}.{table}.{column}: {mask}"
             else:
                 assert col_type in {"STRING", "VARCHAR"}, f"{schema}.{table}.{column}: kiểu {col_type} chưa hỗ trợ"
                 assert "%s" not in mask and column in mask or "AS VARCHAR" in mask, mask
@@ -306,6 +308,46 @@ class TestPolicy:
                         f"{user} đọc được {schema}.{table}.{column} KHÔNG che"
                     )
         assert checked, "không user nào đọc bảng PII — bất biến kiểm rỗng"
+
+    def test_no_one_outside_admin_and_etl_reads_aml_compliance_data(self, rules, ddl):
+        """Cùng bất biến cho dữ liệu tuân thủ AML: trạng thái STR/SAR và kết quả
+        sàng lọc PEP/cấm vận. Nhận diện bảng theo CỘT (sar_filed, sanctions_flag…),
+        không theo tên — nên một bảng AML mới ở Silver/Gold cũng bị kiểm, không cần
+        sửa test."""
+        screening = {
+            "peps_flag",
+            "sanctions_flag",
+            "adverse_media_flag",
+            "edd_required",
+            "edd_reason",
+            "source_of_wealth",
+            "expected_activity",
+        }
+        # status có giá trị STR_FILED; description/evidence/notes là nội dung case.
+        case_columns = {"sar_filed", "sar_reference", "status", "description", "evidence_json", "notes"}
+        aml_tables = {}
+        for key, cols in ddl.items():
+            required = set()
+            if "sar_filed" in cols:
+                required |= case_columns & set(cols)
+            required |= screening & set(cols)
+            if required:
+                aml_tables[key] = sorted(required)
+        assert ("bronze", "core_aml_alert") in aml_tables and ("bronze", "core_aml_customer_risk") in aml_tables
+
+        checked = 0
+        for user in USERS:
+            if _role_closure(user) & RAW_PII_ROLES:
+                continue
+            for (schema, table), columns in aml_tables.items():
+                if not rules.can_select(user, "iceberg", schema, table):
+                    continue
+                for column in columns:
+                    checked += 1
+                    assert rules.mask(user, "iceberg", schema, table, column), (
+                        f"{user} đọc được {schema}.{table}.{column} KHÔNG che"
+                    )
+        assert checked, "không user nào đọc bảng AML — bất biến kiểm rỗng"
 
     def test_data_steward_inherits_masks(self, rules):
         """Trước đây mask không kế thừa: steward đọc Silver mà thấy cccd gốc."""

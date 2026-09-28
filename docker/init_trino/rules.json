@@ -440,6 +440,80 @@
       "user": "freshness_exporter|manifest_collector",
       "catalog": "iceberg",
       "schema": "bronze",
+      "table": "core_aml_alert",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "description",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "evidence_json",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "notes",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "sar_filed",
+          "mask": "CAST(NULL AS INTEGER)"
+        },
+        {
+          "name": "sar_reference",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "status",
+          "mask": "CAST(NULL AS VARCHAR)"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "bronze",
+      "table": "core_aml_customer_risk",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "adverse_media_flag",
+          "mask": "CAST(NULL AS INTEGER)"
+        },
+        {
+          "name": "edd_reason",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "edd_required",
+          "mask": "CAST(NULL AS INTEGER)"
+        },
+        {
+          "name": "expected_activity",
+          "mask": "CAST(NULL AS VARCHAR)"
+        },
+        {
+          "name": "peps_flag",
+          "mask": "CAST(NULL AS INTEGER)"
+        },
+        {
+          "name": "sanctions_flag",
+          "mask": "CAST(NULL AS INTEGER)"
+        },
+        {
+          "name": "source_of_wealth",
+          "mask": "CAST(NULL AS VARCHAR)"
+        }
+      ]
+    },
+    {
+      "user": "freshness_exporter|manifest_collector",
+      "catalog": "iceberg",
+      "schema": "bronze",
       "table": "core_customer",
       "privileges": [
         "SELECT"

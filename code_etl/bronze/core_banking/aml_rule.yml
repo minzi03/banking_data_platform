@@ -1,0 +1,34 @@
+# Bronze Ingestion: aml_rule (dimension — full snapshot)
+#
+# Cấu hình rule phát hiện AML (ngưỡng, cửa sổ thời gian, mức độ, căn cứ pháp lý).
+# Không chứa dữ liệu khách hàng nên không có mask.
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_aml_rule
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    rule_id,
+    rule_name,
+    rule_code,
+    rule_type,
+    description,
+    threshold,
+    threshold_currency,
+    window_hours,
+    severity,
+    is_active,
+    regulatory_ref,
+    created_by,
+    created_at,
+    updated_at
+  FROM core_banking.aml_rule

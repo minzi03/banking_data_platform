@@ -73,9 +73,9 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 - `card_crm.*` → `core_{table}` (e.g., core_card, core_card_txn)
 - `digital_banking.*` → `core_{table}` (e.g., core_device, core_online_transaction)
 
-### 3.1. Batch Tables (19 tables)
+### 3.1. Batch Tables (22 tables)
 
-#### 3.1.1. core_banking Domain (10 tables)
+#### 3.1.1. core_banking Domain (13 tables)
 
 | Bronze Table | Source | Rows | Columns | Type |
 |-------------|--------|------|---------|------|
@@ -88,6 +88,9 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 | core_employee | core_banking.employee | 1,800 | 8 | Dimension |
 | core_loan_payment | core_banking.loan_payment | ~250,000 | 14 | **Fact** |
 | core_standing_order | core_banking.standing_order | 15,000 | 12 | Dimension |
+| core_aml_rule | core_banking.aml_rule | 14 | 14 | Dimension |
+| core_aml_alert | core_banking.aml_alert | 500 | 26 | Dimension |
+| core_aml_customer_risk | core_banking.aml_customer_risk | 200 | 17 | Dimension |
 | core_txn_account | core_banking.txn_account | 1,200,000 | 13 | **Fact** |
 
 **core_customer — Cross-schema FK:** branch_code → core_branch. PII columns: cccd, full_name, phone, email, address. Indexed on branch_code, customer_segment, last_updated.
@@ -99,6 +102,8 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 **core_loan — Multi-FK:** customer_id → core_customer, product_code → core_product, branch_code → core_branch.
 
 **core_standing_order:** Lệnh thanh toán định kỳ (BILL_PAYMENT / TRANSFER / LOAN_PAYMENT). Chưa có Silver/Gold consumer. `beneficiary_name` ở dữ liệu sinh là tên tổ chức; với dữ liệu thật phải xếp vào PII_INVENTORY.
+
+**core_aml_alert, core_aml_customer_risk — dữ liệu tuân thủ:** status/SAR, nội dung case và kết quả sàng lọc PEP/cấm vận bị che (NULL) với role `observer`; xem PII_INVENTORY §3.1. Chưa có Silver/Gold consumer. Lưu ý chất lượng: generator chọn `transaction_id`, `customer_id`, `txn_amount` của alert **độc lập ngẫu nhiên**, nên alert chưa trỏ tới giao dịch thật của đúng khách — phải sửa generator trước khi xây Silver/Gold trên bảng này. `aml_alert_transaction` có DDL nguồn nhưng không có generator nên chưa nạp.
 
 **core_txn_account — Largest Bronze table (1.2M rows):** Contains denormalized customer_id for query performance. Indexed on (account_id, txn_date) and (customer_id, txn_date) for incremental ingestion and customer-level queries.
 

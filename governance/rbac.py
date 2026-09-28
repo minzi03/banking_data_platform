@@ -121,6 +121,41 @@ _BRONZE_CUSTOMER_MASKS = _pii_masks("iceberg.bronze.core_customer") + _pii_masks
     "iceberg.bronze.core_customer_cdc", dob_mask=_DOB_EPOCH_DAYS_MASK
 )
 
+# Dữ liệu tuân thủ AML (PII_INVENTORY §3, mức "Tuân thủ"). Không phải PII theo
+# nghĩa định danh, nhưng nhạy cảm hơn: lộ việc một giao dịch đã bị báo cáo
+# (STR/SAR) hay một khách nằm trong danh sách PEP/cấm vận là vi phạm quy định
+# cấm tiết lộ. Che bằng NULL đúng kiểu, không bằng chuỗi giả: một giá trị giả như
+# 'CLOSED' cho status sẽ là số liệu sai chứ không phải số liệu bị che.
+_AML_ALERT_MASKED = {
+    "status": "CAST(NULL AS VARCHAR)",  # có giá trị STR_FILED
+    "sar_filed": "CAST(NULL AS INTEGER)",
+    "sar_reference": "CAST(NULL AS VARCHAR)",
+    "description": "CAST(NULL AS VARCHAR)",
+    "evidence_json": "CAST(NULL AS VARCHAR)",
+    "notes": "CAST(NULL AS VARCHAR)",
+}
+_AML_CUSTOMER_RISK_MASKED = {
+    "peps_flag": "CAST(NULL AS INTEGER)",
+    "sanctions_flag": "CAST(NULL AS INTEGER)",
+    "adverse_media_flag": "CAST(NULL AS INTEGER)",
+    "edd_required": "CAST(NULL AS INTEGER)",
+    "edd_reason": "CAST(NULL AS VARCHAR)",
+    "source_of_wealth": "CAST(NULL AS VARCHAR)",
+    "expected_activity": "CAST(NULL AS VARCHAR)",
+}
+
+
+def _column_masks(table_path: str, masks: dict[str, str]) -> list[Permission]:
+    return [
+        Permission(ResourceType.COLUMN, f"{table_path}.{col}", AccessLevel.READ, column_mask=expr)
+        for col, expr in masks.items()
+    ]
+
+
+_BRONZE_AML_MASKS = _column_masks("iceberg.bronze.core_aml_alert", _AML_ALERT_MASKED) + _column_masks(
+    "iceberg.bronze.core_aml_customer_risk", _AML_CUSTOMER_RISK_MASKED
+)
+
 
 def _read(*schemas: str) -> list[Permission]:
     """Quyền đọc mọi bảng trong các schema của catalog iceberg."""
@@ -213,11 +248,12 @@ ROLES = {
     ),
     "observer": Role(
         name="observer",
-        description="Freshness exporter, metrics manifest: đọc mọi tầng, PII bị che",
+        description="Freshness exporter, metrics manifest: đọc mọi tầng, PII và dữ liệu tuân thủ AML bị che",
         permissions=[
             Permission(ResourceType.CATALOG, "iceberg", AccessLevel.READ),
             *_read("bronze", "silver", "silver_cdc", "gold", "sandbox", "serving"),
             *_BRONZE_CUSTOMER_MASKS,
+            *_BRONZE_AML_MASKS,
             *_SILVER_CUSTOMER_MASKS,
         ],
     ),

@@ -923,12 +923,12 @@ jobs:
         echo "::group::D — Bronze state"
         assert_rows "bronze.core_customer" \
           "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
-        # Hai nguồn từng seed rồi dừng ở PostgreSQL (không workload nào nạp).
+        # Các nguồn từng seed rồi dừng ở PostgreSQL (không workload nào nạp).
         # Exit code 0 của bootstrap không chứng minh chúng đã tới Bronze.
-        assert_rows "bronze.core_standing_order" \
-          "SELECT COUNT(*) FROM iceberg.bronze.core_standing_order WHERE cob_dt = DATE '${COB_DT}'"
-        assert_rows "bronze.core_merchant" \
-          "SELECT COUNT(*) FROM iceberg.bronze.core_merchant WHERE cob_dt = DATE '${COB_DT}'"
+        for table in core_standing_order core_merchant core_aml_rule core_aml_alert core_aml_customer_risk; do
+          assert_rows "bronze.${table}" \
+            "SELECT COUNT(*) FROM iceberg.bronze.${table} WHERE cob_dt = DATE '${COB_DT}'"
+        done
         echo "::endgroup::"
 
         run_stage "E — Silver process" "${SPARK_SUBMIT[@]}" \
