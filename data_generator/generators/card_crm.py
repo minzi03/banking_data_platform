@@ -65,6 +65,60 @@ CARD_CATEGORY_MCC = {
     "FASHION": ["5691", "5651"],
 }
 
+# Cách dùng thẻ theo kênh. Giao dịch có mặt thẻ (POS, ATM): chip / quẹt theo tỷ
+# lệ của bộ tham khảo Xóm Bank (112.114 chip : 27.327 swipe ≈ 80 : 20). ECOM
+# luôn là ONLINE.
+CARD_PRESENT_ENTRY_MODE = {"CHIP": 112_114, "SWIPE": 27_327}
+
+# Lý do từ chối cho giao dịch FAILED, trọng số = số lần đếm được trong
+# 157.224 giao dịch của Xóm Bank, TÁCH THEO cách dùng thẻ — nên lỗi PIN chỉ có
+# khi có mặt thẻ, lỗi CVV / ngày hết hạn / số thẻ chỉ có khi online, đúng như dữ
+# liệu thật. Lỗi tổ hợp giữ nguyên (nhãn nối bằng dấu phẩy, sắp theo tên).
+# Bỏ "Bad Zipcode" (17 lần): kiểm địa chỉ AVS của Mỹ, không dùng ở Việt Nam.
+DECLINE_REASON_WEIGHTS = {
+    "CHIP": {
+        "INSUFFICIENT_FUNDS": 1281,
+        "WRONG_PIN": 291,
+        "TECHNICAL_ERROR": 228,
+        "INSUFFICIENT_FUNDS,TECHNICAL_ERROR": 1,
+        "INSUFFICIENT_FUNDS,WRONG_PIN": 1,
+        "TECHNICAL_ERROR,WRONG_PIN": 1,
+    },
+    "SWIPE": {
+        "INSUFFICIENT_FUNDS": 321,
+        "WRONG_PIN": 97,
+        "TECHNICAL_ERROR": 49,
+        "INSUFFICIENT_FUNDS,WRONG_PIN": 5,
+        "INSUFFICIENT_FUNDS,TECHNICAL_ERROR": 1,
+    },
+    "ONLINE": {
+        "INSUFFICIENT_FUNDS": 158,
+        "INVALID_CARD_NUMBER": 93,
+        "INVALID_EXPIRY": 73,
+        "WRONG_CVV": 65,
+        "TECHNICAL_ERROR": 47,
+        "INSUFFICIENT_FUNDS,WRONG_CVV": 3,
+        "INVALID_CARD_NUMBER,WRONG_CVV": 2,
+        "INSUFFICIENT_FUNDS,INVALID_CARD_NUMBER": 1,
+        "INVALID_CARD_NUMBER,TECHNICAL_ERROR": 1,
+        "INVALID_EXPIRY,WRONG_CVV": 1,
+        "INSUFFICIENT_FUNDS,TECHNICAL_ERROR": 1,
+    },
+}
+
+
+def _weighted(weights: dict[str, int]) -> str:
+    return random.choices(list(weights), weights=list(weights.values()))[0]
+
+
+def card_entry_mode(channel: str) -> str:
+    return "ONLINE" if channel == "ECOM" else _weighted(CARD_PRESENT_ENTRY_MODE)
+
+
+def decline_reason(status: str, entry_mode: str) -> str | None:
+    """Chỉ giao dịch FAILED có lý do; SUCCESS / PENDING là NULL."""
+    return _weighted(DECLINE_REASON_WEIGHTS[entry_mode]) if status == "FAILED" else None
+
 
 def generate_cards(count: int, config: dict, customer_ids: list[int],
                    account_ids: list[int], product_codes: list[str]) -> list[tuple]:
@@ -201,6 +255,7 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
             proc_time = random.randint(200, 3000)
 
         ref_number = f"CDN{i:010d}"
+        entry_mode = card_entry_mode(channel)
 
         rows.append((
             i,
@@ -215,6 +270,8 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
             mcc,
             channel,
             status,
+            entry_mode,
+            decline_reason(status, entry_mode),
             proc_time,
             ref_number,
             txn_date,  # created_ts

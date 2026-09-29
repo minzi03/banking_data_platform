@@ -8,17 +8,17 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**88 bảng · 1001 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
+**88 bảng · 1006 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 22 | 303 |
-| [silver](#silver) | 17 | 217 |
+| [bronze](#bronze) | 22 | 305 |
+| [silver](#silver) | 17 | 219 |
 | [gold](#gold) | 15 | 243 |
 | [meta](#meta) | 1 | 4 |
-| [card_crm](#card_crm) | 3 | 20 |
+| [card_crm](#card_crm) | 3 | 21 |
 | [core_banking](#core_banking) | 14 | 110 |
 | [digital_banking](#digital_banking) | 6 | 34 |
 | [opslakehouse](#opslakehouse) | 10 | 70 |
@@ -187,6 +187,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `merchant_category` | `STRING` |  |  |
 | `channel` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `entry_mode` | `STRING` |  |  |
+| `decline_reason` | `STRING` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
@@ -884,6 +886,8 @@ Cleansed fact table capturing all card-based transactions (credit and debit). In
 | `merchant_category` | `STRING` |  |  |
 | `channel` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `entry_mode` | `STRING` |  |  |
+| `decline_reason` | `STRING` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
@@ -1530,6 +1534,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `txn_type` | `VARCHAR(20)` |  |  |
 | `merchant_name` | `VARCHAR(200)` |  |  |
 | `merchant_category` | `VARCHAR(50)` |  |  |
+| `B` | `PROCESSING_TIME_MS` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_card_crm.sql`</sub>
