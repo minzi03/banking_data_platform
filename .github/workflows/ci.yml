@@ -339,6 +339,7 @@ jobs:
             tests/gold/test_business_date_semantics.py \
             tests/gold/test_risk_mart_semantics.py \
             tests/gold/test_loan_delinquency_mart.py \
+            tests/gold/test_schema_guard.py \
             -v --tb=short -m integration \
             --junitxml=gold-regression-results.xml
 
