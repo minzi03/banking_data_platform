@@ -462,6 +462,61 @@ def generate_employees(count: int, config: dict, branch_codes: list[str]) -> lis
     return rows
 
 
+# ── Trạng thái trễ hạn nối tiếp (ROADMAP 3.7) ───────────────────────────────
+# Bucket DPD của khoản vay SAU mỗi kỳ: 0 = đúng hạn, 1 = 1–29, 2 = 30–59,
+# 3 = 60–89, 4 = 90+. Bản trước bốc PAID/LATE/MISSED độc lập từng kỳ, nên trễ
+# kỳ này không nói gì về kỳ sau — roll rate tính trên dữ liệu đó chỉ là phân
+# phối không điều kiện, và DPD không bao giờ vượt 90.
+#
+# Ma trận chuyển theo tháng. GIẢ ĐỊNH, không đo từ dữ liệu: cả Xóm Bank lẫn
+# archive (9)/(10) đều không có lịch sử trạng thái khoản vay. Hình dạng theo
+# thông lệ: bucket càng sâu càng khó hồi (cure) và càng dễ trượt tiếp (roll).
+DEFAULT_ROLL_RATES = {
+    0: {0: 0.96, 1: 0.04},
+    1: {0: 0.60, 2: 0.40},
+    2: {0: 0.30, 2: 0.20, 3: 0.50},
+    3: {0: 0.20, 3: 0.20, 4: 0.60},
+    4: {0: 0.05, 4: 0.95},
+}
+_BUCKET_DAYS = {1: (1, 29), 2: (30, 59), 3: (60, 89)}
+
+
+def _next_bucket(bucket: int, rates: dict) -> int:
+    row = rates[bucket]
+    return random.choices(list(row), weights=list(row.values()))[0]
+
+
+def delinquency_path(months: int, rates: dict, end: str | None, max_tries: int = 200) -> list[int]:
+    """
+    Chuỗi bucket DPD cho `months` kỳ, bắt đầu từ đúng hạn.
+
+    end = "current": kỳ cuối phải đúng hạn (khoản ACTIVE / CLOSED);
+    end = "delinquent": kỳ cuối phải quá hạn (khoản OVERDUE). Lấy mẫu lại tới khi
+    khớp; hết lượt thì ép kỳ cuối (một lần hồi / một lần trượt) — hiếm, và giữ
+    cho loan_status và lịch trả nợ không bao giờ mâu thuẫn nhau.
+    """
+    if months <= 0:
+        return []
+    for _ in range(max_tries):
+        path, bucket = [], 0
+        for _ in range(months):
+            bucket = _next_bucket(bucket, rates)
+            path.append(bucket)
+        if end is None or (end == "current") == (path[-1] == 0):
+            return path
+    path[-1] = 0 if end == "current" else max(path[-1], 1)
+    return path
+
+
+def days_late_for(bucket: int, months_in_90_plus: int) -> int:
+    """days_late của kỳ theo bucket; ở 90+ thì tăng thêm 30 mỗi tháng nằm lại."""
+    if bucket == 0:
+        return 0
+    if bucket in _BUCKET_DAYS:
+        return random.randint(*_BUCKET_DAYS[bucket])
+    return min(90 + 30 * (months_in_90_plus - 1) + random.randint(0, 29), 32_767)  # SMALLINT
+
+
 def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
     """
     Generate loan payment (amortization) schedule for active/closed loans.
@@ -477,8 +532,7 @@ def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
         loan_data: list of loan tuples from generate_loans()
         config: loan_payment config dict
     """
-    late_rate = config.get("late_payment_rate", 0.05)
-    missed_rate = config.get("missed_payment_rate", 0.02)
+    rates = config.get("roll_rates", DEFAULT_ROLL_RATES)
     rows = []
     payment_id = 1
 
@@ -517,7 +571,16 @@ def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
             months_elapsed = (today.year - disb_date.year) * 12 + (today.month - disb_date.month)
             months_to_generate = min(months_elapsed, term_months)
 
+        # CLOSED: trả đúng hạn mọi kỳ. ACTIVE: kỳ cuối đúng hạn. OVERDUE: kỳ cuối
+        # quá hạn — nên loan_status luôn khớp với kỳ trả gần nhất.
+        if loan_status == "CLOSED":
+            path = [0] * months_to_generate
+        else:
+            end = "delinquent" if loan_status == "OVERDUE" else "current"
+            path = delinquency_path(months_to_generate, rates, end)
+
         outstanding = principal
+        months_in_90_plus = 0
         for month_idx in range(1, months_to_generate + 1):
             payment_date = disb_date + timedelta(days=month_idx * 30)
             scheduled_amount = round(monthly_payment, 2)
@@ -531,19 +594,18 @@ def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
                 principal_component = round(outstanding, 2)
                 interest_component = round(monthly_payment - principal_component, 2) if monthly_payment > principal_component else 0
 
-            # Determine payment status
-            roll = random.random()
-            if roll < missed_rate and loan_status != "CLOSED":
-                # Missed payment
+            # Kết quả kỳ theo bucket DPD sau kỳ: ≥30 ngày = MISSED (không trả,
+            # dư nợ giữ nguyên), 1–29 = LATE (trả muộn kèm phí), 0 = PAID.
+            bucket = path[month_idx - 1]
+            months_in_90_plus = months_in_90_plus + 1 if bucket == 4 else 0
+            days_late = days_late_for(bucket, months_in_90_plus)
+            if bucket >= 2:
                 payment_status = "MISSED"
-                days_late = random.randint(30, 90)
                 penalty = round(scheduled_amount * 0.05, 2)  # 5% penalty
                 amount_paid = 0
                 outstanding = round(outstanding, 2)  # outstanding doesn't change
-            elif roll < late_rate and loan_status != "CLOSED":
-                # Late payment
+            elif bucket == 1:
                 payment_status = "LATE"
-                days_late = random.randint(1, 30)
                 penalty = round(scheduled_amount * 0.02, 2)  # 2% late fee
                 amount_paid = round(scheduled_amount + penalty, 2)
                 outstanding = round(max(0, outstanding - principal_component), 2)
