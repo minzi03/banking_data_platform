@@ -336,8 +336,18 @@ Without it Trino silently falls back to allowing everything.
 
 ### 10. Gold schema migrations
 
-`gold_job.py` writes with `writeTo(...).overwritePartitions()` and does **not**
-evolve schemas. `docker/init_iceberg/03_ddl_gold.sql` only runs
+> **Since 2026-09-29, Gold adds new columns by itself.** Before every write to
+> an existing table, `gold_job.py` runs `code_etl/shared/spark/schema_guard.py`:
+> a column the result has and the table lacks is added with
+> `ALTER TABLE … ADD COLUMNS`; a column the table has and the result lacks, or a
+> change of type family (number ↔ string, date ↔ timestamp), stops the job
+> **before** the write with `BreakingSchemaChange` — the old partition stays.
+> Numeric types are not widened. The manual `ALTER`s below are only needed on a
+> lakehouse that last ran Gold before this change, and Bronze / Silver still need
+> theirs.
+
+Before that change, `gold_job.py` wrote with `writeTo(...).overwritePartitions()`
+and did **not** evolve schemas. `docker/init_iceberg/03_ddl_gold.sql` only runs
 `CREATE TABLE IF NOT EXISTS`, so a column added to the DDL never reaches a table
 that already exists. The job then computes its result, passes its guards, and
 fails at the write:
@@ -369,6 +379,26 @@ one table was already migrated, a combined command would never reach the other.
 Existing rows read `NULL` for the new columns until the Gold job reruns for
 their `cob_dt`. Running an `ALTER` a second time fails with
 `FIELDS_ALREADY_EXISTS` and leaves schema and data unchanged — verified.
+
+The same applies to Bronze (`write_to_iceberg`) and Silver facts
+(`fact_txn.py`): both write with `overwritePartitions()` and no schema evolution.
+
+2026-09-29 — `card_txn.entry_mode` / `decline_reason` (SOURCE_DATA_BASELINE §2).
+The PostgreSQL source needs nothing by hand: `generate_all.py` applies
+`data_generator/migrations/*.sql` (idempotent) before writing. The lakehouse
+tables need one `ALTER` each:
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.bronze.core_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.silver.fact_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+Rows seeded before the change have `entry_mode` / `decline_reason` NULL in the
+source too — the migration adds the constraints `NOT VALID`, so old rows are not
+rechecked. Re-seed (`--truncate`) to get the columns filled for every row.
 
 ### 11. Rotate local secrets
 

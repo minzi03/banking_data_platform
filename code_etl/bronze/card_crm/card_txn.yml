@@ -25,6 +25,8 @@ sql: |
     merchant_category,
     channel,
     status,
+    entry_mode,
+    decline_reason,
     created_ts,
     last_updated
   FROM card_crm.card_txn
