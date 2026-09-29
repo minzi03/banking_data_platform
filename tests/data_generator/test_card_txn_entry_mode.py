@@ -15,9 +15,11 @@ Thêm hai mắt xích dễ hỏng âm thầm:
 
 from __future__ import annotations
 
+import importlib.util
 import random
 import re
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -26,7 +28,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "data_generator"))
 
-from connectors.postgres_writer import PostgresWriter  # noqa: E402
 from generators.card_crm import (  # noqa: E402
     DECLINE_REASON_WEIGHTS,
     card_entry_mode,
@@ -168,27 +169,46 @@ class _FakeConn:
         self.rollbacks += 1
 
 
-def _writer(conn) -> PostgresWriter:
-    writer = PostgresWriter("h", 1, "db", "u", "p")
+@pytest.fixture
+def writer_cls(monkeypatch):
+    """
+    PostgresWriter import psycopg2 ở đầu module, còn job unit test của CI không cài
+    psycopg2 (chỉ cần cho seed). Các test dưới dùng connection giả, nên thay
+    psycopg2 bằng module rỗng — CHỈ khi thiếu thật, và monkeypatch gỡ sau test.
+    """
+    if importlib.util.find_spec("psycopg2") is None:
+        stub = types.ModuleType("psycopg2")
+        stub.extras = types.ModuleType("psycopg2.extras")
+        monkeypatch.setitem(sys.modules, "psycopg2", stub)
+        monkeypatch.setitem(sys.modules, "psycopg2.extras", stub.extras)
+    path = REPO_ROOT / "data_generator" / "connectors" / "postgres_writer.py"
+    spec = importlib.util.spec_from_file_location("_postgres_writer_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.PostgresWriter
+
+
+def _writer(cls, conn):
+    writer = cls("h", 1, "db", "u", "p")
     writer.conn = conn
     return writer
 
 
-def test_apply_migrations_runs_files_in_order(tmp_path):
+def test_apply_migrations_runs_files_in_order(tmp_path, writer_cls):
     (tmp_path / "002_b.sql").write_text("SELECT 2;", encoding="utf-8")
     (tmp_path / "001_a.sql").write_text("SELECT 1;", encoding="utf-8")
     conn = _FakeConn()
-    assert _writer(conn).apply_migrations(tmp_path) == ["001_a.sql", "002_b.sql"]
+    assert _writer(writer_cls, conn).apply_migrations(tmp_path) == ["001_a.sql", "002_b.sql"]
     assert conn.executed == ["SELECT 1;", "SELECT 2;"]
     assert conn.commits == 2
 
 
-def test_apply_migrations_stops_and_rolls_back_on_failure(tmp_path):
+def test_apply_migrations_stops_and_rolls_back_on_failure(tmp_path, writer_cls):
     (tmp_path / "001_a.sql").write_text("SELECT 1;", encoding="utf-8")
     (tmp_path / "002_b.sql").write_text("BROKEN;", encoding="utf-8")
     (tmp_path / "003_c.sql").write_text("SELECT 3;", encoding="utf-8")
     conn = _FakeConn(fail_on="BROKEN")
     with pytest.raises(RuntimeError):
-        _writer(conn).apply_migrations(tmp_path)
+        _writer(writer_cls, conn).apply_migrations(tmp_path)
     assert conn.executed == ["SELECT 1;"]
     assert conn.rollbacks == 1
