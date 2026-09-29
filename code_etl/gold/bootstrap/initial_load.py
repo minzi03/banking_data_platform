@@ -90,6 +90,12 @@ GOLD_JOB_ORDER = [
         "type": "risk",
         "config": "code_etl/gold/risk/aml_monitoring.yml",
     },
+    {
+        # Đọc silver.dim_loan + silver.fact_loan_payment, không phụ thuộc Gold khác.
+        "name": "loan_delinquency",
+        "type": "risk",
+        "config": "code_etl/gold/risk/loan_delinquency.yml",
+    },
     # === Phase 2: Depends on Phase 1 outputs ===
     {
         "name": "campaign_target",
