@@ -296,9 +296,13 @@ WHERE n = 0 OR dup <> 0 OR parts <> 1 OR cob <> ':cob_dt';
 
 
 --@id serving.objects_present
+-- Chỉ đếm bảng current-serving (`*_current`). Schema serving còn chứa time spine
+-- của MetricFlow (metricflow_time_spine, semantic layer) — bảng hạ tầng, không phải
+-- object phục vụ consumer, nên không tính vào con số README gọi là current-serving.
 SELECT COUNT(*) AS value
 FROM :catalog.information_schema.tables
-WHERE table_schema = 'serving';
+WHERE table_schema = 'serving'
+  AND substr(table_name, -8) = '_current';
 
 
 --@id serving.trino.visible_gold_objects

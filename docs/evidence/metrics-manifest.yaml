@@ -72,7 +72,7 @@ metrics:
   source:
     source_datasets:
       value: 17
-      declared: 17
+      declared: 22
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
       definition: 'Bronze ingestion workload configurations targeting source datasets.
@@ -101,7 +101,7 @@ metrics:
   bronze:
     batch_tables:
       value: 17
-      declared: 17
+      declared: 22
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
       definition: Cùng definition với source.source_datasets — 1 workload = 1 bảng
@@ -256,7 +256,7 @@ metrics:
   gold:
     tables:
       value: 14
-      declared: 14
+      declared: 15
       metric_type: static
       provenance: collector:gold_ddl_tables
       definition: '14 bảng history partitioned by cob_dt (6 mart360 + 4 segment +
@@ -362,10 +362,11 @@ metrics:
         '
     objects_present:
       value: 13
-      declared: 13
+      declared: 16
       metric_type: runtime
       provenance: query:serving.objects_present
-      definition: Số object trong schema `serving` — 13 model dbt current-serving.
+      definition: Số bảng `*_current` trong schema `serving` — 16 model dbt current-serving
+        (không tính time spine của MetricFlow).
     current_snapshot_alignment:
       value: 0
       declared: null
@@ -545,7 +546,7 @@ metrics:
     automated_tests:
       test_functions:
         value: 886
-        declared: 886
+        declared: 972
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
@@ -603,10 +604,11 @@ metrics:
       definition: Số key trong CHECK_DISPATCH của code_etl/shared/ops/data_quality.py.
     dbt_models:
       value: 13
-      declared: 13
+      declared: 16
       metric_type: static
       provenance: collector:dbt_models
-      definition: 'Tất cả materialized: ephemeral — không tạo object vật lý.'
+      definition: 'Số model trong dbt/models/serving/*.sql — materialized: table trong schema
+        serving (dbt_project.yml). Không tính dbt/models/semantic/.'
     business_vs_utc_date_rows:
       total_rows: 1200000
       divergent_date_rows: 70100
@@ -828,22 +830,22 @@ invariants:
 
       '
 readme_bindings:
-- readme_claim: '| Source workloads           |             17 |'
+- readme_claim: '| Source workloads           |             22 |'
   manifest_path: metrics.source.source_datasets.value
 - readme_claim: '| Bronze CDC tables          |              6 |'
   manifest_path: metrics.bronze.cdc_tables.value
 - manifest_path: metrics.gold.tables.value
   readme_claims:
   - location: metrics_table
-    claim: '| Historical Gold tables     |             14 |'
+    claim: '| Historical Gold tables     |             15 |'
   - location: executive_summary
-    claim: 14 historical Gold models
+    claim: 15 historical Gold models
 - manifest_path: metrics.serving.objects_present.value
   readme_claims:
   - location: metrics_table
-    claim: '| Current-serving tables     |             13 |'
+    claim: '| Current-serving tables     |             16 |'
   - location: executive_summary
-    claim: 13 dbt-managed current-serving tables
+    claim: 16 dbt-managed current-serving tables
 - manifest_path: metrics.transaction_scale.curated_financial_transactions.value
   readme_claims:
   - location: metrics_table
@@ -866,7 +868,7 @@ readme_bindings:
     claim: '| Trino integration tests    |             34 |'
   - location: executive_summary
     claim: 34 Trino-backed integration tests
-- readme_claim: '| Automated tests            |            886 |'
+- readme_claim: '| Automated tests            |            972 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             29 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value

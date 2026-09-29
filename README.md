@@ -47,7 +47,7 @@ Operational banking data is ingested from PostgreSQL through both a batch and a 
 
 The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Spark owns history: **14 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **13 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+Spark owns history: **15 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **16 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
 
 Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
@@ -238,15 +238,15 @@ counts are ambiguous without them.
 
 | Metric                     | Verified value | Definition                                                                     |
 | -------------------------- | -------------: | ------------------------------------------------------------------------------ |
-| Source workloads           |             17 | Executable Bronze ingestion configurations; templates and registries excluded   |
-| Bronze batch tables        |             17 | One per ingestion workload                                                      |
+| Source workloads           |             22 | Executable Bronze ingestion configurations; templates and registries excluded   |
+| Bronze batch tables        |             22 | One per ingestion workload                                                      |
 | Bronze CDC tables          |              6 | Append-only change-history tables                                               |
 | Silver SCD Type 2 dims     |              2 | `dim_customer`, `dim_account`                                                   |
 | Silver SCD Type 1 dims     |              8 | Branch, product, card, employee, device, location, deposit, loan                |
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
-| Historical Gold tables     |             14 | Spark-managed Gold history, partitioned by `cob_dt`                             |
-| Current-serving tables     |             13 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Historical Gold tables     |             15 | Spark-managed Gold history, partitioned by `cob_dt`                             |
+| Current-serving tables     |             16 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
@@ -256,7 +256,7 @@ counts are ambiguous without them.
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
 | dbt data tests             |            117 | `dbt test --target docker` → PASS=117, ERROR=0                                  |
-| Automated tests            |            886 | Python `def test_*` functions                                                   |
+| Automated tests            |            972 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
