@@ -307,6 +307,8 @@ amount lệch phải  mean 43,72 vs median 31,14 — repo dùng random.uniform �
 
 Mục **refund âm** đáng kiểm tra sớm: nếu mart đang cộng lẫn refund vào doanh số thì đó là lỗi số liệu, không phải vấn đề thẩm mỹ.
 
+> ✅ **Đã kiểm tra (2026-09-29).** Generator đã sinh refund âm (`card_crm.py:181`: `REFUND`/`REVERSAL` → `amount = -amount`). Mọi chỉ số chi tiêu thẻ trong `customer_360`, `customer_card_summary`, `customer_transaction_summary` đều lọc `txn_type NOT IN ('REFUND','REVERSAL')`, nên không cộng lẫn. Hai mục còn mở của 3.6 là lỗi tổ hợp và (đã xong) amount log-normal. Xem [`SOURCE_DATA_BASELINE.md`](../03-data/SOURCE_DATA_BASELINE.md) §2.
+
 - **Size**: M
 
 ### 3.7 BỔ SUNG — Mart nợ quá hạn: DPD, nhóm nợ, roll rate, vintage
@@ -331,6 +333,16 @@ Việc cần làm: dbt semantic models (dbt-core 1.12 đã hỗ trợ) cho các 
 MCP read-only trên lớp này là bước **sau**, phải đi qua Trino ACL (ADR-0016). Không làm trước khi có metric chuẩn.
 
 - **Size**: M
+
+### 3.9 BỔ SUNG — Hoàn thiện nguồn dữ liệu
+
+Chi tiết và căn cứ: [`SOURCE_DATA_BASELINE.md`](../03-data/SOURCE_DATA_BASELINE.md). Tóm tắt:
+
+- **6/23 bảng nguồn đã seed nhưng không vào lakehouse**: `merchant`, `standing_order` và 4 bảng `aml_*`. Nối chúng là việc rẻ nhất (S mỗi bảng, không cần dữ liệu mới). `aml_alert` chính là mắt xích **Alert** còn thiếu của 3.4.
+- **81/109 mã MCC là mã giả** do generator độn cho đủ số. Thay bằng mã chuẩn ISO 18245. Danh sách Xóm Bank không dùng nguyên trạng được, vì mô tả lệch chuẩn.
+- Nguồn mới theo nhu cầu JD: vòng đời tín dụng (`loan_application`, `collateral`, `collection_activity`, gộp với 3.7) · `campaign_response` · `app_event` qua Kafka · một nguồn file đối soát vào MinIO.
+
+- **Size**: S (nối bảng) → L (vòng đời tín dụng)
 
 ---
 
