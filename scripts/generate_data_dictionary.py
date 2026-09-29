@@ -137,8 +137,20 @@ def parse_ddl(path: Path) -> list[Table]:
         table = Table(fqn=fqn, source_file=path.name)
 
         for raw in _split_column_defs(body):
-            line = raw.strip()
-            if not line or line.startswith("--") or CONSTRAINT_START.match(line):
+            # Comment đứng SAU dấu phẩy (`col TYPE NOT NULL,  -- mô tả`) và dòng
+            # comment tiêu đề (`-- CDC metadata`) đều rơi vào ĐẦU khúc của cột kế
+            # tiếp. Trước đây cả khúc bị bỏ vì bắt đầu bằng `--` — mất luôn cột kế
+            # tiếp (145 cột trên toàn bộ DDL, đo 2026-09-29). Dòng ĐẦU khúc là phần
+            # còn lại của dòng vật lý chứa cột trước → comment của cột trước. Các
+            # dòng chỉ có comment sau đó là tiêu đề nhóm → bỏ.
+            lines = raw.splitlines()
+            if lines and lines[0].strip().startswith("--"):
+                trailing = lines.pop(0).strip().lstrip("-").strip()
+                if trailing and table.columns and not table.columns[-1].comment:
+                    table.columns[-1].comment = trailing
+            lines = [ln for ln in lines if ln.strip() and not ln.strip().startswith("--")]
+            line = " ".join(ln.strip() for ln in lines).strip()
+            if not line or CONSTRAINT_START.match(line):
                 continue
             # Bỏ comment cuối dòng nhưng giữ lại làm mô tả
             comment = ""
