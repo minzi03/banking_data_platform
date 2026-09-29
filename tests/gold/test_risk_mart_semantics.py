@@ -167,9 +167,24 @@ def test_npl_proxy_sums_overdue_and_written_off_outstanding(spark):
         "payment_id bigint, loan_id bigint, payment_status string, penalty decimal(18,2), cob_dt date",
     ).createOrReplaceTempView("fact_loan_payment")
 
-    row = spark.sql(_gold_sql("loan_portfolio_risk.yml")).collect()[0]
+    result = spark.sql(_gold_sql("loan_portfolio_risk.yml"))
+    row = result.collect()[0]
     assert row.total_outstanding == Decimal("170.00")
     assert row.npl_proxy == Decimal("70.00"), "OVERDUE 50 + WRITTEN_OFF 20; ACTIVE và CLOSED không phải nợ xấu"
+
+    # Kiểu kết quả = DDL. Bảng tạo từ schema kết quả (gold_job khi bảng chưa có)
+    # từng lệch DDL ở 4 cột tiền: SUM ra DECIMAL(28/29,2) (drift DAG, 2026-09-29).
+    # Nạp ddl_schema.py theo đường dẫn: `import governance` kéo pydantic, mà job CI
+    # Gold Spark Regression không cài (ddl_schema chỉ dùng thư viện chuẩn).
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_ddl_schema", PROJECT_ROOT / "governance" / "ddl_schema.py")
+    ddl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ddl)
+    declared_schemas, normalize_type = ddl.declared_schemas, ddl.normalize_type
+
+    actual = {c: normalize_type(t) for c, t in result.dtypes}
+    assert actual == declared_schemas()["lakehouse.gold.loan_portfolio_risk"]
 
 
 @pytest.mark.integration

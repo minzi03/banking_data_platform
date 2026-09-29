@@ -37,16 +37,19 @@ sql: |
       ON l.loan_id=py.loan_id AND py.cob_dt=DATE '{{ cob_dt }}'
     GROUP BY l.branch_code, l.product_code
   )
+  -- Tiền ép về DECIMAL(18,2) đúng DDL: SUM trên DECIMAL(18,2) ra DECIMAL(28,2), ROUND(x,2)
+  -- tăng precision thêm 1. Bảng tạo từ schema kết quả (gold_job khi bảng chưa có) sẽ
+  -- lệch DDL — drift DAG đo được 2026-09-29 (DECIMAL(29,2) ở 4 cột bảng này).
   SELECT a.branch_code, COALESCE(b.branch_name,'UNK') AS branch_name,
     a.product_code, a.total_loans, a.active_loans, a.overdue_loans,
-    ROUND(a.total_amount,2) AS total_amount,
-    ROUND(a.total_outstanding,2) AS total_outstanding,
+    CAST(a.total_amount AS DECIMAL(18,2)) AS total_amount,
+    CAST(a.total_outstanding AS DECIMAL(18,2)) AS total_outstanding,
     ROUND(CASE WHEN a.total_loans=0 THEN 0 ELSE CAST(a.overdue_loans AS DOUBLE)/a.total_loans END,4) AS overdue_rate,
-    ROUND(a.npl_outstanding,2) AS npl_proxy,
+    CAST(a.npl_outstanding AS DECIMAL(18,2)) AS npl_proxy,
     COALESCE(pm.pmt_count,0) AS payment_count,
     COALESCE(pm.late_count,0) AS late_payment_count,
     ROUND(CASE WHEN COALESCE(pm.pmt_count,0)=0 THEN 0 ELSE CAST(pm.late_count AS DOUBLE)/pm.pmt_count END,4) AS late_payment_rate,
-    COALESCE(pm.total_penalty,0) AS total_penalty,
+    CAST(COALESCE(pm.total_penalty,0) AS DECIMAL(18,2)) AS total_penalty,
     DATE '{{ cob_dt }}' AS cob_dt
   FROM agg a
   LEFT JOIN lakehouse.silver.dim_branch b ON a.branch_code=b.branch_code

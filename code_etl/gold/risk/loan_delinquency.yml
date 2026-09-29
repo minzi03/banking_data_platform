@@ -59,8 +59,9 @@ sql: |
   )
   SELECT
     loan_id, customer_id, branch_code, product_code, loan_status,
-    ROUND(loan_amount, 2) AS loan_amount,
-    ROUND(outstanding_balance, 2) AS outstanding_balance,
+    -- CAST, không ROUND: ROUND(DECIMAL(18,2), 2) ra DECIMAL(19,2), lệch DDL (drift 2026-09-29).
+    CAST(loan_amount AS DECIMAL(18,2)) AS loan_amount,
+    CAST(outstanding_balance AS DECIMAL(18,2)) AS outstanding_balance,
     disbursement_date,
     DATE_FORMAT(disbursement_date, 'yyyy-MM') AS vintage_month,
     CAST(FLOOR(MONTHS_BETWEEN(DATE '{{ cob_dt }}', disbursement_date)) AS INT) AS months_on_book,
