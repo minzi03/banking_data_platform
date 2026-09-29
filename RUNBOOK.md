@@ -63,6 +63,24 @@ docker compose exec airflow-scheduler airflow dags trigger gold_all_dag
 docker compose exec airflow-scheduler airflow dags trigger ops_data_quality_dag
 ```
 
+**Without Airflow (bootstrap, one `cob_dt`):** the Silver and Gold bootstraps default
+to one `spark-submit` per job, the same path Airflow uses. `--in-process` runs every job
+of the layer in a single Spark app, with a child session per job. Measured on the full
+local data (2026-09-28): Silver took 53 s instead of about 5 min, and Gold took 90 s
+instead of about 5.5 min. Row counts and content checksums were identical. CI uses it.
+
+```bash
+docker exec -w /opt/project banking-spark-worker-1 /opt/spark/bin/spark-submit --master spark://spark-master:7077 code_etl/silver/bootstrap/initial_load.py --cob_dt 2026-09-22 --in-process
+```
+
+```bash
+docker exec -w /opt/project banking-spark-worker-1 /opt/spark/bin/spark-submit --master spark://spark-master:7077 code_etl/gold/bootstrap/initial_load.py --cob_dt 2026-09-22 --in-process
+```
+
+`--in-process` also shows each job's own log. The default mode captures a job's output
+and prints it only when the job fails, which is how a failed Gold z-order
+(`OPTIMIZE_FAILED`) went unseen.
+
 ### 4. Query Data
 
 **Via Trino (port 8085):**

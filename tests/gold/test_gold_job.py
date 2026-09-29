@@ -463,6 +463,33 @@ class TestOptimizeWrittenPartition:
         for table, cols in ZORDER_COLUMNS.items():
             assert isinstance(cols, list) and cols, f"{table} has an empty Z-Order column list"
 
+    def test_zorder_columns_exist_in_the_gold_ddl(self):
+        """
+        cross_sell_segment khai `cross_sell_score` — cột không có trong bảng. rewrite_data_files
+        thất bại ở MỌI lần chạy (IllegalArgumentException: Cannot find column), chỉ thành
+        WARNING OPTIMIZE_FAILED; bootstrap chạy từng job qua subprocess nuốt output của job
+        thành công nên không ai thấy. Lộ ra khi chạy bootstrap --in-process (2026-09-28).
+        """
+        import re
+
+        ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
+        columns = {
+            name: {
+                line.strip().split()[0]
+                for line in body.splitlines()
+                if line.strip() and not line.strip().startswith("--")
+            }
+            for name, body in re.findall(
+                r"CREATE TABLE IF NOT EXISTS lakehouse\.gold\.(\w+)\s*\((.*?)\)\s*USING iceberg", ddl, re.DOTALL
+            )
+        }
+        missing = {
+            table: [c for c in cols if c not in columns.get(table, set())]
+            for table, cols in ZORDER_COLUMNS.items()
+            if any(c not in columns.get(table, set()) for c in cols)
+        }
+        assert not missing, f"cột Z-Order không có trong DDL Gold: {missing}"
+
 
 def test_no_delta_optimize_syntax_left_in_etl_code():
     """
