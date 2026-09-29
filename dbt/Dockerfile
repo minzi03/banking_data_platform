@@ -8,10 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libffi-dev git && \
     rm -rf /var/lib/apt/lists/*
 
-# Install dbt with Trino adapter
+# Install dbt with Trino adapter.
+# dbt-metricflow cung cấp lệnh `mf` để truy vấn semantic layer
+# (dbt/models/semantic/). 0.15.0 yêu cầu dbt-core >=1.11,<1.13 và kéo theo
+# metricflow==0.213.0; trước đây image chỉ có thư viện metricflow, không có CLI.
 RUN pip install --no-cache-dir \
     dbt-core==1.12.0 \
-    dbt-trino==1.9.0
+    dbt-trino==1.9.0 \
+    dbt-metricflow==0.15.0
 
 WORKDIR /usr/src/dbt
 
