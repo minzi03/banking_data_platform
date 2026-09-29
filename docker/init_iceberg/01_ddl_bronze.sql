@@ -203,6 +203,8 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_card_txn (
     merchant_category   STRING,
     channel             STRING,
     status              STRING,
+    entry_mode          STRING,
+    decline_reason      STRING,
     created_ts          TIMESTAMP,
     last_updated        TIMESTAMP,
     cob_dt              DATE
