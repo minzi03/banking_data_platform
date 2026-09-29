@@ -114,6 +114,22 @@ ALTER TABLE lakehouse.bronze.core_support_ticket SET TBLPROPERTIES (
     'write.distribution-mode' = 'hash'
 );
 
+ALTER TABLE lakehouse.bronze.core_standing_order SET TBLPROPERTIES (
+    'write.format.default' = 'parquet',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.target-file-size-bytes' = '134217728',
+    'read.split.target-size' = '134217728',
+    'write.distribution-mode' = 'hash'
+);
+
+ALTER TABLE lakehouse.bronze.core_merchant SET TBLPROPERTIES (
+    'write.format.default' = 'parquet',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.target-file-size-bytes' = '134217728',
+    'read.split.target-size' = '134217728',
+    'write.distribution-mode' = 'hash'
+);
+
 -- Large fact tables (partitioned by cob_dt)
 ALTER TABLE lakehouse.bronze.core_txn_account SET TBLPROPERTIES (
     'write.format.default' = 'parquet',

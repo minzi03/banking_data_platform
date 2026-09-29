@@ -123,8 +123,10 @@ WITH per_table AS (
   UNION ALL SELECT 'core_loan_payment' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_loan_payment WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_location' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_location WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_mcc_code' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_mcc_code WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_merchant' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_merchant WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_online_transaction' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_online_transaction WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_product' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_product WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_standing_order' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_standing_order WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_support_ticket' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_support_ticket WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_txn_account' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_txn_account WHERE cob_dt = DATE ':cob_dt'
 )

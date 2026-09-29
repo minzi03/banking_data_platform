@@ -1,0 +1,29 @@
+# Bronze Ingestion: merchant (dimension — full snapshot)
+#
+# Danh bạ merchant, FK mcc_code → digital_banking.mcc_code. Trước đây bảng này
+# được seed nhưng không có workload nào nạp, nên dừng ở PostgreSQL.
+source:
+  type: postgresql
+  schema: digital_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_merchant
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    merchant_id,
+    merchant_name,
+    merchant_category,
+    mcc_code,
+    city,
+    state,
+    risk_category,
+    is_active,
+    last_updated
+  FROM digital_banking.merchant
