@@ -281,3 +281,89 @@ models:
               quote: false
       - name: cob_dt
         data_tests: [not_null]
+
+  - name: loan_delinquency_current
+    description: "Nợ quá hạn theo khoản vay — DPD, nhóm nợ TT11, roll pair, vintage. Current serving, risk layer."
+    columns:
+      - name: loan_id
+        data_tests: [unique, not_null]
+      - name: dpd_bucket
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['CURRENT', '1-29', '30-59', '60-89', '90+', 'WRITTEN_OFF']
+      - name: debt_group
+        data_tests:
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+              quote: false
+      - name: is_npl
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: cob_dt
+        data_tests: [not_null]
+
+  - name: loan_roll_rate_current
+    description: "Ma trận roll rate một kỳ (from_bucket → to_bucket) tại cob_dt. roll_rate cộng lại bằng 1 theo from_bucket."
+    # Model tổng hợp, không phải select * từ Gold: contract enforce để dbt build
+    # kiểm đúng các cột + kiểu này (tests/governance/test_contracts_match_tables.py
+    # lấy cột từ đây).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: from_bucket
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['CURRENT', '1-29', '30-59', '60-89', '90+', 'WRITTEN_OFF']
+      - name: to_bucket
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['CURRENT', '1-29', '30-59', '60-89', '90+', 'WRITTEN_OFF']
+      - name: loans
+        data_type: bigint
+        data_tests: [not_null]
+      - name: outstanding_balance
+        data_type: decimal(18,2)
+      - name: roll_rate
+        data_type: double
+        data_tests: [not_null]
+      - name: cob_dt
+        data_type: date
+        data_tests: [not_null]
+
+  - name: loan_vintage_current
+    description: "Vintage theo tháng giải ngân tại cob_dt: tỷ lệ từng quá hạn 30+ / 90+, tỷ lệ NPL. Loại WRITTEN_OFF."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: vintage_month
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: loans
+        data_type: bigint
+        data_tests: [not_null]
+      - name: disbursed_amount
+        data_type: decimal(18,2)
+      - name: min_months_on_book
+        data_type: integer
+      - name: max_months_on_book
+        data_type: integer
+      - name: ever_30_plus_rate
+        data_type: double
+        data_tests: [not_null]
+      - name: ever_90_plus_rate
+        data_type: double
+      - name: npl_loan_rate
+        data_type: double
+      - name: cob_dt
+        data_type: date
+        data_tests: [not_null]
