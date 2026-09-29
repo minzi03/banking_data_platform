@@ -8,13 +8,13 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**90 bảng · 1175 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**93 bảng · 1235 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 24 | 328 |
+| [bronze](#bronze) | 27 | 388 |
 | [silver](#silver) | 17 | 223 |
 | [gold](#gold) | 15 | 243 |
 | [meta](#meta) | 1 | 4 |
@@ -127,6 +127,93 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__ingestion_time` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
+
+### `lakehouse.bronze.core_aml_alert`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `alert_id` | `BIGINT` |  |  |
+| `alert_number` | `STRING` |  |  |
+| `rule_id` | `BIGINT` |  |  |
+| `transaction_id` | `BIGINT` |  |  |
+| `card_txn_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  |  |
+| `alert_type` | `STRING` |  |  |
+| `risk_score` | `DECIMAL(5,2)` |  |  |
+| `risk_category` | `STRING` |  |  |
+| `description` | `STRING` |  |  |
+| `evidence_json` | `STRING` |  |  |
+| `txn_amount` | `DECIMAL(18,2)` |  |  |
+| `txn_date` | `TIMESTAMP` |  |  |
+| `channel` | `STRING` |  |  |
+| `status` | `STRING` |  |  |
+| `analyst_id` | `BIGINT` |  |  |
+| `priority` | `STRING` |  |  |
+| `due_date` | `DATE` |  |  |
+| `notes` | `STRING` |  |  |
+| `ctr_required` | `INT` |  |  |
+| `sar_filed` | `INT` |  |  |
+| `sar_reference` | `STRING` |  |  |
+| `created_at` | `TIMESTAMP` |  |  |
+| `updated_at` | `TIMESTAMP` |  |  |
+| `resolved_at` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
+### `lakehouse.bronze.core_aml_customer_risk`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `customer_id` | `BIGINT` |  |  |
+| `risk_level` | `STRING` |  |  |
+| `risk_score` | `DECIMAL(5,2)` |  |  |
+| `peps_flag` | `INT` |  |  |
+| `sanctions_flag` | `INT` |  |  |
+| `adverse_media_flag` | `INT` |  |  |
+| `total_alerts` | `INT` |  |  |
+| `open_alerts` | `INT` |  |  |
+| `last_alert_date` | `DATE` |  |  |
+| `last_review_date` | `DATE` |  |  |
+| `next_review_date` | `DATE` |  |  |
+| `edd_required` | `INT` |  |  |
+| `edd_reason` | `STRING` |  |  |
+| `source_of_wealth` | `STRING` |  |  |
+| `expected_activity` | `STRING` |  |  |
+| `created_at` | `TIMESTAMP` |  |  |
+| `updated_at` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
+### `lakehouse.bronze.core_aml_rule`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `rule_id` | `BIGINT` |  |  |
+| `rule_name` | `STRING` |  |  |
+| `rule_code` | `STRING` |  |  |
+| `rule_type` | `STRING` |  |  |
+| `description` | `STRING` |  |  |
+| `threshold` | `DECIMAL(18,2)` |  |  |
+| `threshold_currency` | `STRING` |  |  |
+| `window_hours` | `INT` |  |  |
+| `severity` | `STRING` |  |  |
+| `is_active` | `INT` |  |  |
+| `regulatory_ref` | `STRING` |  |  |
+| `created_by` | `STRING` |  |  |
+| `created_at` | `TIMESTAMP` |  |  |
+| `updated_at` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
 
 ### `lakehouse.bronze.core_branch`
 

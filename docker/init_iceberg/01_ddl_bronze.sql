@@ -367,3 +367,89 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_merchant (
 )
 USING iceberg
 TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 19. CORE_AML_RULE (dimension — cấu hình rule AML)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_rule (
+    rule_id             BIGINT,
+    rule_name           STRING,
+    rule_code           STRING,
+    rule_type           STRING,
+    description         STRING,
+    threshold           DECIMAL(18,2),
+    threshold_currency  STRING,
+    window_hours        INT,
+    severity            STRING,
+    is_active           INT,
+    regulatory_ref      STRING,
+    created_by          STRING,
+    created_at          TIMESTAMP,
+    updated_at          TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 20. CORE_AML_ALERT (dimension — case AML, trạng thái hiện tại)
+-- Cột tuân thủ bị che với role observer: governance/rbac.py
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_alert (
+    alert_id            BIGINT,
+    alert_number        STRING,
+    rule_id             BIGINT,
+    transaction_id      BIGINT,
+    card_txn_id         BIGINT,
+    customer_id         BIGINT,
+    account_id          BIGINT,
+    alert_type          STRING,
+    risk_score          DECIMAL(5,2),
+    risk_category       STRING,
+    description         STRING,
+    evidence_json       STRING,
+    txn_amount          DECIMAL(18,2),
+    txn_date            TIMESTAMP,
+    channel             STRING,
+    status              STRING,
+    analyst_id          BIGINT,
+    priority            STRING,
+    due_date            DATE,
+    notes               STRING,
+    ctr_required        INT,
+    sar_filed           INT,
+    sar_reference       STRING,
+    created_at          TIMESTAMP,
+    updated_at          TIMESTAMP,
+    resolved_at         TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 21. CORE_AML_CUSTOMER_RISK (dimension — hồ sơ rủi ro AML theo khách)
+-- Cột tuân thủ bị che với role observer: governance/rbac.py
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_customer_risk (
+    customer_id         BIGINT,
+    risk_level          STRING,
+    risk_score          DECIMAL(5,2),
+    peps_flag           INT,
+    sanctions_flag      INT,
+    adverse_media_flag  INT,
+    total_alerts        INT,
+    open_alerts         INT,
+    last_alert_date     DATE,
+    last_review_date    DATE,
+    next_review_date    DATE,
+    edd_required        INT,
+    edd_reason          STRING,
+    source_of_wealth    STRING,
+    expected_activity   STRING,
+    created_at          TIMESTAMP,
+    updated_at          TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');

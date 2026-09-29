@@ -31,7 +31,7 @@ from utils.yaml_loader import load_config
 
 # Tất cả YAML configs cho Bronze layer
 BRONZE_CONFIGS = [
-    # core_banking (10 tables)
+    # core_banking (13 tables)
     "code_etl/bronze/core_banking/branch.yml",
     "code_etl/bronze/core_banking/product.yml",
     "code_etl/bronze/core_banking/customer.yml",
@@ -45,6 +45,10 @@ BRONZE_CONFIGS = [
     "code_etl/bronze/core_banking/txn_account.yml",
     "code_etl/bronze/core_banking/employee.yml",
     "code_etl/bronze/core_banking/standing_order.yml",
+    # AML: dữ liệu tuân thủ, bị che với role observer (governance/rbac.py)
+    "code_etl/bronze/core_banking/aml_rule.yml",
+    "code_etl/bronze/core_banking/aml_alert.yml",
+    "code_etl/bronze/core_banking/aml_customer_risk.yml",
     # card_crm (3 tables)
     "code_etl/bronze/card_crm/card.yml",
     "code_etl/bronze/card_crm/card_txn.yml",

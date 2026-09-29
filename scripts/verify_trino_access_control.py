@@ -38,8 +38,13 @@ RULES_PATH = REPO_ROOT / "docker" / "init_trino" / "rules.json"
 
 ADMIN = "admin"
 # Bảng PII chắc chắn có dữ liệu sau khi pipeline batch chạy. Mask trên các
-# bảng khác vẫn được kiểm nếu bảng tồn tại, nhưng hai bảng này là bắt buộc.
-REQUIRED_MASKED_TABLES = {("silver", "dim_customer"), ("bronze", "core_customer")}
+# bảng khác vẫn được kiểm nếu bảng tồn tại, nhưng các bảng này là bắt buộc.
+REQUIRED_MASKED_TABLES = {
+    ("silver", "dim_customer"),
+    ("bronze", "core_customer"),
+    ("bronze", "core_aml_alert"),
+    ("bronze", "core_aml_customer_risk"),
+}
 
 
 PASSWORDS_PATH = REPO_ROOT / "docker" / "secrets" / "trino" / "passwords.env"
@@ -169,6 +174,20 @@ def verify(trino: Trino) -> Checker:
         c.check(raw_value.isdigit() and not raw_value.startswith("*"), "admin thấy cccd nguyên bản",
                 "giá trị admin không phải chuỗi số")
         c.check(masked_value[-4:] == raw_value[-4:], "mask giữ 4 số cuối như khai trong rbac.py")
+
+    print("=== Giá trị: dữ liệu tuân thủ AML bị che với observer, nguyên bản với admin ===")
+    # Mask thay giá trị cột ở MỌI chỗ trong truy vấn, kể cả WHERE — nên observer
+    # đếm ra 0 dòng có giá trị, còn admin thì > 0. Kiểm cả hai phía: chỉ kiểm
+    # observer = 0 thì một bảng rỗng cũng làm check xanh.
+    for table, column in (("core_aml_alert", "status"), ("core_aml_customer_risk", "peps_flag")):
+        sql = f"SELECT count(*) FROM iceberg.bronze.{table} WHERE {column} IS NOT NULL"
+        by_observer = c.allowed("manifest_collector", sql, f"đếm {table}.{column}")
+        by_admin = c.allowed(ADMIN, sql, f"đếm {table}.{column}")
+        if by_observer is not None and by_admin is not None:
+            observer_count, admin_count = by_observer.strip(), by_admin.strip()
+            c.check(observer_count == "0", f"observer không thấy {table}.{column}", f"nhận: {observer_count}")
+            c.check(admin_count.isdigit() and int(admin_count) > 0, f"admin thấy {table}.{column}",
+                    f"nhận: {admin_count}")
 
     print("=== Quyền ghi ===")
     c.denied("analytics_report", "CREATE TABLE iceberg.sandbox.acl_probe AS SELECT 1 AS x", "role read-only tạo bảng")

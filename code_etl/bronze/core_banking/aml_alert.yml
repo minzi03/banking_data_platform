@@ -1,0 +1,55 @@
+# Bronze Ingestion: aml_alert (dimension — full snapshot)
+#
+# Case AML: vòng đời OPEN → IN_REVIEW → ESCALATED → STR_FILED / CLOSED. Trạng
+# thái đổi theo thời gian nên nạp full snapshot (trạng thái hiện tại), như
+# support_ticket.
+#
+# DỮ LIỆU TUÂN THỦ: trạng thái STR và số tham chiếu SAR không được lộ ra ngoài
+# bộ phận tuân thủ (cấm tiết lộ việc đã báo cáo giao dịch đáng ngờ). Role
+# `observer` đọc được mọi tầng nên các cột status, sar_filed, sar_reference,
+# description, evidence_json, notes bị che trong governance/rbac.py.
+#
+# evidence_json là JSONB ở nguồn — ép ::text để kiểu Bronze là STRING một cách
+# tường minh, không phụ thuộc cách dialect JDBC ánh xạ jsonb.
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_aml_alert
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    alert_id,
+    alert_number,
+    rule_id,
+    transaction_id,
+    card_txn_id,
+    customer_id,
+    account_id,
+    alert_type,
+    risk_score,
+    risk_category,
+    description,
+    evidence_json::text AS evidence_json,
+    txn_amount,
+    txn_date,
+    channel,
+    status,
+    analyst_id,
+    priority,
+    due_date,
+    notes,
+    ctr_required,
+    sar_filed,
+    sar_reference,
+    created_at,
+    updated_at,
+    resolved_at
+  FROM core_banking.aml_alert

@@ -33,6 +33,30 @@ ALTER TABLE lakehouse.bronze.core_mcc_code SET TBLPROPERTIES (
     'write.distribution-mode' = 'none'
 );
 
+ALTER TABLE lakehouse.bronze.core_aml_rule SET TBLPROPERTIES (
+    'write.format.default' = 'parquet',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.target-file-size-bytes' = '67108864',
+    'read.split.target-size' = '134217728',
+    'write.distribution-mode' = 'none'
+);
+
+ALTER TABLE lakehouse.bronze.core_aml_alert SET TBLPROPERTIES (
+    'write.format.default' = 'parquet',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.target-file-size-bytes' = '67108864',
+    'read.split.target-size' = '134217728',
+    'write.distribution-mode' = 'none'
+);
+
+ALTER TABLE lakehouse.bronze.core_aml_customer_risk SET TBLPROPERTIES (
+    'write.format.default' = 'parquet',
+    'write.parquet.compression-codec' = 'zstd',
+    'write.target-file-size-bytes' = '67108864',
+    'read.split.target-size' = '134217728',
+    'write.distribution-mode' = 'none'
+);
+
 -- Medium dimension tables (1K - 100K rows)
 ALTER TABLE lakehouse.bronze.core_customer SET TBLPROPERTIES (
     'write.format.default' = 'parquet',

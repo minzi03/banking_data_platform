@@ -111,6 +111,9 @@ WHERE cob_dt = DATE ':cob_dt';
 -- tests/governance/test_bronze_alignment_query.py giữ điều đó.
 WITH per_table AS (
   SELECT 'core_account' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_account WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_aml_alert' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_aml_alert WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_aml_customer_risk' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_aml_customer_risk WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_aml_rule' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_aml_rule WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_branch' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_branch WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_card' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_card WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_card_txn' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_card_txn WHERE cob_dt = DATE ':cob_dt'

@@ -7,7 +7,7 @@
 # giờ giữ nó khớp với các workload thật.
 
 tables:
-  # === core_banking (10 tables) ===
+  # === core_banking (13 tables) ===
   - source_schema: core_banking
     source_table: branch
     target_schema: bronze
@@ -75,6 +75,27 @@ tables:
     source_table: standing_order
     target_schema: bronze
     target_table: core_standing_order
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: aml_rule
+    target_schema: bronze
+    target_table: core_aml_rule
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: aml_alert
+    target_schema: bronze
+    target_table: core_aml_alert
+    load_strategy: full_snapshot
+    partitioned: false
+
+  - source_schema: core_banking
+    source_table: aml_customer_risk
+    target_schema: bronze
+    target_table: core_aml_customer_risk
     load_strategy: full_snapshot
     partitioned: false
 
