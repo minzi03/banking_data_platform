@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 6b3de51c2ca66ed74a278921231a8c1af1800831
-    git_branch: chore/refresh-manifest-after-75
+    git_commit: 30458be4293d8dbd98df1d139b3991bda90af371
+    git_branch: chore/manifest-refresh-2026-09-29
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-27T12:59:46Z'
+    generated_at_utc: '2026-09-29T07:32:37Z'
     requested_cob_dt: '2026-09-22'
     verification_scope: full
   environment:
@@ -71,7 +71,7 @@ manifest:
 metrics:
   source:
     source_datasets:
-      value: 17
+      value: 22
       declared: 22
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
@@ -100,7 +100,7 @@ metrics:
         value: null
   bronze:
     batch_tables:
-      value: 17
+      value: 22
       declared: 22
       metric_type: static
       provenance: collector:bronze_ingestion_workloads
@@ -140,7 +140,7 @@ metrics:
       provenance: query:bronze.partitions_present
       definition: Số cob_dt partition trong bronze.core_txn_account.
     tables_at_cob_dt:
-      value: 17
+      value: 22
       declared: null
       missing: ''
       metric_type: runtime
@@ -255,7 +255,7 @@ metrics:
       online_distinct: 500000
   gold:
     tables:
-      value: 14
+      value: 15
       declared: 15
       metric_type: static
       provenance: collector:gold_ddl_tables
@@ -352,7 +352,7 @@ metrics:
         duplicate_customer_ids: 0
   serving:
     gold_objects_declared:
-      value: 14
+      value: 15
       declared: null
       metric_type: static
       provenance: collector:gold_ddl_objects
@@ -361,7 +361,7 @@ metrics:
 
         '
     objects_present:
-      value: 13
+      value: 16
       declared: 16
       metric_type: runtime
       provenance: query:serving.objects_present
@@ -381,7 +381,7 @@ metrics:
         '
     trino:
       visible_gold_objects:
-        value: 14
+        value: 15
         declared: null
         metric_type: runtime
         note: 'OBSERVATION, không còn invariant chặn. Nó ghi lại sự thật rằng DDL
@@ -545,13 +545,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 886
+        value: 972
         declared: 972
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 1794
+        value: 1909
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -603,15 +603,15 @@ metrics:
       provenance: collector:dq_check_types
       definition: Số key trong CHECK_DISPATCH của code_etl/shared/ops/data_quality.py.
     dbt_models:
-      value: 13
+      value: 16
       declared: 16
       metric_type: static
       provenance: collector:dbt_models
-      definition: 'Số model trong dbt/models/serving/*.sql — materialized: table trong schema
-        serving (dbt_project.yml). Không tính dbt/models/semantic/.'
+      definition: 'Số model trong dbt/models/serving/*.sql — materialized: table trong
+        schema serving (dbt_project.yml). Không tính dbt/models/semantic/.'
     business_vs_utc_date_rows:
       total_rows: 1200000
-      divergent_date_rows: 70100
+      divergent_date_rows: 70472
       metric_type: runtime
       declared: null
       provenance: query:platform.business_vs_utc_date_rows

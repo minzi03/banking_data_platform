@@ -293,7 +293,8 @@ def _verified_manifest(contract: dict) -> dict:
     m["metrics"]["serving"]["gold_objects_declared"]["value"] = 14
     m["metrics"]["serving"]["trino"]["visible_gold_objects"]["value"] = 14
     m["metrics"]["serving"]["trino"]["mart_customer_360_current_visible"]["value"] = 0
-    m["metrics"]["serving"]["objects_present"]["value"] = 13
+    # Theo `declared` thay vì số cứng: số model serving đổi thì fixture không phải sửa.
+    m["metrics"]["serving"]["objects_present"]["value"] = m["metrics"]["serving"]["objects_present"]["declared"]
     m["metrics"]["serving"]["current_snapshot_alignment"]["value"] = 0
     # TD-14: mọi bảng Bronze batch ở đúng cob_dt.
     m["metrics"]["bronze"]["tables_at_cob_dt"].update(

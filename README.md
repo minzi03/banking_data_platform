@@ -1488,7 +1488,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-886 automated tests
+972 automated tests
 ```
 
 covering areas such as:
