@@ -254,8 +254,8 @@ counts are ambiguous without them.
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
-| dbt models                 |             13 | `dbt run --target docker` → PASS=13                                             |
-| dbt data tests             |            117 | `dbt test --target docker` → PASS=117, ERROR=0                                  |
+| dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-29) |
+| dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
 | Automated tests            |            972 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
@@ -1013,16 +1013,16 @@ Unknown __op = x
 | Type              | Count | Description                                       |
 | ----------------- | ----: | ------------------------------------------------- |
 | SCD Type 2        |     2 | `dim_customer`, `dim_account`                     |
-| SCD Type 1        |     6 | Branch, product, card, employee, device, location |
-| Facts             |     5 | Transactional and interaction facts               |
+| SCD Type 1        |     8 | Branch, product, card, employee, device, location, deposit, loan |
+| Facts             |     6 | Transactional, interaction and loan-payment facts |
 | CDC Current-State |     2 | `dim_customer_current`, `dim_account_current`     |
 
 ## Gold
 
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
-| Historical Gold tables |    14 | Spark-managed marts, partitioned by `cob_dt`       |
-| Current-serving tables |    13 | dbt-managed, in `serving` schema, served via Trino |
+| Historical Gold tables |    15 | Spark-managed marts, partitioned by `cob_dt`       |
+| Current-serving tables |    16 | dbt-managed, in `serving` schema, served via Trino |
 
 ---
 
