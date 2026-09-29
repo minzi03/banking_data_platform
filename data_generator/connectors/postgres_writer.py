@@ -172,6 +172,12 @@ class PostgresWriter:
             ("core_banking", "customer"),
             ("core_banking", "product"),
             ("core_banking", "branch"),
+            # AML — thiếu ở đây thì `--truncate` để lại dữ liệu lần seed trước và
+            # lần ghi sau chết ở `aml_rule_pkey` (đo 2026-09-29). Con trước cha.
+            ("core_banking", "aml_alert_transaction"),
+            ("core_banking", "aml_alert"),
+            ("core_banking", "aml_customer_risk"),
+            ("core_banking", "aml_rule"),
             # ops
             ("opslakehouse", "source_table_registry"),
         ]
