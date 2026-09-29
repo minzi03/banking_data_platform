@@ -36,7 +36,7 @@ ZORDER_COLUMNS = {
     "mart_customer_360": ["customer_id"],
     "rfm_segment": ["rfm_segment", "customer_id"],
     "churn_prediction": ["churn_risk", "customer_id"],
-    "cross_sell_segment": ["cross_sell_score", "customer_id"],
+    "cross_sell_segment": ["primary_opportunity", "customer_id"],
     "campaign_target": ["campaign_type", "customer_id"],
     "customer_balance_summary": ["customer_id"],
     "customer_transaction_summary": ["customer_id"],

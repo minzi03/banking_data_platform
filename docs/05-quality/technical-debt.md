@@ -1677,10 +1677,68 @@ Vietnam.
 
 ---
 
+## TD-18 — Replication slots kept WAL without limit
+
+**Status:** fixed in configuration (2026-09-27). On the local stack, the user dropped
+the three stale slots and applied the cap (RUNBOOK §12, PowerShell variant). WAL
+went from 3,616 MB to 512 MB after a checkpoint.
+
+### Measured (2026-09-27, before CDC verification)
+
+```text
+slot                     active  retained WAL  wal_status
+debezium_slot_card       f       3,024 MB      extended
+debezium_slot_core       f       3,597 MB      extended
+debezium_slot_digital    f       2,729 MB      extended
+pg_wal directory                 3,616 MB      max_wal_size 1GB, max_slot_wal_keep_size -1
+```
+
+- **Registered outside the repo.** No file in the repo, and nothing in its Git history,
+  uses the name `debezium_slot_*`. `register_connectors.py` and
+  `cdc_register_connectors_dag.py` both use `debezium_core_banking`, `debezium_card_crm`
+  and `debezium_digital_banking`. When the CDC stack was brought up, it turned out the
+  slots belonged to three connectors still registered in Kafka Connect with a config
+  not in the repo. All three tasks were `FAILED` with "Couldn't obtain encoding for
+  database", which fits a login failure after the CDC password was rotated. Nothing had
+  read the slots since. They grew with every write; one re-seed alone adds about 3.6 GB.
+  Re-registering through `register_connectors.py` switched them to the repo's slot names
+  (3 tasks RUNNING, 3 new slots active).
+- **Structural.** Compose declares no volume for Kafka or Zookeeper, but the images do
+  (`VOLUME /var/lib/kafka/data`, `/var/lib/zookeeper/{data,log}`). Their topics,
+  connector configs and offsets therefore live in *anonymous* volumes. Compose keeps
+  those across restarts and recreates, but `docker compose down` or `rm` orphans them,
+  and the next `up` starts empty. A slot whose connector is gone or stopped keeps WAL.
+  With `max_slot_wal_keep_size = -1` (the default), that ends in a full disk.
+- **Side note.** All three connectors share `topic.prefix = postgresql.banking`, so their
+  JMX metric names collide. Debezium logs "Failed to register metrics MBean, metrics will
+  not be available". Not fixed here.
+
+### Fix
+
+- `05-cdc-setup.sh`: `ALTER SYSTEM SET max_slot_wal_keep_size = '4GB'`. A slot over the
+  cap becomes `wal_status = lost` instead of filling the disk. Debezium then fails
+  loudly, and re-registering takes a new snapshot. Because Kafka is ephemeral, an old
+  slot preserves nothing that a new snapshot does not.
+- Checked on a throwaway Postgres 15 running the whole init directory:
+  `SHOW max_slot_wal_keep_size` returns `4GB`, `wal_level` is `logical`, and there
+  were 0 psql errors.
+- RUNBOOK §12 covers checking retention, applying the cap to an existing stack, and
+  dropping lost or orphaned slots.
+- Guard: `tests/governance/test_postgres_cdc_setup.py`. The cap must be set, positive
+  and finite (this fails on the old file), and the script and the DAG must use the same
+  slot names.
+
+### Not done here
+
+- Kafka still has no volume. Persisting it (topics, connect configs, offsets) would
+  let Debezium resume instead of re-snapshotting, at the cost of disk and state to
+  manage. That is a separate decision.
+
 ## TD-19 — JVM heaps sized from host RAM, not the container limit
 
-**Status:** fixed for Trino (2026-09-27). Kafka, Zookeeper and Debezium are still open
-(below).
+**Status:** fixed. Trino in #82 (2026-09-27); Zookeeper, Kafka and Debezium in #83
+(2026-09-28): `KAFKA_HEAP_OPTS` / `HEAP_OPTS` in `docker/docker-compose.yml`
+(`-Xmx128m` / `-Xmx640m` / `-Xmx1280m`), each below its `mem_limit`.
 
 ### Measured
 
@@ -1712,7 +1770,7 @@ the container.
   A full `dbt build` (PASS=130) peaked at 3,974 MiB of 6,000 MiB with no OOM. The
   manifest generator peaked at 2,772 MiB.
 
-### Still open: the CDC stack
+### CDC stack — measured before #83
 
 Measured the same day, with `jcmd VM.flags` against `mem_limit`:
 
