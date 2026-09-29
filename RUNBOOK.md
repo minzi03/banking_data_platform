@@ -466,6 +466,51 @@ lists these at the end:
 - OpenMetadata's MySQL passwords.
 - Debezium connectors registered with the old `CDC_DB_PASSWORD`.
 
+### 12. Replication slots (CDC)
+
+A replication slot keeps WAL until its consumer reads it. With Postgres's default
+`max_slot_wal_keep_size = -1`, a slot that nobody reads keeps WAL forever. That
+happens whenever the CDC stack is down or a connector's task has failed. Kafka's state
+sits in anonymous volumes (declared by the image, not by compose), so a
+`docker compose down` loses Debezium's offsets. On
+2026-09-27, three stale `debezium_slot_*` slots held 3.6 GB. They belonged to connectors
+registered outside the repo, whose tasks had failed since the CDC password was rotated.
+See TD-18.
+
+Check how much WAL each slot holds:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT slot_name, active, wal_status, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained FROM pg_replication_slots ORDER BY 1"'
+```
+
+New stacks get a 4 GB cap from `05-cdc-setup.sh`. Apply it once on an existing stack.
+This is a reload-level setting, so no restart is needed:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "ALTER SYSTEM SET max_slot_wal_keep_size = '"'"'4GB'"'"'" -c "SELECT pg_reload_conf()"'
+```
+
+The commands above use bash quoting (`'"'"'`). PowerShell mangles it: on 2026-09-27 a
+`pg_drop_replication_slot` pasted into PowerShell matched no slot at all. In PowerShell,
+send the SQL on stdin instead:
+
+```powershell
+"ALTER SYSTEM SET max_slot_wal_keep_size = '4GB';", "SELECT pg_reload_conf();" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
+Drop orphaned slots the same way. List the names from the query above; never drop an
+active slot:
+
+```powershell
+"SELECT slot_name, pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN ('debezium_slot_core','debezium_slot_card','debezium_slot_digital') AND NOT active;" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
+A slot over the cap becomes `wal_status = lost`, and its connector fails with a clear
+error. Re-register the connector: Debezium drops nothing by itself, so drop the lost
+slot first, and the connector takes a new snapshot. The slot names in use are the
+`slot.name` values in `code_etl/cdc/register_connectors.py`; a test keeps the
+Airflow DAG in sync with them.
+
 ---
 
 ## 🐛 Troubleshooting
