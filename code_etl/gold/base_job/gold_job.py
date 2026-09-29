@@ -45,6 +45,7 @@ ZORDER_COLUMNS = {
     "loan_portfolio_risk": ["branch_code", "product_code"],
     "fraud_risk_txn": ["risk_level", "customer_id"],
     "aml_monitoring": ["alert_generated", "customer_id"],
+    "loan_delinquency": ["dpd_bucket", "loan_id"],
 }
 
 

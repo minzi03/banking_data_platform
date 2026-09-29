@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**87 bảng · 985 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
+**88 bảng · 1006 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -16,7 +16,7 @@
 |---|---:|---:|
 | [bronze](#bronze) | 22 | 305 |
 | [silver](#silver) | 17 | 219 |
-| [gold](#gold) | 14 | 222 |
+| [gold](#gold) | 15 | 243 |
 | [meta](#meta) | 1 | 4 |
 | [card_crm](#card_crm) | 3 | 21 |
 | [core_banking](#core_banking) | 14 | 110 |
@@ -1312,6 +1312,36 @@ _Chưa có data contract trong `governance/datasets/`._
 | `risk_score` | `INT` |  |  |
 | `risk_level` | `INT` |  |  |
 | `is_fraud` | `INT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
+### `lakehouse.gold.loan_delinquency`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `loan_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `branch_code` | `STRING` |  |  |
+| `product_code` | `STRING` |  |  |
+| `loan_status` | `STRING` |  |  |
+| `loan_amount` | `DECIMAL(18,2)` |  |  |
+| `outstanding_balance` | `DECIMAL(18,2)` |  |  |
+| `disbursement_date` | `DATE` |  |  |
+| `vintage_month` | `STRING` |  |  |
+| `months_on_book` | `INT` |  |  |
+| `last_due_date` | `DATE` |  |  |
+| `dpd` | `INT` |  |  |
+| `dpd_bucket` | `STRING` |  |  |
+| `prev_dpd` | `INT` |  |  |
+| `prev_dpd_bucket` | `STRING` |  |  |
+| `debt_group` | `INT` |  |  |
+| `is_npl` | `INT` |  |  |
+| `max_dpd_ever` | `INT` |  |  |
+| `ever_30_plus` | `INT` |  |  |
+| `ever_90_plus` | `INT` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
