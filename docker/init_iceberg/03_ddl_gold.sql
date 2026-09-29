@@ -283,6 +283,36 @@ USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
+-- 12b. LOAN_DELINQUENCY (grain: loan_id) — DPD, nhóm nợ TT11, roll rate, vintage
+-- Xem code_etl/gold/risk/loan_delinquency.yml. debt_group / is_npl theo ngưỡng
+-- số ngày quá hạn; WRITTEN_OFF: dpd, debt_group NULL, is_npl 0.
+CREATE TABLE IF NOT EXISTS lakehouse.gold.loan_delinquency (
+    loan_id             BIGINT,
+    customer_id         BIGINT,
+    branch_code         STRING,
+    product_code        STRING,
+    loan_status         STRING,
+    loan_amount         DECIMAL(18,2),
+    outstanding_balance DECIMAL(18,2),
+    disbursement_date   DATE,
+    vintage_month       STRING,
+    months_on_book      INT,
+    last_due_date       DATE,
+    dpd                 INT,
+    dpd_bucket          STRING,
+    prev_dpd            INT,
+    prev_dpd_bucket     STRING,
+    debt_group          INT,
+    is_npl              INT,
+    max_dpd_ever        INT,
+    ever_30_plus        INT,
+    ever_90_plus        INT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
 -- 13. FRAUD_RISK_TXN (grain: txn_id)
 -- Cột is_fraud: GROUND TRUTH copy từ Silver, KHÔNG dùng làm feature.
 -- Mục đích: đo precision/recall của rule-based fraud flags so với ground truth.

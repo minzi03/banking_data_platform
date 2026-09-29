@@ -31,6 +31,28 @@ class PostgresWriter:
         self.conn.autocommit = False
         logger.info("Connected to PostgreSQL: %s/%s", self.conn_params["host"], self.conn_params["dbname"])
 
+    def apply_migrations(self, migrations_dir) -> list[str]:
+        """
+        Chạy mọi `*.sql` trong migrations_dir theo thứ tự tên, mỗi file một
+        transaction. File phải idempotent: DDL gốc chỉ chạy trên volume rỗng, nên
+        đây là đường duy nhất để cột mới tới một Postgres đã có dữ liệu.
+        """
+        applied = []
+        for path in sorted(migrations_dir.glob("*.sql")):
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute(path.read_text(encoding="utf-8"))
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                logger.error("Migration %s failed", path.name)
+                raise
+            finally:
+                cursor.close()
+            applied.append(path.name)
+            logger.info("Migration applied (idempotent): %s", path.name)
+        return applied
+
     def close(self):
         """Close connection."""
         if self.conn and not self.conn.closed:

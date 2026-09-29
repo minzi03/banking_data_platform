@@ -1,0 +1,93 @@
+# Gold: loan_delinquency — nợ quá hạn theo khoản vay (grain: loan_id, cob_dt)
+#
+# ROADMAP 3.7 bước 2. Một dòng / khoản vay tại cob_dt, đủ để tính ba thước đo tín
+# dụng mà JD hỏi (JD_MARKET_ANALYSIS §5.3) mà loan_portfolio_risk không tính được:
+#   - nhóm nợ / NPL:  GROUP BY debt_group, SUM(outstanding_balance)
+#   - roll rate:      GROUP BY prev_dpd_bucket, dpd_bucket  (ma trận chuyển 1 kỳ)
+#   - vintage:        GROUP BY vintage_month, months_on_book → tỷ lệ ever_30_plus / ever_90_plus
+#
+# DPD = days_late của kỳ trả gần nhất có payment_date <= cob_dt. Chỉ có ý nghĩa
+# khi lịch trả có trạng thái nối tiếp (data_generator, PR "loan delinquency is a
+# state chain"); trên lịch trả bốc độc lập từng kỳ, roll rate chỉ là nhiễu.
+#
+# Nhóm nợ theo NGƯỠNG SỐ NGÀY QUÁ HẠN của Thông tư 11/2021/TT-NHNN (1: <10,
+# 2: 10–89, 3: 90–179, 4: 180–359, 5: >=360; NPL = nhóm 3–5). Đây là phần định
+# lượng: TT11 còn tiêu chí định tính (cơ cấu lại thời hạn trả nợ, nhóm theo CIC…)
+# mà nguồn chưa có, nên debt_group ở đây là mức TỐI THIỂU theo DPD.
+#
+# WRITTEN_OFF: đã xử lý rủi ro, ra ngoài bảng cân đối → không tính vào nhóm nợ /
+# NPL (debt_group NULL, is_npl 0); generator không sinh lịch trả cho chúng.
+job:
+  type: risk
+source:
+  tables: [silver.dim_loan, silver.fact_loan_payment]
+target:
+  catalog: lakehouse
+  schema: gold
+  table: loan_delinquency
+upstream_flags: [silver.dim_loan, silver.fact_loan_payment]
+validation:
+  require_non_empty: true
+  require_snapshots: [silver.fact_loan_payment]
+sql: |
+  WITH l AS (
+    SELECT loan_id, customer_id, branch_code, product_code, loan_status,
+           loan_amount, outstanding_balance,
+           CAST(disbursement_date AS DATE) AS disbursement_date
+    FROM lakehouse.silver.dim_loan
+  ), due AS (
+    SELECT loan_id, payment_id, CAST(payment_date AS DATE) AS payment_date, days_late,
+           ROW_NUMBER() OVER (PARTITION BY loan_id ORDER BY payment_date DESC, payment_id DESC) AS rn
+    FROM lakehouse.silver.fact_loan_payment
+    WHERE cob_dt = DATE '{{ cob_dt }}'
+      AND CAST(payment_date AS DATE) <= DATE '{{ cob_dt }}'
+  ), agg AS (
+    SELECT loan_id,
+      MAX(CASE WHEN rn = 1 THEN days_late END) AS last_dpd,
+      MAX(CASE WHEN rn = 1 THEN payment_date END) AS last_due_date,
+      MAX(CASE WHEN rn = 2 THEN days_late END) AS prev_dpd,
+      MAX(days_late) AS max_dpd_ever
+    FROM due
+    GROUP BY loan_id
+  ), d AS (
+    SELECT l.*,
+      a.last_due_date,
+      CASE WHEN l.loan_status = 'WRITTEN_OFF' THEN NULL ELSE COALESCE(a.last_dpd, 0) END AS dpd,
+      a.prev_dpd,
+      COALESCE(a.max_dpd_ever, 0) AS max_dpd_ever
+    FROM l LEFT JOIN agg a ON l.loan_id = a.loan_id
+  )
+  SELECT
+    loan_id, customer_id, branch_code, product_code, loan_status,
+    ROUND(loan_amount, 2) AS loan_amount,
+    ROUND(outstanding_balance, 2) AS outstanding_balance,
+    disbursement_date,
+    DATE_FORMAT(disbursement_date, 'yyyy-MM') AS vintage_month,
+    CAST(FLOOR(MONTHS_BETWEEN(DATE '{{ cob_dt }}', disbursement_date)) AS INT) AS months_on_book,
+    last_due_date,
+    CAST(dpd AS INT) AS dpd,
+    CASE WHEN loan_status = 'WRITTEN_OFF' THEN 'WRITTEN_OFF'
+         WHEN dpd = 0 THEN 'CURRENT'
+         WHEN dpd < 30 THEN '1-29'
+         WHEN dpd < 60 THEN '30-59'
+         WHEN dpd < 90 THEN '60-89'
+         ELSE '90+' END AS dpd_bucket,
+    CAST(prev_dpd AS INT) AS prev_dpd,
+    CASE WHEN prev_dpd IS NULL THEN NULL
+         WHEN prev_dpd = 0 THEN 'CURRENT'
+         WHEN prev_dpd < 30 THEN '1-29'
+         WHEN prev_dpd < 60 THEN '30-59'
+         WHEN prev_dpd < 90 THEN '60-89'
+         ELSE '90+' END AS prev_dpd_bucket,
+    CASE WHEN dpd IS NULL THEN NULL
+         WHEN dpd < 10 THEN 1
+         WHEN dpd < 90 THEN 2
+         WHEN dpd < 180 THEN 3
+         WHEN dpd < 360 THEN 4
+         ELSE 5 END AS debt_group,
+    CASE WHEN dpd >= 90 THEN 1 ELSE 0 END AS is_npl,
+    CAST(max_dpd_ever AS INT) AS max_dpd_ever,
+    CASE WHEN max_dpd_ever >= 30 THEN 1 ELSE 0 END AS ever_30_plus,
+    CASE WHEN max_dpd_ever >= 90 THEN 1 ELSE 0 END AS ever_90_plus,
+    DATE '{{ cob_dt }}' AS cob_dt
+  FROM d

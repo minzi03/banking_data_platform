@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from common_utils import get_target_table, load_source_df, parse_arguments
 from spark.iceberg_utils import create_iceberg_table_if_not_exists, table_exists
+from spark.schema_guard import guard_and_evolve
 from spark.spark_session import get_spark_session
 from utils.logger import get_logger
 from utils.yaml_loader import load_config
@@ -45,6 +46,7 @@ ZORDER_COLUMNS = {
     "loan_portfolio_risk": ["branch_code", "product_code"],
     "fraud_risk_txn": ["risk_level", "customer_id"],
     "aml_monitoring": ["alert_generated", "customer_id"],
+    "loan_delinquency": ["dpd_bucket", "loan_id"],
 }
 
 
@@ -211,6 +213,10 @@ def run_gold_job(spark, config: dict, cob_dt: str, logger):
     if not table_exists(spark, target):
         logger.warning(f"[{job_type}] Target table {target} does not exist; creating from result schema")
         create_iceberg_table_if_not_exists(result_df, target, logger)
+    else:
+        # Gold chỉ publish khi schema ổn định: BREAKING → dừng trước khi ghi,
+        # ADDITIVE (cột mới, nâng kiểu hợp lệ) → ALTER bảng rồi ghi.
+        guard_and_evolve(spark, result_df, target, logger)
 
     logger.info(f"[{job_type}] Đang ghi vào {target} bằng overwritePartitions (an toàn theo partition)")
     result_df.writeTo(target).overwritePartitions()
