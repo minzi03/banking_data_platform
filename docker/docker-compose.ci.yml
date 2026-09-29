@@ -213,6 +213,8 @@ services:
       - ./init_trino/catalog:/etc/trino/catalog
       # Xác thực: CÙNG cấu hình với môi trường chính (ADR-0016).
       - ./init_trino/config.properties:/etc/trino/config.properties:ro
+      # Heap cố định -Xmx4G: mặc định 80% RAM mà JVM thấy = RAM máy host trên Docker Desktop (OOM-kill, 2026-09-27).
+      - ./init_trino/jvm.config:/etc/trino/jvm.config:ro
       - ./init_trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
       # Mọi `docker exec ci-trino trino …` trong ci.yml / integration test chạy
       # nguyên văn: CLI tự nói HTTPS với localhost bằng mật khẩu của `trino`.

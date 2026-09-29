@@ -461,6 +461,8 @@ services:
     volumes:
       - ./init_trino/catalog:/etc/trino/catalog:ro
       - ./init_trino/config.properties:/etc/trino/config.properties:ro
+      # Heap cố định -Xmx4G: mặc định 80% RAM mà JVM thấy = RAM máy host trên Docker Desktop (OOM-kill, 2026-09-27).
+      - ./init_trino/jvm.config:/etc/trino/jvm.config:ro
       - ./init_trino/password-authenticator.properties:/etc/trino/password-authenticator.properties:ro
       - ./init_trino/trino-cli.properties:/home/trino/.trino_config:ro
       # Keystore + password file: sinh bởi scripts/bootstrap_trino_auth.py, gitignore.
