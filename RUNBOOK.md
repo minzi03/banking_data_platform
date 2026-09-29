@@ -527,6 +527,29 @@ docker compose ps
 docker compose restart [service_name]
 ```
 
+### Kafka exits with `NodeExists` right after Zookeeper restarts
+
+```text
+ERROR Error while creating ephemeral at /brokers/ids/1, node already exists and owner
+'0x…' does not match current session '0x…'
+```
+
+Zookeeper keeps its data in a volume. After a restart or recreate, it still holds the
+previous broker's ephemeral node until that session times out, and Kafka exits with
+code 1. Debezium, which depends on Kafka, is then left created but not started. This
+happened twice on 2026-09-27. Wait about 20 seconds, then start the two in order:
+
+```bash
+docker start banking-kafka
+```
+
+```bash
+docker start banking-debezium
+```
+
+Connectors, offsets and topics survive this (anonymous volumes). Check that the
+connectors are `RUNNING` and all three replication slots are active (RUNBOOK §12).
+
 ### Iceberg REST Connection Error
 ```bash
 # Check if iceberg_catalog database exists
