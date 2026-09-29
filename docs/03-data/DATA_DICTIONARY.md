@@ -8,20 +8,20 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**92 bảng · 1063 cột · 25 bảng có data contract · 31 cột nghi chứa PII**
+**93 bảng · 1235 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 27 | 386 |
-| [silver](#silver) | 17 | 217 |
-| [gold](#gold) | 14 | 222 |
+| [bronze](#bronze) | 27 | 388 |
+| [silver](#silver) | 17 | 223 |
+| [gold](#gold) | 15 | 243 |
 | [meta](#meta) | 1 | 4 |
-| [card_crm](#card_crm) | 3 | 20 |
-| [core_banking](#core_banking) | 14 | 110 |
-| [digital_banking](#digital_banking) | 6 | 34 |
-| [opslakehouse](#opslakehouse) | 10 | 70 |
+| [card_crm](#card_crm) | 3 | 42 |
+| [core_banking](#core_banking) | 14 | 176 |
+| [digital_banking](#digital_banking) | 6 | 58 |
+| [opslakehouse](#opslakehouse) | 10 | 101 |
 
 ---
 
@@ -274,6 +274,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `merchant_category` | `STRING` |  |  |
 | `channel` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `entry_mode` | `STRING` |  |  |
+| `decline_reason` | `STRING` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
@@ -716,8 +718,10 @@ _Chưa có data contract trong `governance/datasets/`._
 | `open_date` | `DATE` |  |  |
 | `close_date` | `DATE` |  |  |
 | `status` | `VARCHAR(20)` |  |  |
+| `__cdc_operation` | `VARCHAR(10)` |  |  |
 | `__cdc_timestamp` | `TIMESTAMP` |  |  |
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
+| `__source_spark_batch_id` | `BIGINT` |  |  |
 | `__consolidated_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `06_ddl_silver_cdc_current.sql`</sub>
@@ -836,8 +840,10 @@ _Chưa có data contract trong `governance/datasets/`._
 | `kyc_status` | `VARCHAR(20)` |  |  |
 | `register_date` | `DATE` |  |  |
 | `is_active` | `INTEGER` |  |  |
+| `__cdc_operation` | `VARCHAR(10)` |  |  |
 | `__cdc_timestamp` | `TIMESTAMP` |  |  |
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
+| `__source_spark_batch_id` | `BIGINT` |  |  |
 | `__consolidated_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `06_ddl_silver_cdc_current.sql`</sub>
@@ -1012,6 +1018,8 @@ Cleansed fact table capturing all card-based transactions (credit and debit). In
 | `merchant_category` | `STRING` |  |  |
 | `channel` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `entry_mode` | `STRING` |  |  |
+| `decline_reason` | `STRING` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
@@ -1440,6 +1448,36 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
 
+### `lakehouse.gold.loan_delinquency`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `loan_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `branch_code` | `STRING` |  |  |
+| `product_code` | `STRING` |  |  |
+| `loan_status` | `STRING` |  |  |
+| `loan_amount` | `DECIMAL(18,2)` |  |  |
+| `outstanding_balance` | `DECIMAL(18,2)` |  |  |
+| `disbursement_date` | `DATE` |  |  |
+| `vintage_month` | `STRING` |  |  |
+| `months_on_book` | `INT` |  |  |
+| `last_due_date` | `DATE` |  |  |
+| `dpd` | `INT` |  |  |
+| `dpd_bucket` | `STRING` |  |  |
+| `prev_dpd` | `INT` |  |  |
+| `prev_dpd_bucket` | `STRING` |  |  |
+| `debt_group` | `INT` |  |  |
+| `is_npl` | `INT` |  |  |
+| `max_dpd_ever` | `INT` |  |  |
+| `ever_30_plus` | `INT` |  |  |
+| `ever_90_plus` | `INT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
 ### `lakehouse.gold.loan_portfolio_risk`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -1608,10 +1646,17 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `card_id` | `BIGINT` |  |  |
-| `card_no_masked` | `VARCHAR(19)` |  |  |
-| `card_type` | `VARCHAR(20)` |  |  |
+| `card_no_masked` | `VARCHAR(19)` |  | format: 4111****1234 |
+| `customer_id` | `BIGINT` |  | logical FK -> core_banking.customer |
+| `account_id` | `BIGINT` |  | logical FK -> core_banking.account (for debit cards) |
+| `product_code` | `VARCHAR(20)` |  |  |
+| `card_type` | `VARCHAR(20)` |  | DEBIT / CREDIT / PREPAID |
+| `card_brand` | `VARCHAR(20)` |  | VISA / MASTER / JCB / NAPAS |
+| `credit_limit` | `NUMERIC(18,2)` |  | only for CREDIT cards |
+| `issue_date` | `DATE` |  |  |
 | `expiry_date` | `DATE` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / BLOCKED / EXPIRED / CLOSED |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_card_crm.sql`</sub>
 
@@ -1623,11 +1668,21 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `txn_id` | `BIGINT` |  |  |
 | `card_id` | `BIGINT` |  |  |
-| `customer_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  | denormalized |
+| `txn_date` | `TIMESTAMP` |  |  |
 | `txn_amount` | `NUMERIC(18,2)` |  |  |
-| `txn_type` | `VARCHAR(20)` |  |  |
+| `txn_type` | `VARCHAR(20)` |  | PURCHASE / CASH_ADVANCE / REFUND / REVERSAL |
+| `currency` | `CHAR(3)` |  |  |
 | `merchant_name` | `VARCHAR(200)` |  |  |
-| `merchant_category` | `VARCHAR(50)` |  |  |
+| `merchant_category` | `VARCHAR(50)` |  | GROCERY / RESTAURANT / TRAVEL / ECOM / FUEL / EDUCATION |
+| `mcc_code` | `VARCHAR(10)` |  | FK -> digital_banking.mcc_code (nullable) |
+| `channel` | `VARCHAR(20)` |  | POS / ECOM / ATM |
+| `status` | `VARCHAR(20)` |  | SUCCESS / FAILED / PENDING |
+| `entry_mode` | `VARCHAR(10)` |  | CHIP / SWIPE / ONLINE |
+| `decline_reason` | `VARCHAR(100)` |  | chỉ khi FAILED; có thể là tổ hợp "A |
+| `B` | `PROCESSING_TIME_MS` |  | transaction processing time |
+| `reference_number` | `VARCHAR(30)` |  | CDN + sequential number |
+| `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_card_crm.sql`</sub>
@@ -1641,9 +1696,14 @@ _Chưa có data contract trong `governance/datasets/`._
 | `interaction_id` | `BIGINT` |  |  |
 | `customer_id` | `BIGINT` |  |  |
 | `interaction_date` | `TIMESTAMP` |  |  |
-| `channel` | `VARCHAR(20)` |  |  |
-| `category` | `VARCHAR(30)` |  |  |
-| `satisfaction_score` | `SMALLINT` |  |  |
+| `channel` | `VARCHAR(20)` |  | CALL / EMAIL / CHAT / BRANCH / SMS |
+| `direction` | `VARCHAR(10)` |  | INBOUND / OUTBOUND |
+| `subject` | `VARCHAR(500)` |  |  |
+| `category` | `VARCHAR(30)` |  | COMPLAINT / INQUIRY / CAMPAIGN / CROSS_SELL / RETENTION |
+| `status` | `VARCHAR(20)` |  | OPEN / RESOLVED / PENDING |
+| `assigned_to` | `VARCHAR(100)` |  |  |
+| `satisfaction_score` | `SMALLINT` |  | 1-5 rating (nullable) |
+| `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_card_crm.sql`</sub>
@@ -1663,11 +1723,13 @@ _Chưa có data contract trong `governance/datasets/`._
 | `customer_id` | `BIGINT` |  |  |
 | `product_code` | `VARCHAR(20)` |  |  |
 | `branch_code` | `VARCHAR(10)` |  |  |
-| `account_type` | `VARCHAR(20)` |  |  |
+| `account_type` | `VARCHAR(20)` |  | CASA / TIME_DEPOSIT |
+| `currency` | `CHAR(3)` |  |  |
 | `balance` | `NUMERIC(18,2)` |  |  |
 | `open_date` | `DATE` |  |  |
 | `close_date` | `DATE` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / CLOSED / FROZEN |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1678,20 +1740,29 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `alert_id` | `BIGINT` |  |  |
-| `alert_number` | `VARCHAR(30)` |  |  |
-| `transaction_id` | `BIGINT` |  |  |
-| `evidence_json` | `JSONB` |  |  |
+| `alert_number` | `VARCHAR(30)` |  | Auto-generated: AML-YYYYMMDD-NNNNN |
+| `rule_id` | `BIGINT` |  |  |
+| `transaction_id` | `BIGINT` |  | FK to txn_account (nullable for pattern-based alerts) |
+| `card_txn_id` | `BIGINT` |  | FK to card_crm.card_txn (nullable) |
+| `customer_id` | `BIGINT` |  | FK to customer |
+| `account_id` | `BIGINT` |  | FK to account (nullable) |
+| `alert_type` | `VARCHAR(50)` |  |  |
+| `risk_score` | `NUMERIC(5,2)` |  | 0.00 - 100.00 |
+| `risk_category` | `VARCHAR(20)` |  |  |
+| `description` | `TEXT` |  |  |
+| `evidence_json` | `JSONB` |  | Supporting evidence: transaction details |
+| `patterns` | `TXN_AMOUNT` |  |  |
 | `txn_date` | `TIMESTAMP` |  |  |
 | `channel` | `VARCHAR(20)` |  |  |
-| `pending` | `REVIEW` |  | IN_REVIEW: Under investigation
-        -- ESCALATED: Sent to compliance officer
-        -- STR_FALSE_POSITIVE: Confirmed false positive
-        -- STR_FILED: Suspicious Transaction Report filed
-        -- CLOSED: Investigation complete
-
-    analyst_id          BIGINT |
+| `status` | `VARCHAR(20)` |  |  |
+| `pending` | `REVIEW` |  | FK to employee (compliance analyst) |
+| `priority` | `VARCHAR(10)` |  |  |
 | `due_date` | `DATE` |  |  |
 | `notes` | `TEXT` |  |  |
+| `ctr_required` | `SMALLINT` |  | Currency Transaction Report required |
+| `sar_filed` | `SMALLINT` |  | Suspicious Activity Report filed |
+| `sar_reference` | `VARCHAR(50)` |  |  |
+| `created_at` | `TIMESTAMP` |  |  |
 | `updated_at` | `TIMESTAMP` |  |  |
 | `resolved_at` | `TIMESTAMP` |  |  |
 
@@ -1704,7 +1775,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `alert_id` | `BIGINT` |  |  |
-| `transaction_id` | `BIGINT` |  |  |
+| `transaction_id` | `BIGINT` |  | FK to txn_account |
+| `created_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `06_ddl_aml.sql`</sub>
 
@@ -1714,15 +1786,18 @@ _Chưa có data contract trong `governance/datasets/`._
 
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
-| `customer_id` | `BIGINT` |  |  |
-| `requires` | `SENIOR` |  | PROHIBITED: Blocked from certain transactions
-
-    risk_score          NUMERIC(5,2) NOT NULL DEFAULT 0 |
-| `peps_flag` | `SMALLINT` |  |  |
+| `customer_id` | `BIGINT` |  | FK to customer |
+| `risk_level` | `VARCHAR(20)` |  |  |
+| `requires` | `SENIOR` |  |  |
+| `peps_flag` | `SMALLINT` |  | Politically Exposed Person |
+| `sanctions_flag` | `SMALLINT` |  | On sanctions list |
+| `adverse_media_flag` | `SMALLINT` |  | Adverse media hits |
+| `total_alerts` | `INT` |  |  |
 | `open_alerts` | `INT` |  |  |
 | `last_alert_date` | `DATE` |  |  |
 | `last_review_date` | `DATE` |  |  |
 | `next_review_date` | `DATE` |  |  |
+| `edd_required` | `SMALLINT` |  |  |
 | `edd_reason` | `TEXT` |  |  |
 | `source_of_wealth` | `VARCHAR(100)` |  |  |
 | `expected_activity` | `TEXT` |  |  |
@@ -1741,11 +1816,14 @@ _Chưa có data contract trong `governance/datasets/`._
 | `rule_name` | `VARCHAR(200)` |  |  |
 | `rule_code` | `VARCHAR(50)` |  |  |
 | `rule_type` | `VARCHAR(50)` |  |  |
+| `description` | `TEXT` |  |  |
 | `threshold` | `NUMERIC(18,2)` |  |  |
 | `threshold_currency` | `VARCHAR(3)` |  |  |
 | `window_hours` | `INT` |  |  |
 | `severity` | `VARCHAR(20)` |  |  |
-| `regulatory_ref` | `VARCHAR(100)` |  |  |
+| `is_active` | `SMALLINT` |  |  |
+| `regulatory_ref` | `VARCHAR(100)` |  | Reference to regulation (e.g., 'TT 35/2019/TT-NHNN') |
+| `created_by` | `VARCHAR(100)` |  |  |
 | `created_at` | `TIMESTAMP` |  |  |
 | `updated_at` | `TIMESTAMP` |  |  |
 
@@ -1759,12 +1837,14 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `branch_code` | `VARCHAR(10)` |  |  |
 | `branch_name` | `VARCHAR(200)` |  |  |
-| `region` | `VARCHAR(20)` |  |  |
+| `region` | `VARCHAR(20)` |  | NORTH / CENTRAL / SOUTH |
+| `city` | `VARCHAR(100)` |  |  |
 | `district` | `VARCHAR(100)` |  |  |
 | `address` | `VARCHAR(500)` | ⚠️ |  |
 | `manager_name` | `VARCHAR(200)` |  |  |
 | `open_date` | `DATE` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / CLOSED |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1775,14 +1855,21 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `customer_id` | `BIGINT` |  |  |
-| `cccd` | `VARCHAR(12)` |  |  |
-| `gender` | `CHAR(1)` |  |  |
-| `phone` | `VARCHAR(15)` | ⚠️ |  |
+| `cccd` | `VARCHAR(12)` |  | National ID (12 digits) |
+| `full_name` | `VARCHAR(200)` | ⚠️ |  |
+| `gender` | `CHAR(1)` |  | M / F / O |
+| `date_of_birth` | `DATE` | ⚠️ |  |
+| `phone` | `VARCHAR(15)` | ⚠️ | 0xxxxxxxxx |
+| `email` | `VARCHAR(200)` | ⚠️ |  |
 | `address` | `VARCHAR(500)` | ⚠️ |  |
 | `city` | `VARCHAR(100)` |  |  |
 | `district` | `VARCHAR(100)` |  |  |
-| `branch_code` | `VARCHAR(10)` |  |  |
-| `is_active` | `SMALLINT` |  |  |
+| `branch_code` | `VARCHAR(10)` |  | FK -> branch |
+| `customer_segment` | `VARCHAR(20)` |  | RETAIL / PRIORITY / VIP |
+| `kyc_status` | `VARCHAR(20)` |  | PENDING / VERIFIED / REJECTED |
+| `register_date` | `DATE` |  |  |
+| `is_active` | `SMALLINT` |  | 0 / 1 |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1793,12 +1880,16 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `deposit_id` | `BIGINT` |  |  |
-| `account_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  | FK -> account (can be NULL for standalone savings) |
+| `customer_id` | `BIGINT` |  |  |
 | `product_code` | `VARCHAR(20)` |  |  |
 | `principal_amount` | `NUMERIC(18,2)` |  |  |
-| `interest_rate` | `NUMERIC(5,2)` |  |  |
+| `interest_rate` | `NUMERIC(5,2)` |  | e.g. 5.50 = 5.5%/year |
+| `term_months` | `SMALLINT` |  | 1/3/6/12/24/36 |
+| `open_date` | `DATE` |  |  |
 | `maturity_date` | `DATE` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / MATURED / EARLY_WITHDRAWN |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1811,9 +1902,11 @@ _Chưa có data contract trong `governance/datasets/`._
 | `employee_id` | `BIGINT` |  |  |
 | `full_name` | `VARCHAR(200)` | ⚠️ |  |
 | `branch_code` | `VARCHAR(10)` |  |  |
-| `role` | `VARCHAR(50)` |  |  |
+| `role` | `VARCHAR(50)` |  | TELLER / MANAGER / ANALYST / DIRECTOR |
+| `hire_date` | `DATE` |  |  |
 | `salary` | `NUMERIC(12,2)` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / TERMINATED |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1827,11 +1920,14 @@ _Chưa có data contract trong `governance/datasets/`._
 | `customer_id` | `BIGINT` |  |  |
 | `product_code` | `VARCHAR(20)` |  |  |
 | `branch_code` | `VARCHAR(10)` |  |  |
-| `loan_amount` | `NUMERIC(18,2)` |  |  |
+| `loan_amount` | `NUMERIC(18,2)` |  | original loan amount |
+| `outstanding_balance` | `NUMERIC(18,2)` |  | current outstanding balance |
+| `interest_rate` | `NUMERIC(5,2)` |  |  |
 | `term_months` | `SMALLINT` |  |  |
 | `disbursement_date` | `DATE` |  |  |
 | `maturity_date` | `DATE` |  |  |
-| `loan_status` | `VARCHAR(20)` |  |  |
+| `loan_status` | `VARCHAR(20)` |  | ACTIVE / CLOSED / OVERDUE / WRITTEN_OFF |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1842,11 +1938,19 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `payment_id` | `BIGINT` |  |  |
-| `loan_id` | `BIGINT` |  |  |
-| `scheduled_amount` | `NUMERIC(18,2)` |  |  |
+| `loan_id` | `BIGINT` |  | FK -> loan |
+| `payment_date` | `DATE` |  |  |
+| `scheduled_amount` | `NUMERIC(18,2)` |  | expected monthly payment |
+| `amount_paid` | `NUMERIC(18,2)` |  | actual amount paid |
+| `principal_component` | `NUMERIC(18,2)` |  |  |
 | `interest_component` | `NUMERIC(18,2)` |  |  |
-| `penalty` | `NUMERIC(18,2)` |  |  |
-| `days_late` | `SMALLINT` |  |  |
+| `penalty` | `NUMERIC(18,2)` |  | late fee if any |
+| `outstanding_after` | `NUMERIC(18,2)` |  |  |
+| `days_late` | `SMALLINT` |  | 0 if on time |
+| `payment_method` | `VARCHAR(30)` |  | BANK_TRANSFER / CASH / CHEQUE / DEBIT_CARD / MOBILE_APP |
+| `payment_status` | `VARCHAR(20)` |  | PAID / LATE / MISSED / PENDING |
+| `late_payment_flag` | `SMALLINT` |  | legacy 0/1 |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
 
@@ -1858,7 +1962,11 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `product_code` | `VARCHAR(20)` |  |  |
 | `product_name` | `VARCHAR(200)` |  |  |
-| `product_group` | `VARCHAR(20)` |  |  |
+| `product_group` | `VARCHAR(20)` |  | DEPOSIT / LOAN / CARD |
+| `product_type` | `VARCHAR(30)` |  | CASA / SAVINGS / PERSONAL_LOAN / MORTGAGE / CREDIT_CARD / DEBIT_CARD |
+| `currency` | `CHAR(3)` |  | VND / USD |
+| `is_active` | `SMALLINT` |  | 0 / 1 |
+| `launch_date` | `DATE` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
@@ -1870,11 +1978,16 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `order_id` | `BIGINT` |  |  |
-| `account_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  | FK -> account |
+| `customer_id` | `BIGINT` |  | FK -> customer |
+| `order_type` | `VARCHAR(30)` |  | BILL_PAYMENT / TRANSFER / LOAN_PAYMENT |
+| `beneficiary_name` | `VARCHAR(200)` |  |  |
 | `beneficiary_account` | `VARCHAR(20)` |  |  |
 | `amount` | `NUMERIC(18,2)` |  |  |
-| `frequency` | `VARCHAR(20)` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `frequency` | `VARCHAR(20)` |  | MONTHLY / WEEKLY / QUARTERLY |
+| `next_execute_date` | `DATE` |  |  |
+| `status` | `VARCHAR(20)` |  | ACTIVE / PAUSED / CANCELLED |
+| `created_date` | `DATE` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
@@ -1887,11 +2000,16 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `txn_id` | `BIGINT` |  |  |
 | `account_id` | `BIGINT` |  |  |
-| `customer_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  | denormalized for query speed |
+| `txn_date` | `TIMESTAMP` |  |  |
 | `txn_amount` | `NUMERIC(18,2)` |  |  |
-| `txn_type` | `VARCHAR(30)` |  |  |
-| `channel` | `VARCHAR(20)` |  |  |
-| `counter_account` | `VARCHAR(20)` |  |  |
+| `txn_type` | `VARCHAR(30)` |  | DEPOSIT / WITHDRAWAL / TRANSFER_IN / TRANSFER_OUT / FEE / INTEREST |
+| `debit_credit` | `CHAR(1)` |  | D (Debit) / C (Credit) |
+| `balance_after` | `NUMERIC(18,2)` |  |  |
+| `channel` | `VARCHAR(20)` |  | BRANCH / ATM / INTERNET_BANKING / MOBILE_BANKING / POS |
+| `description` | `VARCHAR(500)` |  |  |
+| `counter_account` | `VARCHAR(20)` |  | counterparty account (for transfers) |
+| `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `01_ddl_core_banking.sql`</sub>
@@ -1907,7 +2025,13 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `device_id` | `BIGINT` |  |  |
-| `customer_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  | logical FK -> core_banking.customer |
+| `device_type` | `VARCHAR(30)` |  | MOBILE / TABLET / DESKTOP |
+| `device_fingerprint` | `VARCHAR(200)` |  | unique device fingerprint |
+| `operating_system` | `VARCHAR(50)` |  | iOS / Android / Windows / macOS |
+| `ip_address` | `VARCHAR(45)` | ⚠️ | IPv4 or IPv6 |
+| `is_trusted` | `SMALLINT` |  | 0/1 |
+| `first_seen` | `TIMESTAMP` |  |  |
 | `last_seen` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
@@ -1921,12 +2045,13 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `location_id` | `BIGINT` |  |  |
 | `merchant_name` | `VARCHAR(200)` |  |  |
-| `merchant_category` | `VARCHAR(100)` |  |  |
+| `merchant_category` | `VARCHAR(100)` |  | grocery |
 | `etc.` | `CITY` |  |  |
 | `state` | `VARCHAR(100)` |  |  |
 | `latitude` | `NUMERIC(10,7)` |  |  |
 | `longitude` | `NUMERIC(10,7)` |  |  |
-| `is_high_risk_area` | `SMALLINT` |  |  |
+| `is_high_risk_area` | `SMALLINT` |  | 0/1 |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>
 
@@ -1938,7 +2063,9 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `mcc_code` | `VARCHAR(10)` |  |  |
 | `description` | `VARCHAR(200)` |  |  |
-| `category_group` | `VARCHAR(50)` |  |  |
+| `category_group` | `VARCHAR(50)` |  | RETAIL / FOOD / TRAVEL / SERVICES / UTILITIES |
+| `is_high_risk` | `SMALLINT` |  | 0/1 |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>
 
@@ -1951,9 +2078,11 @@ _Chưa có data contract trong `governance/datasets/`._
 | `merchant_id` | `BIGINT` |  |  |
 | `merchant_name` | `VARCHAR(200)` |  |  |
 | `merchant_category` | `VARCHAR(50)` |  |  |
-| `mcc_code` | `VARCHAR(10)` |  |  |
+| `mcc_code` | `VARCHAR(10)` |  | FK -> digital_banking.mcc_code |
+| `city` | `VARCHAR(100)` |  |  |
 | `state` | `VARCHAR(100)` |  |  |
-| `risk_category` | `VARCHAR(20)` |  |  |
+| `risk_category` | `VARCHAR(20)` |  | LOW / MEDIUM / HIGH |
+| `is_active` | `SMALLINT` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>
@@ -1965,10 +2094,18 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `transaction_id` | `BIGINT` |  |  |
-| `account_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  | FK -> core_banking.account (nullable for card-only txns) |
+| `device_id` | `BIGINT` |  | FK -> digital_banking.device |
+| `location_id` | `BIGINT` |  | FK -> digital_banking.location |
+| `customer_id` | `BIGINT` |  | denormalized |
+| `transaction_type` | `VARCHAR(30)` |  | PURCHASE / TRANSFER / PAYMENT / WITHDRAWAL / TOP_UP |
+| `channel` | `VARCHAR(20)` |  | MOBILE_APP / WEB / API / POS |
+| `amount` | `NUMERIC(18,2)` |  |  |
 | `currency` | `CHAR(3)` |  |  |
-| `is_fraud` | `SMALLINT` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `is_fraud` | `SMALLINT` |  | 0/1 |
+| `fraud_reason` | `VARCHAR(200)` |  |  |
+| `status` | `VARCHAR(20)` |  | SUCCESS / FAILED / PENDING |
+| `transaction_date` | `TIMESTAMP` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
@@ -1982,9 +2119,14 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `ticket_id` | `BIGINT` |  |  |
 | `customer_id` | `BIGINT` |  |  |
-| `issue_type` | `VARCHAR(50)` |  |  |
+| `issue_type` | `VARCHAR(50)` |  | TRANSACTION_DISPUTE / ACCOUNT_ACCESS / CARD_BLOCK / GENERAL_INQUIRY / FEEDBACK |
+| `priority` | `VARCHAR(10)` |  | LOW / MEDIUM / HIGH / URGENT |
+| `status` | `VARCHAR(20)` |  | OPEN / IN_PROGRESS / RESOLVED / CLOSED |
+| `date_opened` | `TIMESTAMP` |  |  |
 | `date_resolved` | `TIMESTAMP` |  |  |
-| `resolution_time_hrs` | `NUMERIC(8,2)` |  |  |
+| `resolution_time_hrs` | `NUMERIC(8,2)` |  | auto-calculated |
+| `satisfaction_score` | `SMALLINT` |  | 1-5 (nullable) |
+| `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>
 
@@ -1999,8 +2141,10 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `id` | `SERIAL` |  |  |
-| `dataset_id` | `VARCHAR(255)` |  |  |
-| `'unique_check'` | `CHECK_STATUS` |  |  |
+| `dataset_id` | `VARCHAR(255)` |  | e.g. 'banking.dim_customer_silver' |
+| `check_name` | `VARCHAR(100)` |  | e.g. 'required_columns' |
+| `'unique_check'` | `CHECK_STATUS` |  | PASS / FAIL / WARN |
+| `expected_value` | `TEXT` |  |  |
 | `actual_value` | `TEXT` |  |  |
 | `details` | `TEXT` |  |  |
 | `cob_dt` | `DATE` |  |  |
@@ -2019,7 +2163,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `source_column` | `VARCHAR(200)` |  |  |
 | `target_table` | `VARCHAR(200)` |  |  |
 | `target_column` | `VARCHAR(200)` |  |  |
-| `transformation` | `TEXT` |  |  |
+| `transformation` | `TEXT` |  | SQL or description of transformation |
+| `job_name` | `VARCHAR(100)` |  |  |
 | `job_run_id` | `VARCHAR(100)` |  |  |
 | `executed_at` | `TIMESTAMP` |  |  |
 | `record_count` | `BIGINT` |  |  |
@@ -2034,8 +2179,13 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `id` | `SERIAL` |  |  |
-| `check_name` | `VARCHAR(200)` |  |  |
-| `'fk_integrity'` | `TABLE_NAME` |  |  |
+| `check_name` | `VARCHAR(200)` |  | e.g. 'row_count' |
+| `'fk_integrity'` | `TABLE_NAME` |  | e.g. 'silver.dim_customer' |
+| `check_status` | `VARCHAR(20)` |  | PASS / FAIL / WARN |
+| `expected_value` | `TEXT` |  | expected result |
+| `actual_value` | `TEXT` |  | actual result |
+| `details` | `TEXT` |  | error message or details |
+| `cob_dt` | `DATE` |  |  |
 | `checked_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `00_extensions.sql`</sub>
@@ -2048,8 +2198,12 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `scorecard_id` | `BIGINT` |  |  |
 | `report_date` | `DATE` |  |  |
-| `column_name` | `VARCHAR(200)` |  |  |
-| `threshold` | `NUMERIC(5,2)` |  |  |
+| `table_name` | `VARCHAR(200)` |  |  |
+| `column_name` | `VARCHAR(200)` |  | NULL = table-level score |
+| `dimension` | `VARCHAR(50)` |  |  |
+| `score` | `NUMERIC(5,2)` |  |  |
+| `threshold` | `NUMERIC(5,2)` |  | Minimum acceptable score |
+| `is_pass` | `SMALLINT` |  |  |
 
 <sub>Nguồn DDL: `09_ddl_regulatory.sql`</sub>
 
@@ -2060,8 +2214,14 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `id` | `SERIAL` |  |  |
-| `job_name` | `VARCHAR(100)` |  |  |
-| `S` | `=` |  |  |
+| `job_name` | `VARCHAR(100)` |  | dag_id |
+| `schema_name` | `VARCHAR(50)` |  | bronze / silver / gold / ops |
+| `table_name` | `VARCHAR(100)` |  | dag_id (same as job_name) |
+| `status` | `CHAR(1)` |  | R = Running |
+| `S` | `=` |  | filled when status = R |
+| `end_time` | `TIMESTAMP` |  | filled when status = S |
+| `cob_dt` | `DATE` |  | business date (YYYY-MM-DD) |
+| `created_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `00_extensions.sql`</sub>
 
@@ -2072,7 +2232,10 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `id` | `SERIAL` |  |  |
-| `source_table` | `VARCHAR(255)` |  |  |
+| `source_table` | `VARCHAR(255)` |  | e.g. 'lakehouse.silver.dim_customer' |
+| `target_table` | `VARCHAR(255)` |  | e.g. 'lakehouse.gold.mart_customer_360' |
+| `transform_type` | `VARCHAR(100)` |  | governance.lineage.TransformType |
+| `dag_id` | `VARCHAR(255)` |  |  |
 | `dag_run_id` | `VARCHAR(255)` |  |  |
 | `snapshot_id` | `VARCHAR(255)` |  |  |
 | `row_count` | `INTEGER` |  |  |
@@ -2089,7 +2252,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `id` | `SERIAL` |  |  |
 | `dag_id` | `VARCHAR(100)` |  |  |
 | `task_id` | `VARCHAR(200)` |  |  |
-| `status` | `VARCHAR(20)` |  |  |
+| `status` | `VARCHAR(20)` |  | RUNNING / SUCCESS / FAILED / SKIPPED |
+| `cob_dt` | `DATE` |  |  |
 | `rows_processed` | `BIGINT` |  |  |
 | `execution_time_s` | `NUMERIC(10,2)` |  |  |
 | `error_message` | `TEXT` |  |  |
@@ -2106,17 +2270,18 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `report_id` | `BIGINT` |  |  |
 | `report_type` | `VARCHAR(50)` |  |  |
+| `report_name` | `VARCHAR(200)` |  |  |
 | `report_period_start` | `DATE` |  |  |
 | `report_period_end` | `DATE` |  |  |
 | `generated_date` | `TIMESTAMP` |  |  |
-| `pending` | `REVIEW` |  | REVIEWED: Reviewed by compliance officer
-        -- APPROVED: Approved for submission
-        -- SUBMITTED: Submitted to regulator
-        -- REJECTED: Rejected |
-| `needs` | `CORRECTION` |  | Submission details
-    submitted_by        VARCHAR(100) |
+| `data_json` | `JSONB` |  | Report data in JSON format |
+| `summary_json` | `JSONB` |  | Summary statistics |
+| `status` | `VARCHAR(20)` |  |  |
+| `pending` | `REVIEW` |  |  |
+| `needs` | `CORRECTION` |  |  |
 | `submitted_at` | `TIMESTAMP` |  |  |
-| `submission_reference` | `VARCHAR(100)` |  |  |
+| `submission_reference` | `VARCHAR(100)` |  | Regulator reference number |
+| `created_by` | `VARCHAR(100)` |  |  |
 | `created_at` | `TIMESTAMP` |  |  |
 | `updated_at` | `TIMESTAMP` |  |  |
 | `notes` | `TEXT` |  |  |
@@ -2131,11 +2296,11 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `rule_id` | `BIGINT` |  |  |
 | `rule_code` | `VARCHAR(50)` |  |  |
-| `regulation` | `VARCHAR(50)` |  |  |
+| `regulation` | `VARCHAR(50)` |  | BCBS239 |
 | `INTERNAL` | `RULE_NAME` |  |  |
 | `description` | `TEXT` |  |  |
 | `threshold_value` | `NUMERIC(18,2)` |  |  |
-| `threshold_type` | `VARCHAR(20)` |  |  |
+| `threshold_type` | `VARCHAR(20)` |  | MIN |
 | `PERCENTAGE` | `IS_ACTIVE` |  |  |
 | `created_at` | `TIMESTAMP` |  |  |
 | `updated_at` | `TIMESTAMP` |  |  |
@@ -2151,7 +2316,11 @@ _Chưa có data contract trong `governance/datasets/`._
 | `id` | `SERIAL` |  |  |
 | `schema_name` | `VARCHAR(50)` |  |  |
 | `table_name` | `VARCHAR(100)` |  |  |
-| `source_type` | `VARCHAR(20)` |  |  |
+| `source_type` | `VARCHAR(20)` |  | postgresql / oracle / mysql |
+| `jdbc_conn_id` | `VARCHAR(100)` |  | Airflow connection ID |
+| `bronze_table` | `VARCHAR(200)` |  | Iceberg target: lakehouse.bronze.xxx |
+| `silver_table` | `VARCHAR(200)` |  | Iceberg target: lakehouse.silver.xxx |
+| `is_active` | `SMALLINT` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_ops_metadata.sql`</sub>

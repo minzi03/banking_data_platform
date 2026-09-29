@@ -203,6 +203,8 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_card_txn (
     merchant_category   STRING,
     channel             STRING,
     status              STRING,
+    entry_mode          STRING,
+    decline_reason      STRING,
     created_ts          TIMESTAMP,
     last_updated        TIMESTAMP,
     cob_dt              DATE
@@ -314,7 +316,7 @@ USING iceberg
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
--- 16. CORE_MCC_CODE (dimension — 109 rows)
+-- 16. CORE_MCC_CODE (dimension — 84 rows)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_mcc_code (
     mcc_code            STRING,
