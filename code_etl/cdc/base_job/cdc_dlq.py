@@ -170,14 +170,12 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
         )
         .withColumn("__cdc_timestamp_ms", F.col("_raw_ts_ms").cast("long"))
         .withColumn("__cdc_timestamp", F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000))
-        # Preserve immutable Kafka coordinates and the raw envelope for audit,
-        # replay, reconciliation, and regulatory investigation.
-        .withColumn("source_topic", F.col("_kafka_topic"))
-        .withColumn("kafka_partition", F.col("_kafka_partition"))
-        .withColumn("kafka_offset", F.col("_kafka_offset"))
-        .withColumn("kafka_timestamp", F.col("_kafka_timestamp"))
-        .withColumn("raw_payload", F.col("_raw_payload"))
-        .withColumn("payload_hash", F.sha2(F.col("_raw_payload"), 256))
+        # Bronze CDC KHÔNG lưu toạ độ Kafka (ADR-0010): chỉ DLQ giữ chúng. Bản
+        # trước thêm source_topic / kafka_partition / kafka_offset / kafka_timestamp /
+        # raw_payload / payload_hash vào luồng hợp lệ trong khi cả hai DDL không có
+        # các cột đó — mọi batch có dữ liệu chết ở writeTo().append() với
+        # INSERT_COLUMN_ARITY_MISMATCH (đo trên stack 2026-09-27). Lưu offset vào
+        # Bronze là quyết định "nếu xem lại" của ADR-0010, cần schema evolution.
         .drop(
             "_cdc_key",
             "_raw_op",

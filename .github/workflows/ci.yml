@@ -293,7 +293,9 @@ jobs:
           # test_business_date_semantics.py assert trực tiếp lên chúng: guard
           # assert_utc_session() và dòng spark.sql.session.timeZone=UTC. Nếu
           # không liệt kê, một PR chỉ sửa timezone sẽ bỏ qua đúng job canh nó.
-          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/)'; then
+          # code_etl/cdc/ + DDL Bronze CDC: test_cdc_bronze_schema.py chạy
+          # validate_and_split thật và so với hai DDL (luồng CDC hỏng từ 09-08).
+          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/|code_etl/cdc/|tests/bronze/test_cdc_bronze_schema\.py|docker/init_iceberg/04_ddl_bronze_cdc\.sql)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -334,10 +336,12 @@ jobs:
           # Nhóm business-date canh thay đổi kiến trúc lớn nhất của v1.1 (engine
           # chạy UTC, business date derive tường minh sang ICT) và chỉ cần
           # pyspark — job này đã có sẵn, nên đưa vào đây thay vì dựng job mới.
+          # + 6 node CDC: luồng hợp lệ ra đúng cột Bronze CDC, event hỏng vào DLQ.
           python -m pytest \
             tests/gold/test_gold_fanout_regression.py \
             tests/gold/test_business_date_semantics.py \
             tests/gold/test_risk_mart_semantics.py \
+            tests/bronze/test_cdc_bronze_schema.py \
             tests/gold/test_loan_delinquency_mart.py \
             tests/gold/test_schema_guard.py \
             -v --tb=short -m integration \
