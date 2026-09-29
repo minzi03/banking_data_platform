@@ -63,6 +63,24 @@ docker compose exec airflow-scheduler airflow dags trigger gold_all_dag
 docker compose exec airflow-scheduler airflow dags trigger ops_data_quality_dag
 ```
 
+**Without Airflow (bootstrap, one `cob_dt`):** the Silver and Gold bootstraps default
+to one `spark-submit` per job, the same path Airflow uses. `--in-process` runs every job
+of the layer in a single Spark app, with a child session per job. Measured on the full
+local data (2026-09-28): Silver took 53 s instead of about 5 min, and Gold took 90 s
+instead of about 5.5 min. Row counts and content checksums were identical. CI uses it.
+
+```bash
+docker exec -w /opt/project banking-spark-worker-1 /opt/spark/bin/spark-submit --master spark://spark-master:7077 code_etl/silver/bootstrap/initial_load.py --cob_dt 2026-09-22 --in-process
+```
+
+```bash
+docker exec -w /opt/project banking-spark-worker-1 /opt/spark/bin/spark-submit --master spark://spark-master:7077 code_etl/gold/bootstrap/initial_load.py --cob_dt 2026-09-22 --in-process
+```
+
+`--in-process` also shows each job's own log. The default mode captures a job's output
+and prints it only when the job fails, which is how a failed Gold z-order
+(`OPTIMIZE_FAILED`) went unseen.
+
 ### 4. Query Data
 
 **Via Trino (port 8085):**
@@ -336,8 +354,18 @@ Without it Trino silently falls back to allowing everything.
 
 ### 10. Gold schema migrations
 
-`gold_job.py` writes with `writeTo(...).overwritePartitions()` and does **not**
-evolve schemas. `docker/init_iceberg/03_ddl_gold.sql` only runs
+> **Since 2026-09-29, Gold adds new columns by itself.** Before every write to
+> an existing table, `gold_job.py` runs `code_etl/shared/spark/schema_guard.py`:
+> a column the result has and the table lacks is added with
+> `ALTER TABLE … ADD COLUMNS`; a column the table has and the result lacks, or a
+> change of type family (number ↔ string, date ↔ timestamp), stops the job
+> **before** the write with `BreakingSchemaChange` — the old partition stays.
+> Numeric types are not widened. The manual `ALTER`s below are only needed on a
+> lakehouse that last ran Gold before this change, and Bronze / Silver still need
+> theirs.
+
+Before that change, `gold_job.py` wrote with `writeTo(...).overwritePartitions()`
+and did **not** evolve schemas. `docker/init_iceberg/03_ddl_gold.sql` only runs
 `CREATE TABLE IF NOT EXISTS`, so a column added to the DDL never reaches a table
 that already exists. The job then computes its result, passes its guards, and
 fails at the write:
@@ -369,6 +397,26 @@ one table was already migrated, a combined command would never reach the other.
 Existing rows read `NULL` for the new columns until the Gold job reruns for
 their `cob_dt`. Running an `ALTER` a second time fails with
 `FIELDS_ALREADY_EXISTS` and leaves schema and data unchanged — verified.
+
+The same applies to Bronze (`write_to_iceberg`) and Silver facts
+(`fact_txn.py`): both write with `overwritePartitions()` and no schema evolution.
+
+2026-09-29 — `card_txn.entry_mode` / `decline_reason` (SOURCE_DATA_BASELINE §2).
+The PostgreSQL source needs nothing by hand: `generate_all.py` applies
+`data_generator/migrations/*.sql` (idempotent) before writing. The lakehouse
+tables need one `ALTER` each:
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.bronze.core_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+```bash
+docker exec banking-spark-worker-1 /opt/spark/bin/spark-sql -S -e "ALTER TABLE lakehouse.silver.fact_card_txn ADD COLUMNS (entry_mode STRING, decline_reason STRING)"
+```
+
+Rows seeded before the change have `entry_mode` / `decline_reason` NULL in the
+source too — the migration adds the constraints `NOT VALID`, so old rows are not
+rechecked. Re-seed (`--truncate`) to get the columns filled for every row.
 
 ### 11. Rotate local secrets
 
@@ -436,6 +484,51 @@ lists these at the end:
 - OpenMetadata's MySQL passwords.
 - Debezium connectors registered with the old `CDC_DB_PASSWORD`.
 
+### 12. Replication slots (CDC)
+
+A replication slot keeps WAL until its consumer reads it. With Postgres's default
+`max_slot_wal_keep_size = -1`, a slot that nobody reads keeps WAL forever. That
+happens whenever the CDC stack is down or a connector's task has failed. Kafka's state
+sits in anonymous volumes (declared by the image, not by compose), so a
+`docker compose down` loses Debezium's offsets. On
+2026-09-27, three stale `debezium_slot_*` slots held 3.6 GB. They belonged to connectors
+registered outside the repo, whose tasks had failed since the CDC password was rotated.
+See TD-18.
+
+Check how much WAL each slot holds:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT slot_name, active, wal_status, pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained FROM pg_replication_slots ORDER BY 1"'
+```
+
+New stacks get a 4 GB cap from `05-cdc-setup.sh`. Apply it once on an existing stack.
+This is a reload-level setting, so no restart is needed:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "ALTER SYSTEM SET max_slot_wal_keep_size = '"'"'4GB'"'"'" -c "SELECT pg_reload_conf()"'
+```
+
+The commands above use bash quoting (`'"'"'`). PowerShell mangles it: on 2026-09-27 a
+`pg_drop_replication_slot` pasted into PowerShell matched no slot at all. In PowerShell,
+send the SQL on stdin instead:
+
+```powershell
+"ALTER SYSTEM SET max_slot_wal_keep_size = '4GB';", "SELECT pg_reload_conf();" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
+Drop orphaned slots the same way. List the names from the query above; never drop an
+active slot:
+
+```powershell
+"SELECT slot_name, pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name IN ('debezium_slot_core','debezium_slot_card','debezium_slot_digital') AND NOT active;" | docker exec -i banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db'
+```
+
+A slot over the cap becomes `wal_status = lost`, and its connector fails with a clear
+error. Re-register the connector: Debezium drops nothing by itself, so drop the lost
+slot first, and the connector takes a new snapshot. The slot names in use are the
+`slot.name` values in `code_etl/cdc/register_connectors.py`; a test keeps the
+Airflow DAG in sync with them.
+
 ---
 
 ## 🐛 Troubleshooting
@@ -451,6 +544,29 @@ docker compose ps
 # Restart specific service
 docker compose restart [service_name]
 ```
+
+### Kafka exits with `NodeExists` right after Zookeeper restarts
+
+```text
+ERROR Error while creating ephemeral at /brokers/ids/1, node already exists and owner
+'0x…' does not match current session '0x…'
+```
+
+Zookeeper keeps its data in a volume. After a restart or recreate, it still holds the
+previous broker's ephemeral node until that session times out, and Kafka exits with
+code 1. Debezium, which depends on Kafka, is then left created but not started. This
+happened twice on 2026-09-27. Wait about 20 seconds, then start the two in order:
+
+```bash
+docker start banking-kafka
+```
+
+```bash
+docker start banking-debezium
+```
+
+Connectors, offsets and topics survive this (anonymous volumes). Check that the
+connectors are `RUNNING` and all three replication slots are active (RUNBOOK §12).
 
 ### Iceberg REST Connection Error
 ```bash

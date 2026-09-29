@@ -126,12 +126,12 @@ class TestContractValidation:
 class TestRepoCollectors:
     def test_source_datasets_excludes_template_by_semantics(self, contract):
         """
-        Glob thô ra 18 file; đúng phải là 17 workload.
+        Glob thô ra 20 file; đúng phải là 19 workload.
         templates/source_registry.yml bị loại vì thiếu contract shape
         (source+target+load+sql), KHÔNG phải vì blacklist tên file.
         """
-        assert gen._bronze_ingestion_workloads(contract) == 17
-        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 18
+        assert gen._bronze_ingestion_workloads(contract) == 19
+        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 20
 
     def test_debezium_topics_reads_config_not_docstring(self, contract):
         """Docstring đầu register_connectors.py ghi 8/3/5 — sai. Config là 6/3/3."""
@@ -148,12 +148,12 @@ class TestRepoCollectors:
 
     def test_gold_ddl_tables(self, contract):
         """
-        14 bang lich su (6 mart360 + 4 segment + 1 time_analytics + 3 risk).
+        15 bang lich su (6 mart360 + 4 segment + 1 time_analytics + 4 risk).
         KHONG co CTAS `*_current` trong DDL — chung la dbt serving model.
         Neu con so nay nhay ve ~18 kem theo object `*_current`, nghia la co ai
         do them lai CTAS vao DDL → dual ownership quay lai.
         """
-        assert gen._gold_ddl_tables(contract) == 14
+        assert gen._gold_ddl_tables(contract) == 15
 
     def test_docker_services_three_way_split(self, contract):
         """29 = 25 long-running + 4 one-shot."""
@@ -571,11 +571,11 @@ class TestVerificationScope:
 class TestServingVisibility:
     def test_gold_ddl_declares_no_current_objects(self, contract):
         """
-        Sau retirement: 14 CREATE TABLE lich su, 0 CREATE VIEW.
+        Sau retirement: 15 CREATE TABLE lich su, 0 CREATE VIEW.
         Gold DDL khong con khai bao bat ky serving object nao.
         """
-        assert gen._gold_ddl_objects(contract) == 14
-        assert gen._gold_ddl_tables(contract) == 14
+        assert gen._gold_ddl_objects(contract) == 15
+        assert gen._gold_ddl_tables(contract) == 15
 
         ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
         created = re.findall(r"CREATE (?:TABLE IF NOT EXISTS|OR REPLACE VIEW)\s+[\w.]*\.(\w+)", ddl)

@@ -33,6 +33,7 @@ _STUBBED = {
     "spark": MagicMock(),
     "spark.spark_session": MagicMock(),
     "spark.iceberg_utils": MagicMock(),
+    "spark.schema_guard": MagicMock(),
     "utils": MagicMock(),
     "utils.logger": MagicMock(),
     "utils.yaml_loader": MagicMock(),
@@ -279,6 +280,54 @@ class TestRunGoldJob:
 
         create.assert_not_called()
 
+    def test_schema_guard_runs_before_the_write_on_existing_tables(self, logger):
+        spark = MagicMock()
+        result = MagicMock()
+        calls = []
+        result.writeTo.return_value.overwritePartitions.side_effect = lambda: calls.append("write")
+        with (
+            patch.object(gold_job, "assert_source_snapshots"),
+            patch.object(gold_job, "load_source_df", return_value=result),
+            patch.object(gold_job, "assert_non_empty"),
+            patch.object(gold_job, "table_exists", return_value=True),
+            patch.object(gold_job, "guard_and_evolve", side_effect=lambda *a: calls.append("guard")),
+            patch.object(gold_job, "optimize_written_partition"),
+        ):
+            run_gold_job(spark, _config(), "2026-09-17", logger)
+
+        assert calls == ["guard", "write"]
+
+    def test_breaking_schema_change_stops_the_write(self, logger):
+        """Gold chỉ publish khi schema ổn định: guard raise thì không ghi gì."""
+        spark = MagicMock()
+        result = MagicMock()
+        with (
+            patch.object(gold_job, "assert_source_snapshots"),
+            patch.object(gold_job, "load_source_df", return_value=result),
+            patch.object(gold_job, "assert_non_empty"),
+            patch.object(gold_job, "table_exists", return_value=True),
+            patch.object(gold_job, "guard_and_evolve", side_effect=RuntimeError("BREAKING")),
+        ):
+            with pytest.raises(RuntimeError, match="BREAKING"):
+                run_gold_job(spark, _config(), "2026-09-17", logger)
+            result.writeTo.assert_not_called()
+
+    def test_new_table_skips_the_schema_guard(self, logger):
+        spark = MagicMock()
+        result = MagicMock()
+        with (
+            patch.object(gold_job, "assert_source_snapshots"),
+            patch.object(gold_job, "load_source_df", return_value=result),
+            patch.object(gold_job, "assert_non_empty"),
+            patch.object(gold_job, "table_exists", return_value=False),
+            patch.object(gold_job, "create_iceberg_table_if_not_exists"),
+            patch.object(gold_job, "guard_and_evolve") as guard,
+            patch.object(gold_job, "optimize_written_partition"),
+        ):
+            run_gold_job(spark, _config(), "2026-09-17", logger)
+
+        guard.assert_not_called()
+
     def test_snapshot_guard_runs_before_reading(self, logger):
         """A missing partition must fail before any work is done."""
         spark = MagicMock()
@@ -413,6 +462,33 @@ class TestOptimizeWrittenPartition:
     def test_zorder_columns_are_non_empty_lists(self):
         for table, cols in ZORDER_COLUMNS.items():
             assert isinstance(cols, list) and cols, f"{table} has an empty Z-Order column list"
+
+    def test_zorder_columns_exist_in_the_gold_ddl(self):
+        """
+        cross_sell_segment khai `cross_sell_score` — cột không có trong bảng. rewrite_data_files
+        thất bại ở MỌI lần chạy (IllegalArgumentException: Cannot find column), chỉ thành
+        WARNING OPTIMIZE_FAILED; bootstrap chạy từng job qua subprocess nuốt output của job
+        thành công nên không ai thấy. Lộ ra khi chạy bootstrap --in-process (2026-09-28).
+        """
+        import re
+
+        ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
+        columns = {
+            name: {
+                line.strip().split()[0]
+                for line in body.splitlines()
+                if line.strip() and not line.strip().startswith("--")
+            }
+            for name, body in re.findall(
+                r"CREATE TABLE IF NOT EXISTS lakehouse\.gold\.(\w+)\s*\((.*?)\)\s*USING iceberg", ddl, re.DOTALL
+            )
+        }
+        missing = {
+            table: [c for c in cols if c not in columns.get(table, set())]
+            for table, cols in ZORDER_COLUMNS.items()
+            if any(c not in columns.get(table, set()) for c in cols)
+        }
+        assert not missing, f"cột Z-Order không có trong DDL Gold: {missing}"
 
 
 def test_no_delta_optimize_syntax_left_in_etl_code():

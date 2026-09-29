@@ -16,6 +16,13 @@ on:
 permissions:
   contents: read
 
+# Commit mới trên cùng một PR huỷ run cũ đang chạy — kết quả của nó đã lỗi thời, và
+# job Trino Integration giữ runner ~15 phút. Trên main thì KHÔNG huỷ: mỗi lần merge
+# phải được kiểm đủ. Đo 2026-09-28: một nhánh PR từng có 4 run chạy trọn song song.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ===========================================================================
   # Job 0: phát hiện thay đổi liên quan tới Trino integration
@@ -293,7 +300,9 @@ jobs:
           # test_business_date_semantics.py assert trực tiếp lên chúng: guard
           # assert_utc_session() và dòng spark.sql.session.timeZone=UTC. Nếu
           # không liệt kê, một PR chỉ sửa timezone sẽ bỏ qua đúng job canh nó.
-          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/)'; then
+          # code_etl/cdc/ + DDL Bronze CDC: test_cdc_bronze_schema.py chạy
+          # validate_and_split thật và so với hai DDL (luồng CDC hỏng từ 09-08).
+          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/|code_etl/cdc/|tests/bronze/test_cdc_bronze_schema\.py|docker/init_iceberg/04_ddl_bronze_cdc\.sql)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -328,14 +337,20 @@ jobs:
         run: |
           echo "=== Gold Spark regression — fan-out, snapshot, business-date ==="
           # 23 fan-out/snapshot + 9 business-date semantics + 2 risk-mart
-          # semantics (npl_proxy, AML chạy được sau khi gỡ CTE chết) = 34 test.
+          # semantics (npl_proxy, AML chạy được sau khi gỡ CTE chết) + 15
+          # loan_delinquency (DPD, nhóm nợ TT11, roll pair, vintage). Đo 2026-09-29:
+          # 50 test pass (con số 34 cũ đã lệch 1 trước thay đổi này).
           # Nhóm business-date canh thay đổi kiến trúc lớn nhất của v1.1 (engine
           # chạy UTC, business date derive tường minh sang ICT) và chỉ cần
           # pyspark — job này đã có sẵn, nên đưa vào đây thay vì dựng job mới.
+          # + 6 node CDC: luồng hợp lệ ra đúng cột Bronze CDC, event hỏng vào DLQ.
           python -m pytest \
             tests/gold/test_gold_fanout_regression.py \
             tests/gold/test_business_date_semantics.py \
             tests/gold/test_risk_mart_semantics.py \
+            tests/bronze/test_cdc_bronze_schema.py \
+            tests/gold/test_loan_delinquency_mart.py \
+            tests/gold/test_schema_guard.py \
             -v --tb=short -m integration \
             --junitxml=gold-regression-results.xml
 
@@ -923,11 +938,22 @@ jobs:
         echo "::group::D — Bronze state"
         assert_rows "bronze.core_customer" \
           "SELECT COUNT(*) FROM iceberg.bronze.core_customer WHERE cob_dt = DATE '${COB_DT}'"
+        # Hai nguồn từng seed rồi dừng ở PostgreSQL (không workload nào nạp).
+        # Exit code 0 của bootstrap không chứng minh chúng đã tới Bronze.
+        assert_rows "bronze.core_standing_order" \
+          "SELECT COUNT(*) FROM iceberg.bronze.core_standing_order WHERE cob_dt = DATE '${COB_DT}'"
+        assert_rows "bronze.core_merchant" \
+          "SELECT COUNT(*) FROM iceberg.bronze.core_merchant WHERE cob_dt = DATE '${COB_DT}'"
         echo "::endgroup::"
 
+        # --in-process: 16 job trong MỘT Spark app, mỗi job một session con. Chế độ
+        # một spark-submit mỗi job tốn ~18 s khởi động/job ≈ 5 phút cho vài giây việc
+        # thật trên dữ liệu 1%. Cùng hàm job, cùng dữ liệu (đối chiếu 30 bảng + checksum
+        # trên stack, 2026-09-28). Đường spark-submit từng job vẫn được chạy ở stage
+        # "G2 — per-job CLI smoke" và bước FIXTURE SCD2.
         run_stage "E — Silver process" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/bootstrap/initial_load.py \
-          --cob_dt "${COB_DT}"
+          --cob_dt "${COB_DT}" --in-process
 
         # fact_txn_account, không phải dim_customer: chỉ các bảng fact_* trong
         # Silver mang cob_dt (đã kiểm information_schema), và đây đúng là fact
@@ -952,7 +978,22 @@ jobs:
 
         run_stage "G — Gold process" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/gold/bootstrap/initial_load.py \
-          --cob_dt "${COB_DT}"
+          --cob_dt "${COB_DT}" --in-process
+
+        # Đường production (Airflow): một spark-submit mỗi job, qua main()/argparse của
+        # chính module job. Một job mỗi loại chưa được bước khác chạy theo cách đó
+        # (scd_type2 đã có ở FIXTURE SCD2). Chạy LẠI job đã có dữ liệu cho cùng cob_dt —
+        # và mart_customer_360 chạy trước kiểm grain ở H, nên grain cũng xác nhận việc
+        # chạy lại là idempotent.
+        run_stage "G2 — per-job CLI smoke: silver scd_type1" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/base_job/scd_type1.py \
+          --config code_etl/silver/dims/dim_branch.yml --cob_dt "${COB_DT}"
+        run_stage "G2 — per-job CLI smoke: silver fact_txn" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/silver/base_job/fact_txn.py \
+          --config code_etl/silver/facts/fact_txn_account.yml --cob_dt "${COB_DT}"
+        run_stage "G2 — per-job CLI smoke: gold_job" "${SPARK_SUBMIT[@]}" \
+          /opt/project/code_etl/gold/base_job/gold_job.py \
+          --config code_etl/gold/mart360/customer_360.yml --cob_dt "${COB_DT}"
 
         echo "::group::H — Gold state + grain"
         assert_rows "gold.mart_customer_360" \

@@ -13,6 +13,10 @@ def generate_source_registry() -> list[tuple]:
     from datetime import datetime
     now = datetime.now()
 
+    # Tên đích phải là bảng THẬT: bronze = target.table của code_etl/bronze/*/*.yml,
+    # silver = target.table của code_etl/silver/*/*.yml (None = chưa có Silver).
+    # Bản trước ghi tên tự đặt (card_card, digi_device, fact_online_txn…) không
+    # khớp bảng nào — tests/governance/test_bronze_source_registry.py giữ điều này.
     tables = [
         # (schema, table, source_type, jdbc_conn_id, bronze_table, silver_table, is_active)
         ("core_banking", "branch", "postgresql", "postgres-banking",
@@ -36,23 +40,23 @@ def generate_source_registry() -> list[tuple]:
         ("core_banking", "employee", "postgresql", "postgres-banking",
          "lakehouse.bronze.core_employee", "lakehouse.silver.dim_employee", 1),
         ("card_crm", "card", "postgresql", "postgres-banking",
-         "lakehouse.bronze.card_card", "lakehouse.silver.dim_card", 1),
+         "lakehouse.bronze.core_card", "lakehouse.silver.dim_card", 1),
         ("card_crm", "card_txn", "postgresql", "postgres-banking",
-         "lakehouse.bronze.card_txn", "lakehouse.silver.fact_card_txn", 1),
+         "lakehouse.bronze.core_card_txn", "lakehouse.silver.fact_card_txn", 1),
         ("card_crm", "crm_interaction", "postgresql", "postgres-banking",
-         "lakehouse.bronze.crm_interaction", "lakehouse.silver.fact_crm_interaction", 1),
+         "lakehouse.bronze.core_crm_interaction", "lakehouse.silver.fact_crm_interaction", 1),
         ("digital_banking", "device", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_device", None, 1),
+         "lakehouse.bronze.core_device", "lakehouse.silver.dim_device", 1),
         ("digital_banking", "location", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_location", None, 1),
+         "lakehouse.bronze.core_location", "lakehouse.silver.dim_location", 1),
         ("digital_banking", "online_transaction", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_online_txn", "lakehouse.silver.fact_online_txn", 1),
+         "lakehouse.bronze.core_online_transaction", "lakehouse.silver.fact_online_transaction", 1),
         ("digital_banking", "support_ticket", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_support_ticket", "lakehouse.silver.fact_support_ticket", 1),
+         "lakehouse.bronze.core_support_ticket", "lakehouse.silver.fact_support_ticket", 1),
         ("digital_banking", "mcc_code", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_mcc_code", None, 1),
+         "lakehouse.bronze.core_mcc_code", None, 1),
         ("digital_banking", "merchant", "postgresql", "postgres-banking",
-         "lakehouse.bronze.digi_merchant", None, 1),
+         "lakehouse.bronze.core_merchant", None, 1),
     ]
 
     rows = []

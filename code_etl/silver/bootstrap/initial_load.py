@@ -12,7 +12,10 @@ Usage:
   spark-submit \\
     --master spark://spark-master:7077 \\
     code_etl/silver/bootstrap/initial_load.py \\
-    --cob_dt 2025-01-01
+    --cob_dt 2025-01-01 [--in-process]
+
+--in-process: mọi job chạy trong CHÍNH app này (mỗi job một session con) thay vì một
+spark-submit mỗi job — bỏ ~18 s khởi động mỗi job. Xem code_etl/shared/spark/in_process.py.
 """
 
 import argparse
@@ -129,12 +132,37 @@ JOB_TYPE_MAP = {
     "fact_txn": "code_etl.silver.base_job.fact_txn",
 }
 
+# Hàm job mà main() của mỗi module gọi — dùng cho --in-process.
+IN_PROCESS_RUNNER = {
+    "scd_type1": "run_scd_type1",
+    "scd_type2": "run_scd_type2",
+    "fact_txn": "run_fact_txn",
+}
+BASE_JOB_DIR = Path(__file__).resolve().parent.parent / "base_job"
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Silver Bootstrap Initial Load")
     parser.add_argument("--cob_dt", required=True, help="Business date YYYY-MM-DD")
     parser.add_argument("--spark_submit", default="/opt/spark/bin/spark-submit", help="Path to spark-submit command")
+    parser.add_argument(
+        "--in-process",
+        action="store_true",
+        help="chạy mọi job trong app này (một session con mỗi job) thay vì spark-submit từng job",
+    )
     return parser.parse_args()
+
+
+def run_silver_job_in_process(job_def: dict, cob_dt: str, spark, logger) -> bool:
+    """Chạy một job Silver trên session con của app hiện tại (--in-process)."""
+    from spark.in_process import load_job_module, run_job_in_process
+
+    logger.info(f"Running: {job_def['name']} ({job_def['type']}, in-process)")
+    module = load_job_module(BASE_JOB_DIR / f"{job_def['type']}.py")
+    ok = run_job_in_process(spark, module, IN_PROCESS_RUNNER[job_def["type"]], job_def["config"], cob_dt, logger)
+    if ok:
+        logger.info(f"  ✓ {job_def['name']} completed successfully")
+    return ok
 
 
 def run_silver_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> bool:
@@ -192,8 +220,17 @@ def main():
 
     results = {"success": [], "failed": []}
 
+    spark = None
+    if args.in_process:
+        from spark.spark_session import get_spark_session
+
+        spark = get_spark_session("silver-bootstrap-in-process")
+
     for job_def in SILVER_JOB_ORDER:
-        success = run_silver_job(job_def, args.cob_dt, args.spark_submit, logger)
+        if spark is not None:
+            success = run_silver_job_in_process(job_def, args.cob_dt, spark, logger)
+        else:
+            success = run_silver_job(job_def, args.cob_dt, args.spark_submit, logger)
         if success:
             results["success"].append(job_def["name"])
         else:
@@ -219,6 +256,9 @@ def main():
     logger.info("")
     logger.info(f"Total: {len(results['success'])}/{len(SILVER_JOB_ORDER)} jobs succeeded")
     logger.info(f"Failed: {len(results['failed'])}")
+
+    if spark is not None:
+        spark.stop()
 
     if results["failed"]:
         sys.exit(1)

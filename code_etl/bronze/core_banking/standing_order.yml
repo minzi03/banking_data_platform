@@ -1,0 +1,37 @@
+# Bronze Ingestion: standing_order (dimension — full snapshot)
+#
+# Lệnh thanh toán định kỳ (hoá đơn điện/nước/viễn thông, chuyển khoản, trả nợ vay).
+# Trạng thái hiện tại của lệnh (ACTIVE / PAUSED / CANCELLED) đổi theo thời gian,
+# nên nạp full snapshot như các dimension khác.
+#
+# beneficiary_name ở dữ liệu sinh là tên tổ chức (EVN, Sawaco, FPT…), không phải
+# cá nhân. Với dữ liệu thật, người thụ hưởng có thể là cá nhân → phải xếp vào
+# PII_INVENTORY và che như full_name trước khi mở cho role đọc Bronze.
+source:
+  type: postgresql
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_standing_order
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    order_id,
+    account_id,
+    customer_id,
+    order_type,
+    beneficiary_name,
+    beneficiary_account,
+    amount,
+    frequency,
+    next_execute_date,
+    status,
+    created_date,
+    last_updated
+  FROM core_banking.standing_order

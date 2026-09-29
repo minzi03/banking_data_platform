@@ -37,7 +37,7 @@ cho phép incremental JDBC ingestion dựa trên watermark timestamp.
 |---|---------|--------|---------|-----------|---------|
 | 1 | Core Banking | core_banking | 10 | ~1,530,930 | Giao dịch cốt lõi: tài khoản, tiết kiệm, vay, chuyển khoản |
 | 2 | Card & CRM | card_crm | 3 | ~656,000 | Thẻ ngân hàng, giao dịch thẻ, tương tác CRM |
-| 3 | Digital Banking | digital_banking | 6 | ~582,109 | Kênh số: giao dịch online, thiết bị, MCC, merchant |
+| 3 | Digital Banking | digital_banking | 6 | ~582,084 | Kênh số: giao dịch online, thiết bị, MCC, merchant |
 | 4 | Ops Metadata | opslakehouse | 1 | 19 | Registry mapping source → lakehouse |
 | **Tổng** | | **20 bảng** | **~2,769,058 rows** | |
 
@@ -174,8 +174,9 @@ Schema `core_banking` — 10 bảng, ~1,530,930 rows. Trung tâm của toàn b�
 
 **Business rules:**
 - Standard amortization schedule: principal + interest components
-- Late payment rate: 5% (days_late > 0, penalty > 0)
-- Missed payment rate: 2% (amount_paid = 0)
+- Trạng thái trễ hạn **nối tiếp**: mỗi khoản vay đi qua chuỗi bucket DPD (0 / 1–29 / 30–59 / 60–89 / 90+) theo ma trận chuyển tháng `roll_rates` trong `seed_config.yaml` (giả định — không bộ tham khảo nào có dữ liệu để đo)
+- Kết quả kỳ theo bucket: 0 → PAID; 1–29 ngày → LATE (trả muộn + phí 2%); ≥30 ngày → MISSED (không trả, phí 5%, dư nợ giữ nguyên). Ở 90+ `days_late` tăng 30/tháng, nên nhóm nợ 3–5 có mặt
+- Khớp `loan_status`: CLOSED trả đúng hạn mọi kỳ; ACTIVE kỳ cuối đúng hạn; OVERDUE kỳ cuối quá hạn. WRITTEN_OFF không sinh lịch trả (như trước)
 - outstanding_after = running balance sau mỗi kỳ thanh toán
 
 ### 3.8. standing_order — Thanh toán định kỳ
@@ -285,16 +286,18 @@ OR (card_type <> 'CREDIT' AND credit_limit IS NULL)
 | Thuộc tính | Chi tiết |
 |-----------|---------|
 | **Rows** | 600,000 |
-| **Columns** | 16 (txn_id, card_id, customer_id, txn_date, txn_amount, txn_type, currency, merchant_name, merchant_category, mcc_code, channel, status, processing_time_ms, reference_number, created_ts, last_updated) |
+| **Columns** | 18 (txn_id, card_id, customer_id, txn_date, txn_amount, txn_type, currency, merchant_name, merchant_category, mcc_code, channel, status, entry_mode, decline_reason, processing_time_ms, reference_number, created_ts, last_updated) |
 | **PK** | `txn_id` BIGINT |
 | **FK** | card_id → card |
-| **CHECK** | txn_type IN ('PURCHASE','CASH_ADVANCE','REFUND','REVERSAL'), channel IN ('POS','ECOM','ATM') |
+| **CHECK** | txn_type IN ('PURCHASE','CASH_ADVANCE','REFUND','REVERSAL'), channel IN ('POS','ECOM','ATM'), entry_mode IN ('CHIP','SWIPE','ONLINE'), decline_reason có giá trị ⇔ status = 'FAILED' |
 | **Indexes** | idx_card_txn_card_date, idx_card_txn_cust_date, idx_card_txn_last_upd |
 
 **Phân bố:**
 - Type: PURCHASE 70%, CASH_ADVANCE 15%, REFUND 10%, REVERSAL 5%
 - Channel: POS 45%, ECOM 40%, ATM 15%
 - Status: SUCCESS 90%, FAILED 7%, PENDING 3%
+- Entry mode: ECOM → ONLINE; POS/ATM → CHIP ≈ 80% / SWIPE ≈ 20% (tỷ lệ chip:quẹt của bộ tham khảo Xóm Bank)
+- Decline reason (chỉ FAILED): trọng số = số lần đếm trong Xóm Bank, tách theo entry mode — lỗi PIN chỉ có khi có mặt thẻ, lỗi CVV / ngày hết hạn / số thẻ chỉ online; giữ lỗi tổ hợp (vd. `INSUFFICIENT_FUNDS,WRONG_PIN`). Xem `DECLINE_REASON_WEIGHTS` trong `data_generator/generators/card_crm.py`
 - Amount: 50K–50M VND
 - Merchant categories: GROCERY, RESTAURANT, TRAVEL, ECOM, FUEL, EDUCATION, HEALTHCARE, ENTERTAINMENT, UTILITIES
 
@@ -331,7 +334,7 @@ core_banking.customer ──────────────┐
 
 ## 5. Digital Banking (6 Tables)
 
-Schema `digital_banking` — 6 bảng, ~582,109 rows. Kênh số: giao dịch online, thiết bị, MCC codes, merchant directory.
+Schema `digital_banking` — 6 bảng, ~582,084 rows. Kênh số: giao dịch online, thiết bị, MCC codes, merchant directory.
 
 ### 5.1. device — Thiết bị khách hàng
 
@@ -402,37 +405,37 @@ Schema `digital_banking` — 6 bảng, ~582,109 rows. Kênh số: giao dịch on
 
 | Thuộc tính | Chi tiết |
 |-----------|---------|
-| **Rows** | 109 |
+| **Rows** | 84 |
 | **Columns** | 5 (mcc_code, description, category_group, is_high_risk, last_updated) |
 | **PK** | `mcc_code` VARCHAR(10) |
 | **CHECK** | is_high_risk IN (0,1) |
 
 **Phân bố:**
-- 28 MCC codes defined in config + 81 auto-generated (pool sampling, no duplicates)
+- 84 mã thật theo danh sách mã thẻ (ISO 18245), khai toàn bộ trong `seed_config.yaml`; generator không độn thêm. Nguồn tập mã và lý do bỏ 34 mã của bộ Xóm Bank: comment đầu khối `mcc_code` trong config
 - Category groups: RETAIL, FOOD, TRAVEL, SERVICES, UTILITIES
-- High-risk MCCs: 7995 (Gambling), 6011 (Cash Disbursement), 6051 (Quasi-Cash), 7273 (Dating Services)
+- High-risk MCCs: 7995 (Betting), 6011 (Cash Disbursement), 6051 (Quasi-Cash), 7273 (Dating), 4829 (Wire Transfers), 5967 (Direct Marketing)
 
 **MCC codes được config trong seed_config.yaml:**
 
 | MCC | Mô tả | Nhóm | High-risk |
 |-----|--------|------|-----------|
-| 5411 | Grocery Stores | RETAIL | No |
-| 5812 | Eating Places, Restaurants | FOOD | No |
+| 5411 | Grocery Stores and Supermarkets | RETAIL | No |
+| 5812 | Eating Places and Restaurants | FOOD | No |
 | 5814 | Fast Food Restaurants | FOOD | No |
-| 3000 | Airlines | TRAVEL | No |
-| 3351 | Car Rental | TRAVEL | No |
-| 3501 | Hotels | TRAVEL | No |
-| 4121 | Taxi | TRAVEL | No |
+| 4511 | Airlines and Air Carriers | TRAVEL | No |
+| 7512 | Car Rental Agencies | TRAVEL | No |
+| 7011 | Lodging - Hotels, Motels, Resorts | TRAVEL | No |
+| 4121 | Taxicabs and Limousines | TRAVEL | No |
 | 5541 | Gas Stations | RETAIL | No |
 | 5732 | Electronics Stores | RETAIL | No |
 | 5999 | Misc Retail Stores | RETAIL | No |
-| 7995 | Gambling | SERVICES | **Yes** |
+| 7995 | Betting, Lottery, Casino | SERVICES | **Yes** |
 | 6011 | Cash Disbursement | SERVICES | **Yes** |
 | 6051 | Quasi-Cash | SERVICES | **Yes** |
 | 7273 | Dating Services | SERVICES | **Yes** |
 | 4814 | Telecom Services | UTILITIES | No |
 | 8062 | Hospitals | SERVICES | No |
-| ... | +71 codes (auto-generated) | ... | ... |
+| ... | +68 mã khác trong `seed_config.yaml` | ... | ... |
 
 ### 5.6. merchant — Danh sách merchant
 
@@ -461,7 +464,7 @@ online_transaction (500K) ─────────┤
   │                                 │
 location (5K) ─────────────────────┘
 
-mcc_code (109) ←── FK ── merchant (2K)
+mcc_code (84) ←── FK ── merchant (2K)
     ↑
     └── FK ── card_txn (card_crm schema)
 
@@ -610,7 +613,7 @@ opslakehouse schema (4 tables):
 │   └── txn_account: 1,200,000  (43.3% of total)     │
 │ card_crm:          656,000 rows  (23.7%)            │
 │   └── card_txn:    600,000  (21.7% of total)        │
-│ digital_banking:   582,109 rows  (21.0%)            │
+│ digital_banking:   582,084 rows  (21.0%)            │
 │   └── online_txn:  500,000  (18.1% of total)        │
 │ opslakehouse:           19 rows  (0.001%)            │
 └─────────────────────────────────────────────────────┘
@@ -639,7 +642,7 @@ Step 6: loan_payment (~250K) ─── FK → loan
    │    standing_order (15K) ─── FK → account, customer
    │    txn_account (1.2M) ───── FK → account
    │
-Step 7: mcc_code (109) ── pre-gen, no FK (used by card & digital)
+Step 7: mcc_code (84) ── pre-gen, no FK (used by card & digital)
    │
 Step 8: card (6K) ──── FK → product (logical: customer, account)
    │    card_txn (600K) ─── FK → card, mcc_code*
@@ -665,7 +668,7 @@ Step 11: source_table_registry (19) ── manual seed
 | **Seasonal datetime** | 65% weekday, hour peaks 9–11h/19–21h (giờ VN, lưu UTC) | txn_account, card_txn, online_transaction |
 | **Credit limit conditional** | CHỈ credit card mới có credit_limit | card |
 | **Fraud correlation** | 35% fraud发生在 high-risk locations, amount bias | online_transaction |
-| **Late payment pattern** | 5% late (penalty + days_late), 2% missed (amount=0) | loan_payment |
+| **Late payment pattern** | Chuỗi bucket DPD có trí nhớ (roll / cure), khớp loan_status | loan_payment |
 | **MCC linkage** | card_txn.mcc_code → mcc_code, merchant.mcc_code → mcc_code | card_txn, merchant, mcc_code |
 | **Geographic consistency** | Customer城市的branch được assign bởi city→branch mapping | customer |
 | **Watermark ingestion** | last_updated trigger enables JDBC incremental extract | ALL tables (20/20) |
