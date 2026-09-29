@@ -7,10 +7,28 @@ support_ticket, mcc_code
 
 import random
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta
 
 from .amounts import amount_sampler
 from .timeline import business_to_utc, shift
+
+
+# merchant_category của merchant → MCC. Mọi mã phải có trong mcc_code.codes của
+# seed_config (tests/data_generator/test_mcc_code_uniqueness.py kiểm).
+MERCHANT_CATEGORY_MCC = {
+    "Grocery & Supermarket": ["5411", "5499"],
+    "Food & Beverage": ["5812", "5814"],
+    "Travel & Hospitality": ["4511", "7512", "4121", "7011"],
+    "Electronics": ["5732", "5999"],
+    "Healthcare & Pharmacy": ["5912", "8011", "8041", "8062"],
+    "Education": ["8299"],
+    "Entertainment": ["7832", "7996", "7995"],
+    "Utilities & Bill Payment": ["4814", "4899"],
+    "Fashion & Apparel": ["5691", "5651"],
+    "Telecom": ["4814"],
+    "Insurance": ["6300"],
+}
 
 
 OS_OPTIONS = ["iOS", "Android", "Windows", "macOS", "Linux"]
@@ -261,46 +279,23 @@ def generate_support_tickets(count: int, config: dict, customer_ids: list[int]) 
 
 
 def generate_mcc_codes(config: dict) -> list[tuple]:
-    """Generate MCC code data from config."""
-    rows = []
+    """
+    Sinh bảng MCC: ĐÚNG các mã khai trong seed_config, không độn thêm.
+
+    Bản trước độn cho đủ 109 dòng bằng số ngẫu nhiên 1000–9999 gắn mô tả bốc
+    ngẫu nhiên ("Hotel", "Airline"…): 81/109 mã không tồn tại, và giao dịch thẻ
+    rơi vào nhánh "MCC bất kỳ" nhận luôn mã giả. Số dòng giờ là số mã thật.
+
+    mcc_code là PRIMARY KEY, nên mã trùng trong config là lỗi cấu hình — báo ngay
+    ở đây thay vì để seed chết ở Postgres với `duplicate key … pk_mcc_code`.
+    """
     codes = config.get("codes", [])
+    counts = Counter(c["mcc"] for c in codes)
+    duplicates = sorted(code for code, n in counts.items() if n > 1)
+    if duplicates:
+        raise ValueError(f"mcc_code trùng trong seed_config: {duplicates}")
 
-    for c in codes:
-        rows.append((
-            c["mcc"],
-            c["desc"],
-            c["group"],
-            c["risk"],
-            datetime.now(),
-        ))
-
-    # Fill up to 109 with generated codes if needed
-    existing = len(rows)
-    if existing < 109:
-        groups = ["RETAIL", "FOOD", "TRAVEL", "SERVICES", "UTILITIES"]
-        descs = ["General Retail", "Restaurant", "Gas Station", "Hotel",
-                 "Airline", "Telecom", "Healthcare", "Education", "Entertainment"]
-        # mcc_code là PRIMARY KEY. Trước đây mỗi mã lấy bằng
-        # random.randint(1000, 9999) độc lập, không kiểm trùng: với ~50 mã bốc
-        # từ 9000 giá trị, xác suất đụng nhau khoảng 13% MỖI LẦN CHẠY. Seed
-        # thất bại không đều đặn kiểu đó rất khó truy, và CI đã dính:
-        # `duplicate key value violates unique constraint "pk_mcc_code",
-        # Key (mcc_code)=(5967) already exists` sau hai lần chạy trước đó xanh.
-        #
-        # Bốc mẫu KHÔNG hoàn lại từ phần còn lại của không gian mã, loại sẵn
-        # những mã đã có trong config — hết trùng theo cấu trúc, không phải nhờ
-        # may mắn.
-        used = {row[0] for row in rows}
-        pool = [str(code) for code in range(1000, 10000) if str(code) not in used]
-        for code in random.sample(pool, 109 - existing):
-            rows.append((
-                code,
-                random.choice(descs),
-                random.choice(groups),
-                1 if random.random() < 0.1 else 0,
-                datetime.now(),
-            ))
-    return rows
+    return [(c["mcc"], c["desc"], c["group"], c["risk"], datetime.now()) for c in codes]
 
 
 def generate_merchants(count: int, config: dict, mcc_codes: list[str],
@@ -331,20 +326,6 @@ def generate_merchants(count: int, config: dict, mcc_codes: list[str],
         "Electronics": "LOW",
     }
 
-    # MCC code → category mapping for linking
-    cat_mcc = {
-        "Grocery & Supermarket": ["5411", "5422"],
-        "Food & Beverage": ["5812", "5814"],
-        "Travel & Hospitality": ["3000", "3351", "3501", "4121", "7011"],
-        "Electronics": ["5732", "5999"],
-        "Healthcare & Pharmacy": ["5912", "8011", "8041", "8062"],
-        "Education": ["8299"],
-        "Entertainment": ["7993", "7995"],
-        "Utilities & Bill Payment": ["4814", "4899"],
-        "Fashion & Apparel": ["5691", "5651"],
-        "Telecom": ["4814"],
-        "Insurance": ["6300"],
-    }
 
     rows = []
     used_names = set()
@@ -375,7 +356,7 @@ def generate_merchants(count: int, config: dict, mcc_codes: list[str],
         # Link to MCC code
         mcc = None
         if mcc_codes:
-            cat_mcns = cat_mcc.get(cat, [])
+            cat_mcns = MERCHANT_CATEGORY_MCC.get(cat, [])
             if cat_mcns:
                 mcc = random.choice(cat_mcns)
             else:

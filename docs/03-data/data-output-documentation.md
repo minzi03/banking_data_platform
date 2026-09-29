@@ -120,7 +120,7 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 | core_location | digital_banking.location | 5,000 | 9 | Dimension |
 | core_online_transaction | digital_banking.online_transaction | 500,000 | 15 | **Fact** |
 | core_support_ticket | digital_banking.support_ticket | 25,000 | 10 | Dimension |
-| core_mcc_code | digital_banking.mcc_code | 109 | 5 | Dimension |
+| core_mcc_code | digital_banking.mcc_code | 84 | 5 | Dimension |
 
 **core_online_transaction:** Contains is_fraud flag (0.8% rate), fraud_reason, high-risk location correlation. Indexed on (customer_id, transaction_date), (account_id, transaction_date), is_fraud.
 
