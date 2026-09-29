@@ -255,6 +255,32 @@ sources:
     - name: late_payment_rate
     - name: total_penalty
     - name: cob_dt
+  - name: loan_delinquency
+    description: >
+      Nợ quá hạn theo khoản vay (grain loan_id, cob_dt): DPD của kỳ tới hạn gần nhất,
+      nhóm nợ theo ngưỡng số ngày quá hạn của TT 11/2021, roll pair, vintage.
+    columns:
+    - name: loan_id
+    - name: customer_id
+    - name: branch_code
+    - name: product_code
+    - name: loan_status
+    - name: loan_amount
+    - name: outstanding_balance
+    - name: disbursement_date
+    - name: vintage_month
+    - name: months_on_book
+    - name: last_due_date
+    - name: dpd
+    - name: dpd_bucket
+    - name: prev_dpd
+    - name: prev_dpd_bucket
+    - name: debt_group
+    - name: is_npl
+    - name: max_dpd_ever
+    - name: ever_30_plus
+    - name: ever_90_plus
+    - name: cob_dt
   - name: fraud_risk_txn
     description: Transaction-level fraud risk scoring (rule-based)
     columns:

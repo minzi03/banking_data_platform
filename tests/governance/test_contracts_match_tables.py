@@ -19,9 +19,10 @@ kiểm tĩnh — không cần stack — cùng những gì một lượt chạy t
     layer == namespace      DAG chọn contract theo layer
     dag_id tồn tại          khai trong airflow/dags/
 
-Bảng serving không có DDL: dbt tạo chúng lúc chạy. Cả 13 model đều là
-`select * from source('gold', X)`, nên cột của `serving.X_current` chính là cột
-của `gold.X`. Model nào không theo dạng đó thì test đỏ, thay vì đoán.
+Bảng serving không có DDL: dbt tạo chúng lúc chạy. Model dạng
+`select * from source('gold', X)` có cột của `serving.X_current` chính là cột
+của `gold.X`; model tổng hợp phải enforce contract dbt (cột + data_type), và test
+lấy cột từ đó. Không thuộc hai dạng này thì test đỏ, thay vì đoán.
 
 Chạy: pytest tests/governance/test_contracts_match_tables.py -v
 """
@@ -45,14 +46,36 @@ from generate_data_dictionary import collect_tables  # noqa: E402
 SELECT_STAR_FROM_GOLD = re.compile(r"\bselect \*\s+from\s+\{\{\s*source\('gold',\s*'(\w+)'\)\s*\}\}", re.IGNORECASE)
 
 
+SERVING_YML = REPO_ROOT / "dbt" / "models" / "serving" / "_serving_models.yml"
+
+
+def _enforced_contract_columns() -> dict[str, set[str]]:
+    """Model serving có `contract: {enforced: true}`: dbt build kiểm schema thật
+    với danh sách cột + data_type khai trong yml, nên danh sách đó đáng tin."""
+    out = {}
+    for model in yaml.safe_load(SERVING_YML.read_text(encoding="utf-8"))["models"]:
+        contract = (model.get("config") or {}).get("contract") or {}
+        if contract.get("enforced"):
+            columns = model.get("columns") or []
+            assert all(c.get("data_type") for c in columns), f"{model['name']}: contract cần data_type cho mọi cột"
+            out[model["name"]] = {c["name"] for c in columns}
+    return out
+
+
 def _known_tables() -> dict[str, set[str]]:
     tables = {t.fqn: {c.name for c in t.columns} for t in collect_tables()}
+    contracted = _enforced_contract_columns()
     for model in SERVING_MODELS:
         match = SELECT_STAR_FROM_GOLD.search(model.read_text(encoding="utf-8"))
-        assert match, (
-            f"{model.name} không còn là `select * from source('gold', ...)` — không suy được cột "
-            "của bảng serving từ DDL Gold. Cập nhật cách test này lấy cột."
-        )
+        if match is None:
+            # Model tổng hợp (không phải select * từ Gold): cột lấy từ contract dbt đã
+            # enforce. Không có contract thì không suy được cột — đỏ, không đoán.
+            assert model.stem in contracted, (
+                f"{model.name} không phải `select * from source('gold', ...)` và không có "
+                "`contract: {enforced: true}` trong _serving_models.yml — không suy được cột."
+            )
+            tables[f"lakehouse.serving.{model.stem}"] = contracted[model.stem]
+            continue
         source = f"lakehouse.gold.{match.group(1)}"
         assert source in tables, f"{model.name} đọc {source}, bảng không có trong DDL"
         tables[f"lakehouse.serving.{model.stem}"] = tables[source]
