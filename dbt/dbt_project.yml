@@ -33,6 +33,13 @@ models:
       +materialized: table
       +schema: serving
       +tags: ["serving"]
+    # ─── SEMANTIC LAYER (MetricFlow) ──────────────────────────────────────
+    # Định nghĩa metric dùng chung (ROADMAP 3.8). Chỉ time spine là bảng vật lý;
+    # nằm trong schema serving vì user `dbt` chỉ được tạo bảng ở đó (ADR-0016).
+    semantic:
+      +materialized: table
+      +schema: serving
+      +tags: ["semantic"]
 
 # ==========================================================================
 # VARIABLES (Global)

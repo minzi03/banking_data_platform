@@ -1,0 +1,200 @@
+# =============================================================================
+# Semantic layer — định nghĩa metric dùng chung (ROADMAP 3.8)
+# =============================================================================
+# Mỗi metric ở đây có MỘT định nghĩa; dbt (MetricFlow `mf query`), Superset và
+# API đọc cùng một công thức thay vì mỗi nơi tự viết SQL. Trước đây NPL ratio chỉ
+# có dạng xấp xỉ (`npl_proxy` theo loan_status) và mỗi dashboard phải tự chia.
+#
+# Kiểm: `dbt parse` (MetricFlow validate khi parse), rồi
+#   mf query --metrics npl_ratio --group-by metric_time__day
+# phải bằng tỷ lệ tính thẳng trên gold.loan_delinquency (7,24% tại
+# cob_dt 2026-09-22, đo 2026-09-29).
+# =============================================================================
+
+version: 2
+
+models:
+  - name: metricflow_time_spine
+    description: "Time spine theo ngày cho MetricFlow."
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
+semantic_models:
+  - name: loan_delinquency
+    description: >
+      Nợ quá hạn theo khoản vay tại cob_dt (serving.loan_delinquency_current).
+      Nhóm nợ theo ngưỡng số ngày quá hạn của TT 11/2021; WRITTEN_OFF ra ngoài
+      bảng cân đối (debt_group NULL).
+    model: ref('loan_delinquency_current')
+    defaults:
+      agg_time_dimension: cob_dt
+    entities:
+      - name: loan
+        type: primary
+        expr: loan_id
+      - name: customer
+        type: foreign
+        expr: customer_id
+    dimensions:
+      - name: cob_dt
+        type: time
+        type_params:
+          time_granularity: day
+      - name: dpd_bucket
+        type: categorical
+      - name: prev_dpd_bucket
+        type: categorical
+      - name: debt_group
+        type: categorical
+      - name: loan_status
+        type: categorical
+      - name: vintage_month
+        type: categorical
+      - name: branch_code
+        type: categorical
+      - name: product_code
+        type: categorical
+    measures:
+      - name: loan_count
+        agg: count
+        expr: loan_id
+      - name: outstanding
+        description: Dư nợ mọi khoản, kể cả đã xử lý rủi ro.
+        agg: sum
+        expr: outstanding_balance
+      - name: on_book_outstanding
+        description: Dư nợ còn trong bảng cân đối (có nhóm nợ) — mẫu số của NPL ratio.
+        agg: sum
+        expr: "case when debt_group is not null then outstanding_balance else 0 end"
+      - name: npl_outstanding
+        description: Dư nợ nhóm 3–5.
+        agg: sum
+        expr: "case when is_npl = 1 then outstanding_balance else 0 end"
+      - name: npl_loans
+        agg: sum
+        expr: is_npl
+      - name: ever_30_plus_loans
+        agg: sum
+        expr: ever_30_plus
+      - name: ever_90_plus_loans
+        agg: sum
+        expr: ever_90_plus
+
+  - name: loan_portfolio_risk
+    description: "Rủi ro danh mục theo chi nhánh × sản phẩm (serving.loan_portfolio_risk_current)."
+    model: ref('loan_portfolio_risk_current')
+    defaults:
+      agg_time_dimension: cob_dt
+    entities:
+      - name: branch_product
+        type: primary
+        expr: "branch_code || '|' || product_code"
+    dimensions:
+      - name: cob_dt
+        type: time
+        type_params:
+          time_granularity: day
+      - name: branch_code
+        type: categorical
+      - name: product_code
+        type: categorical
+    measures:
+      - name: payment_count
+        agg: sum
+      - name: late_payment_count
+        agg: sum
+
+metrics:
+  # ── Metric đơn: tử / mẫu của các tỷ lệ (dbt yêu cầu ratio tham chiếu metric) ──
+  - name: loan_count
+    label: Số khoản vay
+    type: simple
+    type_params:
+      measure: loan_count
+
+  - name: on_book_outstanding
+    label: Dư nợ trong bảng cân đối
+    type: simple
+    type_params:
+      measure: on_book_outstanding
+
+  - name: ever_30_plus_loans
+    label: Số khoản từng quá hạn 30+ ngày
+    type: simple
+    type_params:
+      measure: ever_30_plus_loans
+
+  - name: ever_90_plus_loans
+    label: Số khoản từng quá hạn 90+ ngày
+    type: simple
+    type_params:
+      measure: ever_90_plus_loans
+
+  - name: payment_count
+    label: Số kỳ trả
+    type: simple
+    type_params:
+      measure: payment_count
+
+  - name: late_payment_count
+    label: Số kỳ trả muộn
+    type: simple
+    type_params:
+      measure: late_payment_count
+
+  # ── Metric chuẩn ──
+  - name: npl_ratio
+    label: NPL ratio
+    description: >
+      Dư nợ nhóm 3–5 / dư nợ trong bảng cân đối. Định nghĩa CHUẨN của platform —
+      thay cho npl_proxy (theo loan_status) của loan_portfolio_risk.
+    type: ratio
+    type_params:
+      numerator: npl_outstanding
+      denominator: on_book_outstanding
+
+  - name: npl_outstanding
+    label: Dư nợ xấu (nhóm 3–5)
+    type: simple
+    type_params:
+      measure: npl_outstanding
+
+  - name: total_outstanding
+    label: Tổng dư nợ
+    type: simple
+    type_params:
+      measure: outstanding
+
+  - name: npl_loan_count
+    label: Số khoản nợ xấu
+    type: simple
+    type_params:
+      measure: npl_loans
+
+  - name: ever_30_plus_rate
+    label: Tỷ lệ từng quá hạn 30+ ngày
+    description: Dùng cùng vintage_month để vẽ đường vintage.
+    type: ratio
+    type_params:
+      numerator: ever_30_plus_loans
+      denominator: loan_count
+
+  - name: ever_90_plus_rate
+    label: Tỷ lệ từng quá hạn 90+ ngày
+    type: ratio
+    type_params:
+      numerator: ever_90_plus_loans
+      denominator: loan_count
+
+  - name: late_payment_rate
+    label: Tỷ lệ kỳ trả muộn
+    description: >
+      Kỳ LATE / tổng kỳ trả, tính lại từ tổng — KHÔNG trung bình các late_payment_rate
+      theo chi nhánh (trung bình của tỷ lệ sai khi mẫu số khác nhau).
+    type: ratio
+    type_params:
+      numerator: late_payment_count
+      denominator: payment_count
