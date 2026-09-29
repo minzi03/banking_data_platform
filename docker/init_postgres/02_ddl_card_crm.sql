@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS card_crm.card_txn (
     mcc_code            VARCHAR(10),                    -- FK -> digital_banking.mcc_code (nullable)
     channel             VARCHAR(20)     NOT NULL,        -- POS / ECOM / ATM
     status              VARCHAR(20)     NOT NULL,        -- SUCCESS / FAILED / PENDING
+    entry_mode          VARCHAR(10),                     -- CHIP / SWIPE / ONLINE
+    decline_reason      VARCHAR(100),                    -- chỉ khi FAILED; có thể là tổ hợp "A,B"
     processing_time_ms  INT,                             -- transaction processing time
     reference_number    VARCHAR(30),                     -- CDN + sequential number
     created_ts          TIMESTAMP       NOT NULL,
@@ -79,6 +81,10 @@ CREATE TABLE IF NOT EXISTS card_crm.card_txn (
     CONSTRAINT chk_ct_txn_type CHECK (txn_type IN ('PURCHASE', 'CASH_ADVANCE', 'REFUND', 'REVERSAL')),
     CONSTRAINT chk_ct_txn_channel CHECK (channel IN ('POS', 'ECOM', 'ATM')),
     CONSTRAINT chk_ct_txn_status CHECK (status IN ('SUCCESS', 'FAILED', 'PENDING')),
+    -- Hai constraint dưới cũng có trong data_generator/migrations/001_*.sql (cho
+    -- volume cũ) — giữ tên trùng để migration nhận ra đã có.
+    CONSTRAINT chk_ct_entry_mode CHECK (entry_mode IN ('CHIP', 'SWIPE', 'ONLINE')),
+    CONSTRAINT chk_ct_decline_reason CHECK ((status = 'FAILED') = (decline_reason IS NOT NULL)),
     CONSTRAINT chk_ct_txn_amount CHECK (txn_amount <> 0)
 );
 

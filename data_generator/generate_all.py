@@ -143,6 +143,10 @@ def main():
     start_time = time.time()
 
     try:
+        # Schema của Postgres có sẵn có thể cũ hơn DDL (DDL chỉ chạy trên volume
+        # rỗng) — đưa nó lên trước khi ghi, nếu không INSERT sẽ chết ở cột mới.
+        writer.apply_migrations(Path(__file__).resolve().parent / "migrations")
+
         # Disable triggers for faster bulk load
         writer.disable_triggers("all")
 
@@ -376,14 +380,14 @@ def main():
         writer.write_rows("card_crm", "card_txn", [
             "txn_id", "card_id", "customer_id", "txn_date", "txn_amount",
             "txn_type", "currency", "merchant_name", "merchant_category",
-            "mcc_code", "channel", "status", "processing_time_ms",
+            "mcc_code", "channel", "status", "entry_mode", "decline_reason", "processing_time_ms",
             "reference_number", "created_ts", "last_updated"
         ], card_txns)
         if csv_writer:
             csv_writer.write_rows("card_crm", "card_txn", [
                 "txn_id", "card_id", "customer_id", "txn_date", "txn_amount",
                 "txn_type", "currency", "merchant_name", "merchant_category",
-                "mcc_code", "channel", "status", "processing_time_ms",
+                "mcc_code", "channel", "status", "entry_mode", "decline_reason", "processing_time_ms",
                 "reference_number", "created_ts", "last_updated"
             ], card_txns)
 

@@ -44,12 +44,12 @@ PostgreSQL (Source)
 │   ├── card_txn (600,000)
 │   └── crm_interaction (50,000)
 │
-├── digital_banking (6 tables) ──── 582,109 rows
+├── digital_banking (6 tables) ──── 582,084 rows
 │   ├── device (50,000)
 │   ├── location (5,000)
 │   ├── online_transaction (500,000)
 │   ├── support_ticket (25,000)
-│   ├── mcc_code (109)
+│   ├── mcc_code (84)
 │   └── merchant (2,000)               ← NEW
 │
 └── opslakehouse (1 table) ──────── 19 rows
@@ -185,8 +185,9 @@ monthly_payment = P × r(1+r)^n / ((1+r)^n - 1)
 Where P = principal, r = monthly rate, n = months.
 
 **Patterns**:
-- 5% late payment rate
-- 2% missed payment rate
+- Trạng thái trễ hạn **nối tiếp**: mỗi khoản vay đi qua chuỗi bucket DPD (0 / 1–29 / 30–59 / 60–89 / 90+) theo ma trận chuyển tháng `roll_rates` trong `seed_config.yaml` (giả định — không bộ tham khảo nào có dữ liệu để đo)
+- Kết quả kỳ theo bucket: 0 → PAID; 1–29 ngày → LATE (trả muộn + phí 2%); ≥30 ngày → MISSED (không trả, phí 5%, dư nợ giữ nguyên). Ở 90+ `days_late` tăng 30/tháng, nên nhóm nợ 3–5 có mặt
+- Khớp `loan_status`: CLOSED trả đúng hạn mọi kỳ; ACTIVE kỳ cuối đúng hạn; OVERDUE kỳ cuối quá hạn. WRITTEN_OFF không sinh lịch trả (như trước)
 - CLOSED loans: outstanding balance → 0
 - Payment methods: Vietnamese banking context (BANK_TRANSFER most common)
 
@@ -364,13 +365,13 @@ Where P = principal, r = monthly rate, n = months.
 
 ---
 
-### 3.18 digital_banking.mcc_code (109 rows, 5 columns)
+### 3.18 digital_banking.mcc_code (84 rows, 5 columns)
 
 **Mục đích**: Master data — MCC (Merchant Category Code)
 
-- 28 codes from config (standard banking MCCs)
-- 81 auto-generated codes (pool sampling, no duplicates)
-- Risk flags: gambling (7995), cash disbursement (6011), quasi-cash (6051), dating (7273)
+- 84 mã thật theo danh sách mã thẻ (ISO 18245), khai toàn bộ trong `seed_config.yaml`; generator không độn thêm
+- Trước 2026-09-29: 28 mã khai + 81 mã số ngẫu nhiên độn cho đủ 109 — 74% bảng là mã không tồn tại
+- Risk flags: gambling (7995), cash disbursement (6011), quasi-cash (6051), dating (7273), money transfer (4829), telemarketing (5967)
 
 ---
 
@@ -498,7 +499,7 @@ core_banking:
   branch: { row_count: 100, regions: [...], region_weights: [...] }
   customer: { row_count: 10000, gender_distribution: {...}, segment_distribution: {...} }
   txn_account: { row_count: 1200000, type_distribution: {...}, amount_range: [10000, 500000000] }
-  loan_payment: { late_payment_rate: 0.05, missed_payment_rate: 0.02 }
+  loan_payment: { roll_rates: <ma trận chuyển bucket DPD theo tháng> }
   standing_order: { row_count: 15000, frequency_distribution: {...} }
   # ...etc
 
