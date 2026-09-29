@@ -106,6 +106,16 @@ def test_one_row_per_loan(rows):
 
 
 @pytest.mark.integration
+def test_result_types_match_the_ddl(spark, rows):
+    """ROUND(DECIMAL(18,2), 2) ra DECIMAL(19,2) — bảng tạo từ kết quả lệch DDL
+    (drift DAG đo được trên lakehouse thật 2026-09-29). `rows` để các view tồn tại."""
+    from governance.ddl_schema import declared_schemas, normalize_type
+
+    actual = {c: normalize_type(t) for c, t in spark.sql(_job_sql()).dtypes}
+    assert actual == declared_schemas()["lakehouse.gold.loan_delinquency"]
+
+
+@pytest.mark.integration
 def test_dpd_is_latest_installment_due_by_cob_dt(rows):
     loan = rows[1]
     # Kỳ 2026-01-31 (99 ngày) là tương lai so với cob_dt; kỳ 2025-12-15 thuộc partition khác.
