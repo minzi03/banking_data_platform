@@ -100,9 +100,9 @@ class TestGoldJobOrder:
         assert len(time_jobs) == 1
 
     def test_risk_jobs_count(self):
-        """Should have 3 risk jobs (loan_portfolio, fraud, aml)."""
+        """Should have 4 risk jobs (loan_portfolio, fraud, aml, loan_delinquency)."""
         risk_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "risk"]
-        assert len(risk_jobs) == 3
+        assert len(risk_jobs) == 4
 
     def test_every_config_on_disk_is_scheduled(self):
         """

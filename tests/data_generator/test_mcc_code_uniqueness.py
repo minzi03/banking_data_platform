@@ -1,15 +1,19 @@
 """
-mcc_code là PRIMARY KEY của digital_banking.mcc_code, nên generator không được
-sinh trùng — kể cả một lần trong nhiều lần chạy.
+Bảng MCC: chỉ mã thật, không trùng, và mọi nơi dùng mã đều trỏ vào bảng.
 
-Bug đã gặp trên CI: mỗi mã lấy bằng `random.randint(1000, 9999)` độc lập, không
-kiểm trùng. Với ~50 mã bốc từ 9000 giá trị, xác suất đụng khoảng 13% mỗi lần
-chạy, nên seed hỏng ngẫu nhiên: hai run xanh rồi run thứ ba chết với
-`duplicate key value violates unique constraint "pk_mcc_code"`.
+Lịch sử hai lỗi mà file này chặn:
 
-Một test chạy generator ĐÚNG MỘT LẦN sẽ pass khoảng 87% số lần — tức là gần như
-vô dụng. Test dưới đây chạy nhiều lần để một implementation dựa vào may mắn
-gần như chắc chắn bị bắt.
+1. Trùng khoá. mcc_code là PRIMARY KEY. Generator từng độn thêm mã bằng
+   `random.randint(1000, 9999)` không kiểm trùng — seed hỏng ngẫu nhiên khoảng
+   13% số lần chạy (`duplicate key … pk_mcc_code`). Bản sửa đầu bốc không hoàn
+   lại, hết trùng nhưng vẫn là mã giả.
+2. Mã giả. Config khai 28 mã, generator độn 81 mã số ngẫu nhiên cho đủ 109 —
+   74% bảng là mã không tồn tại. `card_txn` còn dùng 5422 (không có trong bảng)
+   và mã riêng của một hãng bay / hãng thuê xe / chuỗi khách sạn (3000, 3351,
+   3501) như mã nhóm ngành.
+
+Giờ số dòng = số mã khai trong seed_config; generator không bốc ngẫu nhiên nên
+không cần chạy nhiều seed để bắt trùng — trùng là lỗi config, báo ngay.
 """
 
 from __future__ import annotations
@@ -19,44 +23,85 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "data_generator"))
 
-from generators.digital_banking import generate_mcc_codes  # noqa: E402
+from generators.card_crm import CARD_CATEGORY_MCC, generate_card_txn  # noqa: E402
+from generators.digital_banking import (  # noqa: E402
+    MERCHANT_CATEGORY_MCC,
+    generate_mcc_codes,
+    generate_merchants,
+)
 
-TARGET_ROW_COUNT = 109
+SEED_CONFIG = REPO_ROOT / "data_generator" / "config" / "seed_config.yaml"
 
 
-def _codes(config: dict) -> list[str]:
-    return [row[0] for row in generate_mcc_codes(config)]
+@pytest.fixture(scope="module")
+def config() -> dict:
+    return yaml.safe_load(SEED_CONFIG.read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("seed", range(40))
-def test_codes_are_unique_across_many_seeds(seed):
-    """
-    40 seed khác nhau. Nếu generator quay lại bốc ngẫu nhiên có hoàn lại, xác
-    suất cả 40 lần đều không trùng là 0.87^40 ≈ 0.4% — coi như chắc chắn đỏ.
-    """
+@pytest.fixture(scope="module")
+def mcc_config(config) -> dict:
+    return config["digital_banking"]["mcc_code"]
+
+
+@pytest.fixture(scope="module")
+def configured(mcc_config) -> list[str]:
+    return [c["mcc"] for c in mcc_config["codes"]]
+
+
+def test_configured_codes_are_real_category_codes(configured):
+    assert len(configured) >= 80, "danh sách MCC bị rút gọn bất thường"
+    assert len(configured) == len(set(configured)), "mã trùng trong seed_config"
+    for code in configured:
+        assert code.isdigit() and len(code) == 4, code
+        # 3000–3999: mã riêng từng hãng bay / hãng thuê xe / chuỗi khách sạn.
+        assert not 3000 <= int(code) <= 3999, f"{code} là mã của một doanh nghiệp, không phải nhóm ngành"
+        # 7800–7802: xổ số / casino / đua do chính phủ cấp phép (bộ Xóm ghi sai).
+        assert not 7800 <= int(code) <= 7802, code
+
+
+@pytest.mark.parametrize("seed", [0, 1, 7, 12345])
+def test_generator_emits_exactly_the_configured_codes(mcc_config, configured, seed):
+    """Không độn thêm — với bất kỳ seed nào, số dòng và tập mã = config."""
     random.seed(seed)
-    codes = _codes({"codes": []})
-    duplicates = {c for c in codes if codes.count(c) > 1}
-    assert not duplicates, f"seed={seed}: mã trùng {sorted(duplicates)}"
+    rows = generate_mcc_codes(mcc_config)
+    assert [r[0] for r in rows] == configured
 
 
-def test_generated_codes_do_not_collide_with_configured_codes():
-    """Mã sinh thêm không được đụng mã đã khai báo trong seed_config."""
-    random.seed(12345)
-    configured = [
-        {"mcc": "5411", "desc": "Grocery Stores", "group": "RETAIL", "risk": 0},
-        {"mcc": "5812", "desc": "Restaurants", "group": "FOOD", "risk": 0},
-    ]
-    codes = _codes({"codes": configured})
-    assert len(codes) == len(set(codes))
-    assert codes[: len(configured)] == [c["mcc"] for c in configured]
+def test_generator_rejects_duplicate_codes():
+    duplicated = {
+        "codes": [
+            {"mcc": "5411", "desc": "Grocery Stores and Supermarkets", "group": "RETAIL", "risk": 0},
+            {"mcc": "5411", "desc": "Grocery again", "group": "RETAIL", "risk": 0},
+        ]
+    }
+    with pytest.raises(ValueError, match="5411"):
+        generate_mcc_codes(duplicated)
 
 
-def test_row_count_is_preserved():
-    """Sửa tính duy nhất không được đổi số dòng sinh ra."""
-    random.seed(7)
-    assert len(_codes({"codes": []})) == TARGET_ROW_COUNT
+@pytest.mark.parametrize("mapping", [CARD_CATEGORY_MCC, MERCHANT_CATEGORY_MCC], ids=["card_txn", "merchant"])
+def test_category_maps_point_into_the_table(mapping, configured):
+    for category, codes in mapping.items():
+        missing = set(codes) - set(configured)
+        assert not missing, f"{category}: {sorted(missing)} không có trong bảng MCC"
+
+
+def test_card_txn_mcc_matches_its_category(config, configured):
+    """Mọi category cấu hình đều có mã, nên MCC luôn thuộc đúng category."""
+    random.seed(3)
+    cards = [(i, i, "DEBIT", "ACTIVE") for i in range(1, 21)]
+    rows = generate_card_txn(500, config["card_crm"]["card_txn"], cards, configured)
+    for row in rows:
+        category, mcc = row[8], row[9]
+        assert category in CARD_CATEGORY_MCC, f"category {category} chưa có MCC"
+        assert mcc in CARD_CATEGORY_MCC[category], f"{category} nhận MCC {mcc}"
+
+
+def test_merchant_mcc_is_in_the_table(config, configured):
+    random.seed(5)
+    rows = generate_merchants(200, config["digital_banking"]["merchant"], configured)
+    assert {r[3] for r in rows} <= set(configured)

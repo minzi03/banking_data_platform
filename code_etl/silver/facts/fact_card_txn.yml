@@ -30,6 +30,8 @@ sql: |
       t.merchant_category,
       t.channel,
       t.status,
+      t.entry_mode,
+      t.decline_reason,
       t.created_ts,
       t.cob_dt
   FROM lakehouse.bronze.core_card_txn t

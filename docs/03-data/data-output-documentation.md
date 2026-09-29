@@ -124,7 +124,7 @@ Schema `lakehouse.bronze` — 22 bảng. Tầng giữ nguyên cấu trúc nguồ
 | core_location | digital_banking.location | 5,000 | 9 | Dimension |
 | core_online_transaction | digital_banking.online_transaction | 500,000 | 15 | **Fact** |
 | core_support_ticket | digital_banking.support_ticket | 25,000 | 10 | Dimension |
-| core_mcc_code | digital_banking.mcc_code | 109 | 5 | Dimension |
+| core_mcc_code | digital_banking.mcc_code | 84 | 5 | Dimension |
 | core_merchant | digital_banking.merchant | 2,000 | 9 | Dimension |
 
 **core_merchant:** Danh bạ merchant, `mcc_code` FK → core_mcc_code. Chưa có Silver/Gold consumer — `card_txn` vẫn mang `merchant_name` dạng text, chưa có `merchant_id`.
