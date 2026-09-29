@@ -108,8 +108,16 @@ def test_one_row_per_loan(rows):
 @pytest.mark.integration
 def test_result_types_match_the_ddl(spark, rows):
     """ROUND(DECIMAL(18,2), 2) ra DECIMAL(19,2) — bảng tạo từ kết quả lệch DDL
-    (drift DAG đo được trên lakehouse thật 2026-09-29). `rows` để các view tồn tại."""
-    from governance.ddl_schema import declared_schemas, normalize_type
+    (drift DAG đo được trên lakehouse thật 2026-09-29). `rows` để các view tồn tại.
+
+    ddl_schema.py nạp theo đường dẫn: `import governance` kéo pydantic, mà job CI
+    Gold Spark Regression không cài (ddl_schema chỉ dùng thư viện chuẩn)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_ddl_schema", PROJECT_ROOT / "governance" / "ddl_schema.py")
+    ddl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ddl)
+    declared_schemas, normalize_type = ddl.declared_schemas, ddl.normalize_type
 
     actual = {c: normalize_type(t) for c, t in spark.sql(_job_sql()).dtypes}
     assert actual == declared_schemas()["lakehouse.gold.loan_delinquency"]

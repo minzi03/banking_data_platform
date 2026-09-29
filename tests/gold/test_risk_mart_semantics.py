@@ -174,7 +174,14 @@ def test_npl_proxy_sums_overdue_and_written_off_outstanding(spark):
 
     # Kiểu kết quả = DDL. Bảng tạo từ schema kết quả (gold_job khi bảng chưa có)
     # từng lệch DDL ở 4 cột tiền: SUM ra DECIMAL(28/29,2) (drift DAG, 2026-09-29).
-    from governance.ddl_schema import declared_schemas, normalize_type
+    # Nạp ddl_schema.py theo đường dẫn: `import governance` kéo pydantic, mà job CI
+    # Gold Spark Regression không cài (ddl_schema chỉ dùng thư viện chuẩn).
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_ddl_schema", PROJECT_ROOT / "governance" / "ddl_schema.py")
+    ddl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ddl)
+    declared_schemas, normalize_type = ddl.declared_schemas, ddl.normalize_type
 
     actual = {c: normalize_type(t) for c, t in result.dtypes}
     assert actual == declared_schemas()["lakehouse.gold.loan_portfolio_risk"]
