@@ -350,9 +350,11 @@ TQ "SELECT customer_id, full_name_masked, aum_total, rfm_segment, has_credit_car
     WHERE cross_sell_credit_card_flag = 1 AND rfm_segment IN ('Champions','Loyal Customers')
       AND days_since_last_txn <= 30
     ORDER BY aum_total DESC LIMIT 10"
+# Semantic layer: 13 metric định nghĩa một lần (dbt/models/semantic/_semantic_models.yml)
+docker exec banking-dbt sh -lc "cd /usr/src/dbt && mf query   --metrics npl_ratio,npl_loan_count,late_payment_rate --group-by metric_time__day"
 ```
 
-**Expected.** `dbt build` PASS (17 model + 137 test). Serving có `rows_ = customers`, `MIN(cob_dt) = MAX(cob_dt) = $COB`. Query cross-sell (use case chính của đề) trả về danh sách khách.
+**Expected.** `dbt build` PASS=154 (17 model + 137 test; chạy **không** kèm `--vars` thì 2 test singular FAIL có chủ đích vì `cob_dt` rơi về sentinel 1900-01-01). `mf query` ra một dòng cho `$COB` (đo 2026-09-30: NPL 7,24%, 252 khoản, late payment 2,10%; thiếu `--group-by` thì bảng rỗng). Serving có `rows_ = customers`, `MIN(cob_dt) = MAX(cob_dt) = $COB`. Query cross-sell (use case chính của đề) trả về danh sách khách.
 
 **Talking points.** Serving là `table`, không phải view (Iceberg REST của Trino không hỗ trợ `createView`). `cob_dt` truyền tường minh, không dùng `MAX(cob_dt)`: thiếu snapshot thì build fail thay vì âm thầm phục vụ dữ liệu cũ.
 

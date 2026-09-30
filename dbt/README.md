@@ -57,6 +57,16 @@ docker exec banking-airflow-scheduler airflow dags trigger dbt_serving_publish \
 
 Kiểm tra tĩnh (không cần Trino): `dbt parse --target docker`.
 
+Semantic layer (MetricFlow, `mf` có sẵn trong image):
+
+```bash
+docker exec banking-dbt sh -lc "cd /usr/src/dbt && mf validate-configs &&   mf query --metrics npl_ratio,npl_loan_count,late_payment_rate --group-by metric_time__day"
+```
+
+Cần `--group-by metric_time__day`: không có nó, bản 0.213 trả về bảng rỗng. Đo trên
+stack 2026-09-30 (serving `cob_dt` 2026-09-23): `npl_ratio 0.0724178`, `npl_loan_count 252`,
+`late_payment_rate 0.0210158`.
+
 ## Lưu ý
 
 - `dbt build` dựng model trước rồi mới test: nếu test fail, bảng serving **đã bị

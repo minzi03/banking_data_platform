@@ -994,7 +994,7 @@ jobs:
         # chạy lại là idempotent.
         run_stage "G2 — per-job CLI smoke: silver scd_type1" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/base_job/scd_type1.py \
-          --config code_etl/silver/dims/dim_branch.yml --cob_dt "${COB_DT}"
+          --config code_etl/silver/dims/dim_employee.yml --cob_dt "${COB_DT}"
         run_stage "G2 — per-job CLI smoke: silver fact_txn" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/base_job/fact_txn.py \
           --config code_etl/silver/facts/fact_txn_account.yml --cob_dt "${COB_DT}"
