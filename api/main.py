@@ -340,6 +340,9 @@ async def get_risk_score(
     )
 
 
+HIGH_AUM_BUCKETS = ("PRIORITY", "VIP")
+
+
 @app.get("/customer/{customer_id}/recommendations", response_model=Recommendation, tags=["Recommendations"])
 async def get_recommendations(
     customer_id: int,
@@ -377,16 +380,19 @@ async def get_recommendations(
 
     row = results[0]
 
-    # Build recommended products
-    recommended_products = []
+    # Build recommended products. Miền giá trị lấy từ Gold (đo 2026-09-30):
+    # aum_bucket ∈ MASS/AFFLUENT/PRIORITY/VIP (customer_360.yml), primary_opportunity
+    # có chuỗi 'None' khi không có cơ hội (campaign_target) — không phải sản phẩm.
+    candidates = []
     if row.get("cross_sell_credit_card_flag"):
-        recommended_products.append("Credit Card")
-    if row.get("primary_opportunity"):
-        recommended_products.append(row["primary_opportunity"])
-    if row.get("aum_bucket") in ["500M-1B", "1B+"]:
-        recommended_products.append("Priority Banking Package")
+        candidates.append("Credit Card")
+    if row.get("primary_opportunity") and row["primary_opportunity"] != "None":
+        candidates.append(row["primary_opportunity"])
+    if row.get("aum_bucket") in HIGH_AUM_BUCKETS:
+        candidates.append("Priority Banking Package")
     if row.get("rfm_segment") in ["Loyal Customers", "Potential Loyalists"]:
-        recommended_products.append("Savings Account Premium")
+        candidates.append("Savings Account Premium")
+    recommended_products = list(dict.fromkeys(candidates))
 
     return Recommendation(
         customer_id=row["customer_id"],

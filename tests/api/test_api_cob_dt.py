@@ -93,3 +93,37 @@ def test_joined_endpoints_qualify_cob_dt(calls, path, column):
     sql, params = calls[-1]
     assert f"AND {column} = ?" in sql
     assert params == (7, date(2026, 9, 29))
+
+
+def _recommend(monkeypatch, **row):
+    base = {
+        "customer_id": 1,
+        "cross_sell_credit_card_flag": False,
+        "primary_opportunity": None,
+        "rfm_segment": "At Risk",
+        "aum_bucket": "MASS",
+        "campaign_type": "GENERAL",
+        "cob_dt": "2026-09-22",
+    }
+    base.update(row)
+    monkeypatch.setattr(api, "execute_query", lambda sql, params=None: [base])
+    response = TestClient(api.app).get("/customer/1/recommendations")
+    assert response.status_code == 200
+    return response.json()["recommended_products"]
+
+
+def test_recommendations_are_not_repeated(monkeypatch):
+    """Stack 2026-09-30: customer 1 nhận ["Credit Card", "Credit Card", ...]."""
+    products = _recommend(monkeypatch, cross_sell_credit_card_flag=True, primary_opportunity="Credit Card")
+    assert products == ["Credit Card"]
+
+
+def test_none_opportunity_is_not_a_product(monkeypatch):
+    """campaign_target ghi chuỗi 'None' cho 337 khách (cob_dt 2026-09-22)."""
+    assert _recommend(monkeypatch, primary_opportunity="None") == []
+
+
+@pytest.mark.parametrize("bucket", ["PRIORITY", "VIP"])
+def test_high_aum_buckets_get_priority_banking(monkeypatch, bucket):
+    """Điều kiện cũ so với "500M-1B"/"1B+" — không có trong Gold, nhánh không bao giờ chạy."""
+    assert _recommend(monkeypatch, aum_bucket=bucket) == ["Priority Banking Package"]
