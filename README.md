@@ -241,8 +241,8 @@ counts are ambiguous without them.
 | Source workloads           |             22 | Executable Bronze ingestion configurations; templates and registries excluded   |
 | Bronze batch tables        |             22 | One per ingestion workload                                                      |
 | Bronze CDC tables          |              6 | Append-only change-history tables                                               |
-| Silver SCD Type 2 dims     |              2 | `dim_customer`, `dim_account`                                                   |
-| Silver SCD Type 1 dims     |              8 | Branch, product, card, employee, device, location, deposit, loan                |
+| Silver SCD Type 2 dims     |              4 | `dim_customer`, `dim_account`, `dim_product`, `dim_branch`                      |
+| Silver SCD Type 1 dims     |              6 | Card, employee, device, location, deposit, loan                                 |
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
 | Historical Gold tables     |             15 | Spark-managed Gold history, partitioned by `cob_dt`                             |
@@ -254,21 +254,19 @@ counts are ambiguous without them.
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
 | Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
-| dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-29) |
+| dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-30) |
 | dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
-| Automated tests            |            972 | Python `def test_*` functions                                                   |
+| Automated tests            |          1,055 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
-> **The table above is the last promoted measurement (manifest commit `30458be`,
-> 2026-09-29).** The 2026-09-30 audit remediation changed some static counts, recomputed
-> with the manifest's own collectors: Silver SCD2 dimensions **2 → 4** (product and
-> branch now keep history), SCD1 **8 → 6**, `def test_*` functions **972 → 1,034**,
-> pytest nodes **1,909 → 2,016**. Every other static count is unchanged. The table is
-> rebound only when `scripts/generate_metrics_manifest.py` is re-run against a live
-> stack and promoted — runtime rows (transactions, CDC rows, dbt build) have not been
-> re-measured since the fixes. See [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
+> **Measured 2026-09-30 after the audit remediation** (`cob_dt` 2026-09-22; the
+> manifest's `git_commit` names the exact commit). Compared with the previous promotion
+> (2026-09-29): Silver SCD2 dimensions **2 → 4** (product and branch now keep history),
+> SCD1 **8 → 6**, `def test_*` functions **972 → 1,055**. The dbt rows come from
+> `dbt build --vars '{"cob_dt": …}'` and are not bound to the manifest. See
+> [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
 
 **Curated transactions** replaces the previous `4.6M+` claim. That figure counted
 `COUNT(*)` across accumulated full-snapshot fact partitions, so the same
