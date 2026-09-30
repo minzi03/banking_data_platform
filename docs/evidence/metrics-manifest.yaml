@@ -2,12 +2,12 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: 67b187a766041311f88b2205a0a098d7518dc407
-    git_branch: fix/rfm-cutoffs-per-kpi-dictionary
+    git_commit: 5a8a860e917322441c0d2243f1a78e6dfde814ac
+    git_branch: chore/manifest-after-104-105
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-30T06:39:06Z'
+    generated_at_utc: '2026-09-30T15:27:09Z'
     requested_cob_dt: '2026-09-29'
     verification_scope: full
   environment:
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 12
+      value: 1
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
@@ -202,7 +202,7 @@ metrics:
         distinct_ticket_id: 25000
     scd2:
       dim_customer:
-        total_rows: 30001
+        total_rows: 10000
         distinct_business_keys: 10000
         current_rows: 10000
         current_distinct_business_keys: 10000
@@ -210,7 +210,7 @@ metrics:
         open_ended_rows: 10000
         overlapping_intervals: 0
       dim_account:
-        total_rows: 90000
+        total_rows: 30000
         distinct_business_keys: 30000
         current_rows: 30000
         current_distinct_business_keys: 30000
@@ -548,13 +548,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 1050
+        value: 1068
         declared: 1068
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 2013
+        value: 2062
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -614,7 +614,7 @@ metrics:
         schema serving (dbt_project.yml). Không tính dbt/models/semantic/.'
     business_vs_utc_date_rows:
       total_rows: 1200000
-      divergent_date_rows: 70233
+      divergent_date_rows: 70350
       metric_type: runtime
       declared: null
       provenance: query:platform.business_vs_utc_date_rows
