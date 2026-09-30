@@ -12,10 +12,10 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 DAG_ID              = "ops_lineage_dag"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
-COB_DT              = "{{ ds }}"
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -30,7 +30,7 @@ dag = DAG(
     default_args=DEFAULT_ARGS,
     description="Lineage emission — Record and emit data lineage",
     # Cùng mẫu với ops_data_quality_dag / ops_pii_masking_daily_dag: chạy 08:00, sensor chờ cờ
-    # silver_all_dag + gold_all_dag của cùng {{ ds }}. Trước đây None và không DAG nào
+    # silver_all_dag + gold_all_dag của cùng cob_dt. Trước đây None và không DAG nào
     # trigger — lineage_log chỉ có dữ liệu khi có người bấm tay (TD-13).
     schedule_interval="0 8 * * *",  # Daily at 8:00 AM (Production - after Gold 06:00)
     catchup=False,

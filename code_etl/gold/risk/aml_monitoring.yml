@@ -31,8 +31,8 @@ sql: |
       t.channel, t.description, t.counter_account,
       c.customer_segment, a.branch_code
     FROM lakehouse.silver.fact_txn_account t
-    LEFT JOIN lakehouse.silver.dim_customer c ON t.customer_id=c.customer_id AND c.is_current=1
-    LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND a.is_current=1
+    LEFT JOIN lakehouse.silver.dim_customer c ON t.customer_id=c.customer_id AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
+    LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND DATE '{{ cob_dt }}' BETWEEN a.effective_from AND a.effective_to
     WHERE t.cob_dt = DATE '{{ cob_dt }}'
   ),
   -- Từng có CTE `customer_stats` ở đây, tính total_credit / total_debit / txn_count

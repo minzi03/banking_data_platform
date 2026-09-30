@@ -104,9 +104,9 @@ echo "Registering SILVER tables..."
 echo "============================"
 
 # Silver - Dimensions
-register_table "silver" "dim_branch" "SCD Type 1 - Branch dimension" '[{"name":"branch_sk","dataType":"BIGINT"},{"name":"branch_code","dataType":"VARCHAR"},{"name":"branch_name","dataType":"VARCHAR"},{"name":"city","dataType":"VARCHAR"},{"name":"region","dataType":"VARCHAR"},{"name":"manager_id","dataType":"BIGINT"},{"name":"open_date","dataType":"DATE"},{"name":"is_active","dataType":"INT"},{"name":"cob_dt","dataType":"DATE"}]'
+register_table "silver" "dim_branch" "SCD Type 2 - Branch dimension" '[{"name":"branch_sk","dataType":"BIGINT"},{"name":"branch_code","dataType":"VARCHAR"},{"name":"branch_name","dataType":"VARCHAR"},{"name":"city","dataType":"VARCHAR"},{"name":"region","dataType":"VARCHAR"},{"name":"manager_id","dataType":"BIGINT"},{"name":"open_date","dataType":"DATE"},{"name":"is_active","dataType":"INT"},{"name":"cob_dt","dataType":"DATE"}]'
 
-register_table "silver" "dim_product" "SCD Type 1 - Product dimension" '[{"name":"product_sk","dataType":"BIGINT"},{"name":"product_code","dataType":"VARCHAR"},{"name":"product_name","dataType":"VARCHAR"},{"name":"product_type","dataType":"VARCHAR"},{"name":"interest_rate","dataType":"DECIMAL"},{"name":"is_active","dataType":"INT"},{"name":"cob_dt","dataType":"DATE"}]'
+register_table "silver" "dim_product" "SCD Type 2 - Product dimension" '[{"name":"product_sk","dataType":"BIGINT"},{"name":"product_code","dataType":"VARCHAR"},{"name":"product_name","dataType":"VARCHAR"},{"name":"product_type","dataType":"VARCHAR"},{"name":"interest_rate","dataType":"DECIMAL"},{"name":"is_active","dataType":"INT"},{"name":"cob_dt","dataType":"DATE"}]'
 
 register_table "silver" "dim_employee" "SCD Type 1 - Employee dimension" '[{"name":"employee_sk","dataType":"BIGINT"},{"name":"employee_id","dataType":"BIGINT"},{"name":"full_name","dataType":"VARCHAR"},{"name":"position","dataType":"VARCHAR"},{"name":"branch_code","dataType":"VARCHAR"},{"name":"hire_date","dataType":"DATE"},{"name":"is_active","dataType":"INT"},{"name":"cob_dt","dataType":"DATE"}]'
 

@@ -315,11 +315,12 @@ class TestNoUnimplementedClaims:
         """
         Chốt chặn chống README drift quay lại: hai field này chỉ được đặt true
         khi P1 thực sự persist Kafka metadata vào valid Bronze CDC.
-        Hiện tại cdc_dlq.py drop kafka metadata và meta.cdc_watermark chỉ có
-        table_name → cả hai phải là false.
+        Hiện tại cdc_dlq.py drop kafka metadata và meta.cdc_watermark theo dõi
+        snapshot Iceberg theo bảng, không theo partition → cả hai phải là false.
         """
         wm = manifest["metrics"]["cdc"]["consolidation_watermark"]
-        assert wm["implementation"] == "timestamp_plus_spark_batch_id"
+        assert wm["implementation"] == "iceberg_snapshot_id"
+        assert wm["event_ordering"] == "cdc_timestamp_ms_then_spark_batch_id"
         assert wm["partition_aware"] is False
         assert wm["kafka_offsets_persisted_in_valid_bronze"] is False
 

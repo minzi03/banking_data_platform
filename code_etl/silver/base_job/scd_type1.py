@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from common_utils import get_target_table, load_source_df, parse_arguments
-from spark.iceberg_utils import table_exists
+from spark.iceberg_utils import create_iceberg_table_if_not_exists, table_exists
 from spark.spark_session import get_spark_session
 from utils.logger import get_logger
 from utils.yaml_loader import load_config
@@ -51,8 +51,12 @@ def run_scd_type1(spark, config: dict, cob_dt: str, logger):
 
     # Check table exists, create if not (first run scenario)
     if not table_exists(spark, target):
+        # Tạo bảng tường minh rồi append: writeTo().overwritePartitions() không tự
+        # tạo được bảng Iceberg chưa tồn tại (TABLE_OR_VIEW_NOT_FOUND) — cùng lý do
+        # fact_txn.py / gold_job.py đã tạo bảng trước khi ghi.
         logger.warning(f"Target table {target} does not exist. Creating from source DataFrame...")
-        source_df.writeTo(target).overwritePartitions()
+        create_iceberg_table_if_not_exists(source_df, target, logger)
+        source_df.writeTo(target).append()
         logger.info(f"Created {target} with initial data load")
         return
 

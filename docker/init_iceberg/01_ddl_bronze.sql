@@ -1,7 +1,9 @@
 -- =============================================================================
--- DDL: Bronze Layer — Iceberg Tables (16 tables)
+-- DDL: Bronze Layer — Iceberg Tables (21 bảng; core_loan_payment được tạo ở lần ghi đầu, cũng partition theo cob_dt)
 -- Catalog: lakehouse  |  Schema: bronze
--- Strategy: full_snapshot for dims, partitioned by cob_dt for facts
+-- Strategy: full snapshot mỗi cob_dt, MỌI bảng partition theo cob_dt.
+-- overwritePartitions() trên bảng KHÔNG partition ghi đè toàn bộ bảng, nên bảng
+-- nào thiếu partition chỉ giữ được ngày mới nhất (mất lịch sử, backfill ghi đè).
 -- =============================================================================
 
 -- =============================================================================
@@ -21,6 +23,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_branch (
     cob_dt          DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -38,6 +41,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_product (
     cob_dt          DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -63,6 +67,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_customer (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -84,6 +89,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_account (
     cob_dt          DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -104,6 +110,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_deposit (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -125,6 +132,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_loan (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -165,6 +173,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_employee (
     cob_dt          DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -186,6 +195,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_card (
     cob_dt          DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -232,6 +242,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_crm_interaction (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -251,6 +262,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_device (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -269,6 +281,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_location (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -313,6 +326,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_support_ticket (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -327,6 +341,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_mcc_code (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -348,6 +363,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_standing_order (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -366,6 +382,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_merchant (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -389,6 +406,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_rule (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -425,6 +443,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_alert (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
@@ -452,4 +471,5 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_customer_risk (
     cob_dt              DATE
 )
 USING iceberg
+PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');

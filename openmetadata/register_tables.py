@@ -129,8 +129,8 @@ def main():
         ],
         "silver": [
             # Dimensions
-            ("dim_branch", "SCD Type 1 - Branch dimension"),
-            ("dim_product", "SCD Type 1 - Product dimension"),
+            ("dim_branch", "SCD Type 2 - Branch dimension"),
+            ("dim_product", "SCD Type 2 - Product dimension"),
             ("dim_employee", "SCD Type 1 - Employee dimension"),
             ("dim_card", "SCD Type 1 - Card dimension"),
             ("dim_device", "SCD Type 1 - Device dimension"),

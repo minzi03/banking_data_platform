@@ -28,6 +28,10 @@ quality_rules:
     - product_name
     - product_type
     - product_group
+    - product_sk
+    - effective_from
+    - effective_to
+    - is_current
   non_null_columns:
     - product_code
     - product_name

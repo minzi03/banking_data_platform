@@ -60,8 +60,10 @@ USING iceberg
 TBLPROPERTIES ('format-version' = '2');
 
 -- CDC Watermark (track consolidation progress)
+-- last_snapshot_id = tiến độ (snapshot Bronze CDC đã MERGE); ts/batch chỉ để quan sát.
 CREATE TABLE IF NOT EXISTS lakehouse.meta.cdc_watermark (
     table_name               VARCHAR(100),
+    last_snapshot_id         BIGINT,
     last_cdc_timestamp_ms    BIGINT,
     last_spark_batch_id      BIGINT,
     last_processed_at        TIMESTAMP

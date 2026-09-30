@@ -14,6 +14,8 @@ from airflow.operators.bash import BashOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
+from cob_dt import COB_DT
+
 DAG_ID = "ops_schema_drift_dag"
 APP = "/opt/project/governance/schema_drift.py"
 PG = "postgres-etl"
@@ -34,7 +36,7 @@ dag = DAG(DAG_ID, default_args=DEFAULT_ARGS,
 wait_dq = SqlSensor(
     task_id="wait_dq",
     conn_id=PG,
-    sql='''SELECT 1 FROM opslakehouse.flag_job_etl WHERE job_name = 'ops_data_quality_dag' AND status = 'S' AND cob_dt = DATE '{{ ds }}' LIMIT 1''',
+    sql=f"SELECT 1 FROM opslakehouse.flag_job_etl WHERE job_name = 'ops_data_quality_dag' AND status = 'S' AND cob_dt = DATE '{COB_DT}' LIMIT 1",
     poke_interval=60, timeout=3600, mode="reschedule", dag=dag)
 
 check_schema_drift = BashOperator(

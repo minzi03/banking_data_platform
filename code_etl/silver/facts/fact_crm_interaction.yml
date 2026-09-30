@@ -34,5 +34,5 @@ sql: |
   FROM lakehouse.bronze.core_crm_interaction i
   LEFT JOIN lakehouse.silver.dim_customer c
       ON i.customer_id = c.customer_id
-      AND c.is_current = 1
+      AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
   WHERE i.cob_dt = DATE '{{ cob_dt }}'

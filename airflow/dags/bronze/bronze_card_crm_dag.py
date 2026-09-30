@@ -14,15 +14,15 @@ from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 import pendulum
 
-from jdbc_conn_utils import resolve_jdbc_conn
+from jdbc_conn_utils import jdbc_jinja_args
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 DAG_ID            = "bronze_card_crm_dag"
 ETL_PATH          = Variable.get("ETL_PATH", default_var="/opt/project/code_etl")
 SPARK_APPLICATION = f"{ETL_PATH}/bronze/base_job/ingestion_jdbc.py"
 CONFIG_DIR        = Path(ETL_PATH) / "bronze" / "card_crm"
 CONN_ID           = "postgres-card-crm"
-COB_DT            = "{{ ds }}"
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -42,7 +42,9 @@ dag = DAG(
     tags=["bronze", "card_crm", "postgresql", "production"],
 )
 
-conn_tmpl = resolve_jdbc_conn(CONN_ID)
+# Template, render lúc task chạy — không query metadata DB lúc parse DAG,
+# và password đi qua env (docker exec -e), không qua argv (ps / Spark UI).
+jdbc = jdbc_jinja_args(CONN_ID)
 
 dag_start = make_start_flag_task("dag_start", DAG_ID, "bronze", dag, cob_dt=COB_DT)
 
@@ -53,7 +55,7 @@ with TaskGroup("ingest_all", dag=dag) as ingest_all:
         remote_cfg = f"{CONFIG_DIR}/{config_file.name}"
 
         cmd = (
-            f"/usr/bin/docker exec banking-spark-worker-1 "
+            f"/usr/bin/docker exec -e DB_PASSWORD banking-spark-worker-1 "
             f"/opt/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client "
             f"--conf spark.driver.memory=512m "
             f"--conf spark.executor.memory=768m "
@@ -61,14 +63,15 @@ with TaskGroup("ingest_all", dag=dag) as ingest_all:
             f"{SPARK_APPLICATION} "
             f"--config {remote_cfg} "
             f"--cob_dt {COB_DT} "
-            f"--jdbc_url '{conn_tmpl['jdbc_url']}' "
-            f"--db_user {conn_tmpl['db_user']} "
-            f"--db_password '{conn_tmpl['db_password']}'"
+            f"--jdbc_url '{jdbc['jdbc_url']}' "
+            f"--db_user '{jdbc['db_user']}'"
         )
 
         BashOperator(
             task_id=f"ingest_{table_name}",
             bash_command=cmd,
+            env={"DB_PASSWORD": jdbc["db_password"]},
+            append_env=True,
             dag=dag,
         )
 

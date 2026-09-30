@@ -1,5 +1,5 @@
 import os,logging,argparse
-from datetime import datetime
+from datetime import date, datetime
 import mlflow,mlflow.sklearn
 import numpy as np,pandas as pd
 from trino.dbapi import connect
@@ -22,12 +22,16 @@ def trino_auth_kwargs(user: str) -> dict:
         "auth": BasicAuthentication(user, password),
         "verify": os.environ.get("TRINO_CA_CERT") or True,
     }
-FEATURES=["total_accounts","total_cards","total_loans","total_deposit_balance","total_loan_outstanding","aum_total","txn_count_30d","txn_amount_30d","days_since_last_txn","interaction_count_90d","rfm_recency_score","rfm_frequency_score","rfm_monetary_score"]
+# churn_flag = days_since_last_txn > 90 (customer_360.yml) → days_since_last_txn và
+# rfm_recency_score (xếp hạng của cùng đại lượng) là nhãn trá hình; đưa vào feature
+# thì model chỉ học lại luật. Loại ra để model phải dựa vào hành vi khác.
+FEATURES=["total_accounts","total_cards","total_loans","total_deposit_balance","total_loan_outstanding","aum_total","txn_count_30d","txn_amount_30d","interaction_count_90d","rfm_frequency_score","rfm_monetary_score"]
 def load_features(cob_dt):
     user=os.getenv("TRINO_USER","ml")
     conn=connect(host=os.getenv("TRINO_HOST","trino"),port=int(os.getenv("TRINO_PORT","8080")),user=user,catalog="iceberg",schema="serving",**trino_auth_kwargs(user))
     cols=",".join(FEATURES)
-    sql=f"SELECT customer_id,customer_segment,{cols},churn_flag FROM mart_customer_360_current WHERE cob_dt=DATE ''{cob_dt}''"
+    cob_dt=date.fromisoformat(cob_dt).isoformat()  # chỉ nhận đúng định dạng ngày trước khi đưa vào SQL
+    sql=f"SELECT customer_id,customer_segment,{cols},churn_flag FROM mart_customer_360_current WHERE cob_dt=DATE '{cob_dt}'"
     df=pd.read_sql(sql,conn)
     conn.close()
     return df

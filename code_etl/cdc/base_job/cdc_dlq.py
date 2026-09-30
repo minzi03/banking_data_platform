@@ -10,9 +10,16 @@ Design:
         └── invalid → bronze.cdc_dead_letter (append)
 
 Invalid-event criteria:
-    1. __op is null or not in (c, u, d, r)
-    2. __ts_ms is null or not a valid long
-    3. Primary key column is null (configurable per table)
+    1. payload is null / not parseable (PARSE_ERROR)
+    2. __op is null or not in (c, u, d, r)
+    3. __ts_ms is null or not a valid long
+    4. Primary key column is null (target.primary_key in the table config)
+
+Kafka tombstones (record value = NULL) are NOT invalid events: with
+`tombstones.on.delete=true` Debezium follows every delete event with one, for
+log compaction. The delete itself already arrived as a normal `__op = d`
+record (ExtractNewRecordState, delete.handling.mode=rewrite). Tombstones are
+dropped before validation instead of being counted as PARSE_ERROR in the DLQ.
 
 Interview value:
     "A malformed CDC event is isolated without failing the entire
@@ -50,6 +57,9 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
     """
     if batch_df.isEmpty():
         return batch_df, batch_df  # both empty
+
+    # Kafka tombstone (value NULL) theo sau mỗi delete — không phải event lỗi.
+    batch_df = batch_df.filter(F.col("value").isNotNull())
 
     # ── Extract CDC metadata (same as cdc_streaming.py) ──────────────
     extracted_df = batch_df.select(
@@ -109,6 +119,8 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
 
     # ── Validation: classify each row ────────────────────────────────
     valid_ops = ["c", "u", "d", "r"]
+    primary_key = config["target"].get("primary_key")
+    missing_pk = F.col(primary_key).isNull() if primary_key else F.lit(False)
 
     validated_df = (
         enriched_df.withColumn(
@@ -128,6 +140,11 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
                 F.col("_raw_payload").isNull(),
                 F.lit(False),
             )
+            .when(
+                # Check 4: primary key must be present (MERGE cannot match a NULL key)
+                missing_pk,
+                F.lit(False),
+            )
             .otherwise(F.lit(True)),
         )
         .withColumn(
@@ -135,6 +152,7 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
             F.when(F.col("_raw_payload").isNull(), "PARSE_ERROR")
             .when(F.col("_raw_op").isNull() | ~F.col("_raw_op").isin(valid_ops), "INVALID_OPERATION")
             .when(F.col("_raw_ts_ms").isNull() | F.col("_raw_ts_ms").cast("long").isNull(), "INVALID_TIMESTAMP")
+            .when(missing_pk, "MISSING_PRIMARY_KEY")
             .otherwise(F.lit(None).cast("string")),
         )
         .withColumn(
@@ -150,6 +168,7 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
                 F.col("_raw_ts_ms").cast("long").isNull(),
                 F.concat(F.lit("__ts_ms not numeric: "), F.col("_cdc_key"), F.lit(" value="), F.col("_raw_ts_ms")),
             )
+            .when(missing_pk, F.concat(F.lit(f"{primary_key} is null: "), F.coalesce(F.col("_cdc_key"), F.lit(""))))
             .otherwise(F.lit(None).cast("string")),
         )
     )

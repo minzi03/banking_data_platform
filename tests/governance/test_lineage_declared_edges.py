@@ -72,7 +72,8 @@ def test_gold_edges_include_the_ones_the_old_list_missed(edges):
 def test_transform_types(edges):
     by_target = {t: kind for _s, t, kind in edges}
     assert by_target["lakehouse.silver.dim_customer"] == TransformType.SCD2_MERGE
-    assert by_target["lakehouse.silver.dim_branch"] == TransformType.SCD1_UPSERT
+    assert by_target["lakehouse.silver.dim_branch"] == TransformType.SCD2_MERGE
+    assert by_target["lakehouse.silver.dim_card"] == TransformType.SCD1_UPSERT
     assert by_target["lakehouse.silver.fact_txn_account"] == TransformType.FACT_LOAD
     assert all(kind == TransformType.GOLD_MART for _s, t, kind in edges if ".gold." in t)
 

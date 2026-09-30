@@ -135,6 +135,24 @@ class TestCheckViolation:
         spark.table.return_value.filter.return_value.collect.return_value = []
         assert quarantine.check_violation(spark, "t", "x") == []
 
+    def test_cob_dt_scopes_snapshot_and_current_version(self):
+        """
+        Cùng phạm vi với DQ (_scoped_table): fact giữ mỗi cob_dt một snapshot, dim
+        SCD2 giữ mọi version. Không lọc thì một vi phạm bị quarantine lại mỗi ngày.
+        """
+        spark = MagicMock()
+        df = spark.table.return_value
+        df.columns = ["txn_id", "is_current", "cob_dt"]
+        df.filter.return_value = df
+        df.collect.return_value = []
+
+        quarantine.check_violation(spark, "t", "x", "2026-01-02")
+
+        conditions = [c.args[0] for c in df.filter.call_args_list]
+        assert "cob_dt = DATE '2026-01-02'" in conditions
+        assert "CAST(is_current AS INT) = 1" in conditions
+        assert "x" in conditions
+
     def test_swallows_errors_and_returns_empty(self):
         """
         A failed check must not abort the run — the caller records zero

@@ -28,6 +28,7 @@ import yaml
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
+from ops.data_quality import SCOPE_KEY, _scoped_table  # noqa: E402
 from spark.spark_session import get_spark_session  # noqa: E402
 
 basicConfig(
@@ -55,7 +56,7 @@ def load_rules(path: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Violation Check Executor
 # ---------------------------------------------------------------------------
-def check_violation(spark, source_table: str, condition: str) -> list[dict]:
+def check_violation(spark, source_table: str, condition: str, cob_dt: str | None = None) -> list[dict]:
     """
     Execute a violation check and return violating records.
 
@@ -63,12 +64,16 @@ def check_violation(spark, source_table: str, condition: str) -> list[dict]:
         spark: SparkSession
         source_table: Source table to check
         condition: SQL condition to filter violating records
+        cob_dt: Ngày đang kiểm. Có thì đọc cùng phạm vi với DQ/contract
+            (`_scoped_table`): bảng có cob_dt → một snapshot, dim SCD2 → version
+            hiện hành. Không thì mỗi snapshot / version cũ bị quarantine lặp lại.
 
     Returns:
         List of violating records as dicts
     """
     try:
-        df = spark.table(source_table)
+        rule = {SCOPE_KEY: cob_dt} if cob_dt else {}
+        df, _scope = _scoped_table(spark, source_table, rule)
 
         # Apply condition filter
         violating_df = df.filter(condition)
@@ -175,7 +180,7 @@ def run_quarantine_checks(spark, rule_name: str, rule_config: dict, cob_dt: str)
         log.info(f"  Checking: {violation_name} (severity: {severity})")
 
         # Execute check
-        violating_records = check_violation(spark, source_table, condition)
+        violating_records = check_violation(spark, source_table, condition, cob_dt)
 
         if violating_records:
             # Write to quarantine table

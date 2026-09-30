@@ -22,6 +22,10 @@ sys.modules["airflow.providers.postgres"] = MagicMock()
 sys.modules["airflow.providers.postgres.operators"] = MagicMock()
 sys.modules["airflow.providers.postgres.operators.postgres"] = MagicMock()
 
+# Airflow đặt plugins folder vào sys.path; etl_flag import `cob_dt` từ đó.
+sys.path.insert(0, str(PROJECT_ROOT / "airflow" / "plugins"))
+from cob_dt import COB_DT  # noqa: E402
+
 # Import via importlib
 _spec = importlib.util.spec_from_file_location(
     "etl_flag_mod", str(PROJECT_ROOT / "airflow" / "plugins" / "etl_flag.py")
@@ -87,10 +91,10 @@ class TestMakeStartFlagTask:
         task = make_start_flag_task("start", "test_dag", "bronze", dag)
         assert task is not None
 
-    def test_default_cob_dt_is_ds(self):
-        """Default cob_dt should be '{{ ds }}' Airflow template."""
+    def test_default_cob_dt_is_shared_template(self):
+        """Default cob_dt = cob_dt.COB_DT (ngày ICT), không phải `{{ ds }}` (ngày UTC)."""
         kwargs = self._get_call_kwargs()
-        assert kwargs.get("parameters", {}).get("cob_dt") == "{{ ds }}"
+        assert kwargs.get("parameters", {}).get("cob_dt") == COB_DT
 
     def test_custom_cob_dt(self):
         """Should accept custom cob_dt value."""
@@ -135,10 +139,10 @@ class TestMakeEndFlagTask:
         task = make_end_flag_task("end", "test_dag", "bronze", dag)
         assert task is not None
 
-    def test_default_cob_dt_is_ds(self):
-        """Default cob_dt should be '{{ ds }}'."""
+    def test_default_cob_dt_is_shared_template(self):
+        """Default cob_dt = cob_dt.COB_DT (ngày ICT), không phải `{{ ds }}` (ngày UTC)."""
         kwargs = self._get_call_kwargs()
-        assert kwargs.get("parameters", {}).get("cob_dt") == "{{ ds }}"
+        assert kwargs.get("parameters", {}).get("cob_dt") == COB_DT
 
     def test_custom_cob_dt(self):
         """Should accept custom cob_dt value."""

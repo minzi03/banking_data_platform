@@ -450,13 +450,16 @@ metrics:
       business_date_derivation_applied: false
       bronze_cdc_partitioning: DATE(__cdc_timestamp) — UTC day, kỹ thuật
     consolidation_watermark:
-      implementation: timestamp_plus_spark_batch_id
+      implementation: iceberg_snapshot_id
+      event_ordering: cdc_timestamp_ms_then_spark_batch_id
       partition_aware: false
       kafka_offsets_persisted_in_valid_bronze: false
-      note: 'Đặt true CHỈ SAU KHI P1 persist Kafka (topic, partition, offset) vào
-        valid Bronze CDC và watermark key gồm partition. Hiện cdc_dlq.py drop kafka
-        metadata khỏi valid_df, meta.cdc_watermark chỉ có table_name. README không
-        được claim per-partition offset cho tới khi cả hai = true.
+      note: 'Tiến độ = snapshot Iceberg cuối cùng của Bronze CDC đã MERGE (meta.cdc_watermark.last_snapshot_id);
+        mỗi lượt đọc đúng các append trong (watermark, end]. Thứ tự event = (__cdc_timestamp_ms,
+        __spark_batch_id), dùng cho dedup và guard không-ghi-đè-bằng-event-cũ trong MERGE.
+        partition_aware / kafka_offsets_persisted_in_valid_bronze chỉ đặt true SAU KHI
+        persist Kafka (topic, partition, offset) vào valid Bronze CDC. README không được
+        claim per-partition offset cho tới khi cả hai = true.
 
         '
   cdc_freshness:

@@ -18,12 +18,12 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.utils.task_group import TaskGroup
 
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID           = "silver_all_dag"
-DATA_COB_DT      = "{{ ds }}"
+DATA_COB_DT      = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
-SPARK_CONN_ID    = "spark_default"
 SILVER_BASE      = "/opt/project/code_etl/silver"
 SILVER_BASE_JOB  = f"{SILVER_BASE}/base_job"
 
@@ -37,16 +37,11 @@ DEFAULT_ARGS = {
     "sla": timedelta(hours=3),
 }
 
-SPARK_CONF = {
-    "spark.driver.memory":   "512m",
-    "spark.executor.memory": "768m",
-    "spark.executor.cores":  "1",
-}
 
 # (table_name, job_script, config_file)
 DIM_JOBS = [
-    ("dim_branch",   "scd_type1.py", "dims/dim_branch.yml"),
-    ("dim_product",  "scd_type1.py", "dims/dim_product.yml"),
+    ("dim_branch",   "scd_type2.py", "dims/dim_branch.yml"),
+    ("dim_product",  "scd_type2.py", "dims/dim_product.yml"),
     ("dim_card",     "scd_type1.py", "dims/dim_card.yml"),
     ("dim_employee", "scd_type1.py", "dims/dim_employee.yml"),
     ("dim_device",   "scd_type1.py", "dims/dim_device.yml"),

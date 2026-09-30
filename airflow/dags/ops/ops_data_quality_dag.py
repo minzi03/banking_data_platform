@@ -16,11 +16,11 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 DAG_ID              = "ops_data_quality_dag"
 APPLICATION_PATH    = "/opt/project/code_etl/shared/ops/data_quality.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
-COB_DT              = "{{ ds }}"
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",

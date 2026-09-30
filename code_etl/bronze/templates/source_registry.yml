@@ -13,42 +13,42 @@ tables:
     target_schema: bronze
     target_table: core_branch
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: product
     target_schema: bronze
     target_table: core_product
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: customer
     target_schema: bronze
     target_table: core_customer
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: account
     target_schema: bronze
     target_table: core_account
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: deposit
     target_schema: bronze
     target_table: core_deposit
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: loan
     target_schema: bronze
     target_table: core_loan
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: txn_account
@@ -62,7 +62,7 @@ tables:
     target_schema: bronze
     target_table: core_employee
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: loan_payment
@@ -76,28 +76,28 @@ tables:
     target_schema: bronze
     target_table: core_standing_order
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: aml_rule
     target_schema: bronze
     target_table: core_aml_rule
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: aml_alert
     target_schema: bronze
     target_table: core_aml_alert
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: core_banking
     source_table: aml_customer_risk
     target_schema: bronze
     target_table: core_aml_customer_risk
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   # === card_crm (3 tables) ===
   - source_schema: card_crm
@@ -105,7 +105,7 @@ tables:
     target_schema: bronze
     target_table: core_card
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: card_crm
     source_table: card_txn
@@ -119,7 +119,7 @@ tables:
     target_schema: bronze
     target_table: core_crm_interaction
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   # === digital_banking (6 tables) ===
   - source_schema: digital_banking
@@ -127,14 +127,14 @@ tables:
     target_schema: bronze
     target_table: core_device
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: digital_banking
     source_table: location
     target_schema: bronze
     target_table: core_location
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: digital_banking
     source_table: online_transaction
@@ -148,18 +148,18 @@ tables:
     target_schema: bronze
     target_table: core_support_ticket
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: digital_banking
     source_table: mcc_code
     target_schema: bronze
     target_table: core_mcc_code
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true
 
   - source_schema: digital_banking
     source_table: merchant
     target_schema: bronze
     target_table: core_merchant
     load_strategy: full_snapshot
-    partitioned: false
+    partitioned: true

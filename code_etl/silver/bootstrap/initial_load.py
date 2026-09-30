@@ -2,7 +2,7 @@
 Silver Bootstrap Job — Initial Load
 ====================================
 Chạy tất cả Silver jobs (SCD1, SCD2, Fact) theo thứ tự dependency:
-  1. Dimensions SCD1 (branch, product, employee, card, device, location)
+  1. Dimensions (SCD2: branch, product; SCD1: employee, card, device, location, deposit, loan)
   2. Dimensions SCD2 (customer, account)
   3. Facts (txn_account, card_txn, crm_interaction, online_transaction, support_ticket)
 
@@ -29,15 +29,15 @@ from utils.logger import get_logger
 
 # Thứ tự chạy Silver jobs (dependency-ordered)
 SILVER_JOB_ORDER = [
-    # === Phase 1: Dimensions SCD1 (no dependency) ===
+    # === Phase 1: Dimensions (no dependency) — branch/product là SCD2 ===
     {
         "name": "dim_branch",
-        "type": "scd_type1",
+        "type": "scd_type2",
         "config": "code_etl/silver/dims/dim_branch.yml",
     },
     {
         "name": "dim_product",
-        "type": "scd_type1",
+        "type": "scd_type2",
         "config": "code_etl/silver/dims/dim_product.yml",
     },
     {

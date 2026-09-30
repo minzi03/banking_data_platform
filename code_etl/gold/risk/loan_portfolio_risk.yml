@@ -53,4 +53,5 @@ sql: |
     DATE '{{ cob_dt }}' AS cob_dt
   FROM agg a
   LEFT JOIN lakehouse.silver.dim_branch b ON a.branch_code=b.branch_code
+    AND DATE '{{ cob_dt }}' BETWEEN b.effective_from AND b.effective_to
   LEFT JOIN pm ON a.branch_code=pm.branch_code AND a.product_code=pm.product_code

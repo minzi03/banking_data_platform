@@ -109,16 +109,20 @@ def ts(day: int, hour: int = 10) -> datetime:
 @pytest.fixture(scope="module")
 def silver_tables(spark):
     # --- dim_customer (SCD2) ------------------------------------------------
+    # Gold chọn version hiệu lực TẠI cob_dt (effective_from <= cob_dt <= effective_to),
+    # không phải is_current: chạy lại một cob_dt cũ phải thấy dim của ngày đó.
+    open_from, open_to = date(2025, 1, 1), date(9999, 12, 31)
     customers = [
-        (1, "sk-1", 1),  # cả account lẫn card  → Case 1
-        (2, "sk-2", 1),  # chỉ account          → Case 3
-        (3, "sk-3", 1),  # chỉ card             → Case 3
-        (4, "sk-4", 1),  # không giao dịch      → Case 3
-        (9, "sk-9", 0),  # không current → phải bị loại
+        (1, "sk-1", 1, open_from, open_to),  # cả account lẫn card  → Case 1
+        (2, "sk-2", 1, open_from, open_to),  # chỉ account          → Case 3
+        (3, "sk-3", 1, open_from, open_to),  # chỉ card             → Case 3
+        (4, "sk-4", 1, open_from, open_to),  # không giao dịch      → Case 3
+        (9, "sk-9", 0, open_from, date(2025, 12, 1)),  # đã đóng trước mọi cob_dt → phải bị loại
     ]
-    spark.createDataFrame(customers, "customer_id long, customer_sk string, is_current int").createOrReplaceTempView(
-        "dim_customer"
-    )
+    spark.createDataFrame(
+        customers,
+        "customer_id long, customer_sk string, is_current int, effective_from date, effective_to date",
+    ).createOrReplaceTempView("dim_customer")
 
     # --- fact_txn_account ---------------------------------------------------
     # customer 1: 10 txn × 100.00 = 1000.00

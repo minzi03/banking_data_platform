@@ -60,7 +60,7 @@ sql: |
           customer_id,
           customer_sk
       FROM lakehouse.silver.dim_customer
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
   -- Card holding — grain: customer_id
   card_holding AS (

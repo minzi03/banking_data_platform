@@ -55,7 +55,7 @@ sql: |
           COALESCE(SUM(CASE WHEN t.debit_credit = 'C' THEN t.txn_amount ELSE 0 END), 0) AS total_credit_amount,
           COALESCE(SUM(CASE WHEN t.debit_credit = 'D' THEN t.txn_amount ELSE 0 END), 0) AS total_debit_amount
       FROM lakehouse.silver.fact_txn_account t
-      JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND da.is_current = 1
+      JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND DATE '{{ cob_dt }}' BETWEEN da.effective_from AND da.effective_to
       WHERE t.cob_dt = DATE '{{ cob_dt }}'
       GROUP BY da.branch_code, YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE))
   ),
@@ -71,7 +71,7 @@ sql: |
               ORDER BY COUNT(*) DESC
           ) AS rn
       FROM lakehouse.silver.fact_txn_account t
-      JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND da.is_current = 1
+      JOIN lakehouse.silver.dim_account da ON t.account_id = da.account_id AND DATE '{{ cob_dt }}' BETWEEN da.effective_from AND da.effective_to
       WHERE t.cob_dt = DATE '{{ cob_dt }}'
       GROUP BY da.branch_code, YEAR(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), MONTH(CAST(from_utc_timestamp(t.txn_date, 'Asia/Ho_Chi_Minh') AS DATE)), t.channel
   ),
@@ -97,4 +97,5 @@ sql: |
       DATE '{{ cob_dt }}' AS cob_dt
   FROM txn_monthly m
   LEFT JOIN lakehouse.silver.dim_branch db ON m.branch_code = db.branch_code
+      AND DATE '{{ cob_dt }}' BETWEEN db.effective_from AND db.effective_to
   LEFT JOIN top_channel tc ON m.branch_code = tc.branch_code AND m.txn_year = tc.txn_year AND m.txn_month = tc.txn_month

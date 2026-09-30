@@ -67,7 +67,7 @@ sql: |
           customer_id,
           customer_sk
       FROM lakehouse.silver.dim_customer
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
   -- Account transactions — 365d lookback, conditional aggregate 30d/90d tại chỗ
   acct_txn AS (
@@ -125,17 +125,17 @@ sql: |
       txn_cnt_90d,
       txn_amt_30d,
       txn_amt_90d,
-      DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) AS days_since_last_txn,
+      DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_ts, 'Asia/Ho_Chi_Minh') AS DATE)) AS days_since_last_txn,
       CASE
           WHEN last_txn_ts = TIMESTAMP '1900-01-01 00:00:00'
-           OR DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) > 90 THEN 'High'
-          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) > 60 THEN 'Medium'
-          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) > 30 THEN 'Low'
+           OR DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_ts, 'Asia/Ho_Chi_Minh') AS DATE)) > 90 THEN 'High'
+          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_ts, 'Asia/Ho_Chi_Minh') AS DATE)) > 60 THEN 'Medium'
+          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_ts, 'Asia/Ho_Chi_Minh') AS DATE)) > 30 THEN 'Low'
           ELSE 'Active'
       END AS churn_risk,
       CASE
           WHEN last_txn_ts = TIMESTAMP '1900-01-01 00:00:00'
-           OR DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_ts AS DATE)) > 90 THEN 1
+           OR DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_ts, 'Asia/Ho_Chi_Minh') AS DATE)) > 90 THEN 1
           ELSE 0
       END AS is_churn_candidate,
       DATE '{{ cob_dt }}' AS cob_dt

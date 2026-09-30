@@ -3,7 +3,7 @@
 # Quick commands for managing the data platform
 # =============================================================================
 
-.PHONY: help up down restart logs status clean seed superset superset-init
+.PHONY: help env-check secrets up down restart logs status clean seed superset superset-init
 
 COMPOSE_FILE := docker/docker-compose.yml
 DC := docker compose -f $(COMPOSE_FILE)
@@ -31,6 +31,7 @@ help:
 	@echo "    make bronze-init       Create Iceberg Bronze tables"
 	@echo "    make bronze-bootstrap  Full load (COB_DT=YYYY-MM-DD)"
 	@echo "    make bronze-ingest     Incremental (CONFIG=path COB_DT=YYYY-MM-DD)"
+	@echo "    make bronze-partition-migrate  One-time: partition old Bronze tables by cob_dt"
 	@echo ""
 	@echo "  Silver Layer:"
 	@echo "    make silver-init       Create Iceberg Silver tables"
@@ -82,20 +83,29 @@ help:
 # ---------------------------------------------------------------------------
 # Service management
 # ---------------------------------------------------------------------------
-up:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+# Python trên HOST cho các script chuẩn bị (Windows: make PYTHON="py -3" up).
+PYTHON ?= python3
+
+# docker/.env phải có trước; secret Trino (docker/secrets/trino/, gitignored) được
+# sinh nếu thiếu — compose tham chiếu các file đó qua env_file/volume nên thiếu
+# là `docker compose up` fail ngay trên một bản clone mới.
+env-check:
+	@test -f docker/.env || { echo "Thiếu docker/.env — chạy: cp docker/.env.example docker/.env rồi sửa giá trị CHANGE_ME"; exit 1; }
+
+secrets: env-check
+	$(PYTHON) scripts/bootstrap_trino_auth.py
+
+up: secrets
 	$(DC) up -d
 	@echo ""
 	@echo "All services starting... check status with: make status"
 
-up-lite:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+up-lite: secrets
 	$(DC) up -d --scale debezium=0 --scale kafka=0 --scale zookeeper=0
 	@echo ""
 	@echo "Core services starting (no CDC)..."
 
-up-db:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+up-db: env-check
 	$(DC) up -d postgres minio mc iceberg-rest
 	@echo ""
 	@echo "Database + Storage services starting..."
@@ -139,7 +149,7 @@ logs-cdc:
 # Database access
 # ---------------------------------------------------------------------------
 psql:
-	$(DC) exec postgres psql -U banking_admin -d banking_db
+	$(DC) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 # ---------------------------------------------------------------------------
 # Seed data generation
@@ -169,8 +179,13 @@ seed-local:
 # ---------------------------------------------------------------------------
 # Trino queries
 # ---------------------------------------------------------------------------
+# Trino chỉ nhận HTTPS + mật khẩu (ADR-0016). User `trino`; mật khẩu TRINO_PASSWORD
+# có sẵn trong container qua secrets/trino/env/trino-server.env.
+TRINO_CLI := $(DC) exec trino trino --server https://localhost:8443 \
+	--truststore-path /etc/trino/secrets/trino.pem --user trino --password --catalog iceberg
+
 trino:
-	$(DC) exec trino trino --catalog iceberg
+	$(TRINO_CLI)
 
 # ---------------------------------------------------------------------------
 # Superset (BI Layer)
@@ -247,6 +262,16 @@ bronze-bootstrap:
 		--db_password "$$POSTGRES_PASSWORD" \
 		--cob_dt $(COB_DT)'
 	@echo "Bronze bootstrap completed"
+
+# Một lần cho stack tạo trước khi mọi bảng Bronze partition theo cob_dt.
+# Bronze job từ chối ghi vào bảng chưa migrate (xem spark/iceberg_utils.py).
+bronze-partition-migrate:
+	@echo "Partitioning existing Bronze tables by cob_dt..."
+	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+		--master spark://spark-master:7077 \
+		--deploy-mode client \
+		code_etl/bronze/bootstrap/partition_bronze_by_cob_dt.py
+	@echo "Bronze partition migration completed"
 
 bronze-ingest:
 	@echo "Running Bronze incremental ingestion..."

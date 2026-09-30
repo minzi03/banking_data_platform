@@ -21,10 +21,11 @@ from airflow.operators.empty import EmptyOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
 from etl_flag import make_start_flag_task
+from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID = "dbt_data_quality"
-DATA_COB_DT = "{{ ds }}"
+DATA_COB_DT = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
 DBT_EXEC = "/usr/bin/docker exec banking-dbt sh -lc"
 DBT_DIR = "/usr/src/dbt"

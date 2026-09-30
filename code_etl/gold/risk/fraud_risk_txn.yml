@@ -21,7 +21,7 @@ sql: |
       t.channel, t.description, t.counter_account, c.customer_segment
     FROM lakehouse.silver.fact_txn_account t
     LEFT JOIN lakehouse.silver.dim_customer c
-      ON t.customer_id=c.customer_id AND c.is_current=1
+      ON t.customer_id=c.customer_id AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
     WHERE t.cob_dt = DATE '{{ cob_dt }}'
   ),
   stats AS (

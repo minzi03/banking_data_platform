@@ -1,6 +1,12 @@
 # =============================================================================
-# Airflow DAG: Regulatory Reporting
+# Airflow DAG: Regulatory Reporting — KHÔNG HOẠT ĐỘNG, chỉ chạy tay
 # =============================================================================
+# Ngoài phạm vi đề bài. Audit 2026-09-30: các task chạy SQL Trino
+# (iceberg.gold.fact_loan, gold.dim_account, gold.fact_account_txn…) qua
+# PostgresHook, và các bảng đó không tồn tại (fact nằm ở Silver với tên khác).
+# Đã tắt lịch (schedule_interval=None) để không fail mỗi ngày; đề xuất xoá DAG này
+# cùng docker/init_postgres/09_ddl_regulatory.sql.
+#
 # Generates regulatory reports for banking compliance:
 #   - BCBS 239 (Basel Committee on Banking Supervision)
 #   - SBV/NHNN (State Bank of Vietnam)
@@ -31,10 +37,11 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from etl_flag import make_start_flag_task
+from cob_dt import COB_DT, cob_dt_from_context
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID = "regulatory_reporting"
-DATA_COB_DT = "{{ ds }}"
+DATA_COB_DT = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
 SERVING_COMPLETE_FLAG = "SERVING_COMPLETE"
 DQ_PASS_FLAG = "DQ_TEST_PASS"
@@ -64,7 +71,7 @@ def _serving_complete_sql() -> str:
 def generate_bcb239_report(**context):
     """Generate BCBS 239 risk data aggregation report."""
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-    cob_dt = context["ds"]
+    cob_dt = cob_dt_from_context(context)
 
     # BCBS 239 requires comprehensive risk data aggregation
     report_data = {
@@ -157,7 +164,7 @@ def generate_bcb239_report(**context):
 def generate_sbv_report(**context):
     """Generate SBV (State Bank of Vietnam) card transaction report."""
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-    cob_dt = context["ds"]
+    cob_dt = cob_dt_from_context(context)
 
     report_data = {
         "report_type": "SBV_CARD_TRANSACTION",
@@ -211,7 +218,7 @@ def generate_sbv_report(**context):
 def generate_dq_scorecard(**context):
     """Generate Data Quality scorecard for all serving tables."""
     hook = PostgresHook(postgres_conn_id=POSTGRES_CONN_ID)
-    cob_dt = context["ds"]
+    cob_dt = cob_dt_from_context(context)
 
     serving_tables = [
         "mart_customer_360_current",
@@ -264,7 +271,7 @@ with DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
     description="Regulatory reporting for BCBS 239 and SBV compliance",
-    schedule_interval="0 9 * * *",  # 09:00 daily (after DQ tests at 08:00)
+    schedule_interval=None,  # tắt: DAG không hoạt động (xem ghi chú đầu file)
     catchup=False,
     max_active_runs=1,
     tags=["compliance", "regulatory", "bcbs239", "sbv", "production"],

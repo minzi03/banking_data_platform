@@ -32,12 +32,13 @@ from airflow.operators.empty import EmptyOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
 from etl_flag import make_end_flag_task, make_start_flag_task
+from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID = "dbt_serving_publish"
 # Một biến duy nhất cho cả sensor lẫn dbt --vars. Không được để sensor check D
 # còn dbt build D±1.
-DATA_COB_DT = "{{ ds }}"
+DATA_COB_DT = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
 # Image Airflow KHÔNG cài dbt (Dockerfile.airflow chỉ có pyspark + spark provider),
 # nhưng CÓ docker CLI. Nên gọi dbt qua `docker exec` vào container dbt —

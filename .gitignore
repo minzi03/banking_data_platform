@@ -62,6 +62,7 @@ dbt/logs/
 dbt/target/
 dbt/dbt_packages/
 dbt/dbt_modules/
+dbt/.user.yml
 
 # ── Testing ──────────────────────────────────────────────────────────────────
 .pytest_cache/
@@ -85,3 +86,6 @@ terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.*
 terraform/.terraform.lock.hcl
+
+# ── Agent / editor worktrees (local only) ────────────────────────────────────
+.claude/

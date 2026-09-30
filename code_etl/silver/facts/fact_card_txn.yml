@@ -37,5 +37,5 @@ sql: |
   FROM lakehouse.bronze.core_card_txn t
   LEFT JOIN lakehouse.silver.dim_customer c
       ON t.customer_id = c.customer_id
-      AND c.is_current = 1
+      AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
   WHERE t.cob_dt = DATE '{{ cob_dt }}'
