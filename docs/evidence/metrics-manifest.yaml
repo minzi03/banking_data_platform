@@ -2,13 +2,13 @@ manifest:
   schema_version: '1.1'
   project: banking_data_platform
   build:
-    git_commit: ee5c2d0c97af094f53292981610539eab308c01a
-    git_branch: fix/audit-remediation
+    git_commit: 67b187a766041311f88b2205a0a098d7518dc407
+    git_branch: fix/rfm-cutoffs-per-kpi-dictionary
     git_dirty: false
     portfolio_release: portfolio-v2.0
   runtime:
-    generated_at_utc: '2026-09-30T05:29:50Z'
-    requested_cob_dt: '2026-09-23'
+    generated_at_utc: '2026-09-30T06:39:06Z'
+    requested_cob_dt: '2026-09-29'
     verification_scope: full
   environment:
     execution_mode: local-docker-compose
@@ -36,10 +36,10 @@ manifest:
 
       '
   snapshot:
-    requested_cob_dt: '2026-09-23'
-    bronze_max_cob_dt: '2026-09-23'
-    silver_max_cob_dt: '2026-09-23'
-    gold_max_cob_dt: '2026-09-23'
+    requested_cob_dt: '2026-09-29'
+    bronze_max_cob_dt: '2026-09-29'
+    silver_max_cob_dt: '2026-09-29'
+    gold_max_cob_dt: '2026-09-29'
     bronze_partition_exists: true
     silver_partition_exists: true
     gold_partition_exists: true
@@ -134,7 +134,7 @@ metrics:
         rows: 500000
         distinct_transaction_id: 500000
     partitions_present:
-      value: 11
+      value: 12
       declared: null
       metric_type: runtime
       provenance: query:bronze.partitions_present
@@ -202,7 +202,7 @@ metrics:
         distinct_ticket_id: 25000
     scd2:
       dim_customer:
-        total_rows: 20001
+        total_rows: 30001
         distinct_business_keys: 10000
         current_rows: 10000
         current_distinct_business_keys: 10000
@@ -210,7 +210,7 @@ metrics:
         open_ended_rows: 10000
         overlapping_intervals: 0
       dim_account:
-        total_rows: 60000
+        total_rows: 90000
         distinct_business_keys: 30000
         current_rows: 30000
         current_distinct_business_keys: 30000
@@ -519,12 +519,12 @@ metrics:
         '
   platform:
     airflow_dag_files:
-      value: 20
+      value: 18
       declared: 18
       metric_type: static
       provenance: collector:airflow_dag_files
     airflow_dag_objects:
-      value: 21
+      value: 19
       declared: 19
       metric_type: static
       provenance: collector:airflow_dag_objects
@@ -548,13 +548,13 @@ metrics:
         '
     automated_tests:
       test_functions:
-        value: 1055
+        value: 1050
         declared: 1050
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
       collected_pytest_nodes:
-        value: 2045
+        value: 2013
         declared: null
         metric_type: static
         provenance: collector:pytest_collected_nodes
@@ -614,7 +614,7 @@ metrics:
         schema serving (dbt_project.yml). Không tính dbt/models/semantic/.'
     business_vs_utc_date_rows:
       total_rows: 1200000
-      divergent_date_rows: 70472
+      divergent_date_rows: 70233
       metric_type: runtime
       declared: null
       provenance: query:platform.business_vs_utc_date_rows
