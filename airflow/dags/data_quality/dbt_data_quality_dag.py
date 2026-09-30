@@ -20,7 +20,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
-from etl_flag import make_start_flag_task
+from etl_flag import make_start_flag_task, upstream_success_sql
 from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -45,13 +45,7 @@ DEFAULT_ARGS = {
 
 
 def _serving_complete_sql() -> str:
-    return (
-        "SELECT 1 FROM opslakehouse.flag_job_etl "
-        f"WHERE job_name = '{SERVING_COMPLETE_FLAG}' "
-        "  AND status = 'S' "
-        f"  AND cob_dt = DATE '{DATA_COB_DT}' "
-        "LIMIT 1"
-    )
+    return upstream_success_sql(SERVING_COMPLETE_FLAG, DATA_COB_DT)
 
 
 with DAG(

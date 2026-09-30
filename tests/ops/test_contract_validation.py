@@ -214,7 +214,7 @@ class TestWiring:
     def test_serving_waits_for_dbt_not_for_gold(self):
         """Serving do dbt publish; kiểm trước khi SERVING_COMPLETE là kiểm snapshot cũ."""
         dag = (PROJECT_ROOT / "airflow" / "dags" / "ops" / "ops_contract_validation_dag.py").read_text(encoding="utf-8")
-        assert "job_name = 'SERVING_COMPLETE'" in dag
+        assert 'upstream_success_sql("SERVING_COMPLETE"' in dag
         assert "wait_serving >> validate_serving_contracts" in dag or (
             "[start, wait_serving] >> validate_serving_contracts" in dag
         )

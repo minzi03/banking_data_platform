@@ -772,6 +772,18 @@ SELECT snapshot_id, made_current_at FROM bronze."core_customer_cdc$history" ORDE
 ### Steps
 Pass the target date to every DAG with `--conf '{"cob_dt": "YYYY-MM-DD"}'` (ADR-0017).
 
+Sensors treat an upstream as done when the **latest** `flag_job_etl` row for
+(job, `cob_dt`) is `S` (`etl_flag.upstream_success_sql`). A re-run inserts `R` at its start,
+which hides the previous `S`; Gold and dbt also insert `R` for `GOLD_COMPLETE` /
+`SERVING_COMPLETE`. Before 2026-09-30 sensors only asked "is there any `S`", so re-running a
+date let Silver start while Bronze was still rewriting. Trigger each layer after the one it
+waits for has started; triggering all at once only works for a date with no flags yet.
+
+After editing anything in `airflow/plugins/` (e.g. `etl_flag.py`, `cob_dt.py`), restart the
+scheduler and webserver: plugins are imported once at start, so DAGs importing a new plugin
+function fail to parse and the processor deletes them from `serialized_dag` ("DAG not
+found"; seen 2026-09-30): `docker compose -f docker/docker-compose.yml restart airflow-scheduler airflow-webserver`.
+
 1. Trigger Bronze for the target date:
    docker exec banking-airflow-scheduler airflow dags trigger bronze_core_banking_dag --conf '{"cob_dt": "2026-09-20"}'
 2. Wait for Bronze completion (check flag_job_etl)

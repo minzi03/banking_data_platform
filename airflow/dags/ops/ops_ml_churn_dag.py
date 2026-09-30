@@ -14,6 +14,7 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
 from cob_dt import COB_DT
+from etl_flag import upstream_success_sql
 
 DAG_ID = "ops_ml_churn_dag"
 APP = "/opt/project/ml/pipeline/churn_prediction.py"
@@ -29,12 +30,12 @@ DEFAULT_ARGS = {
 
 dag = DAG(DAG_ID, default_args=DEFAULT_ARGS,
     description="ML churn model training (manual; needs ml/requirements.txt on the worker)",
-    schedule_interval=None, catchup=False,
+    schedule_interval=None, catchup=False, max_active_runs=1,
     tags=["ops","ml","churn","manual"])
 
 wait_gold = SqlSensor(
     task_id="wait_gold", conn_id=PG,
-    sql=f"SELECT 1 FROM opslakehouse.flag_job_etl WHERE job_name='SERVING_COMPLETE' AND status='S' AND cob_dt = DATE '{COB_DT}' LIMIT 1",
+    sql=upstream_success_sql("SERVING_COMPLETE", COB_DT),
     poke_interval=120, timeout=7200, mode="reschedule", dag=dag)
 
 train_churn = BashOperator(

@@ -40,6 +40,7 @@ dag = DAG(
     description="Weekly Iceberg maintenance — compact, expire, orphan cleanup",
     schedule_interval="0 3 * * 0",   # Weekly on Sunday at 3:00 AM (Production)
     catchup=False,
+    max_active_runs=1,  # ghi bảng: hai lượt cùng cob_dt tranh nhau (PII 2026-09-30)
     max_active_tasks=1,
     tags=["ops", "maintenance", "iceberg", "production"],
 )
