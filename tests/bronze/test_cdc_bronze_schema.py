@@ -11,7 +11,7 @@ như ADR-0010 ghi (chỉ DLQ giữ toạ độ Kafka). Lệch từ commit d84b0e
 mọi batch có dữ liệu đều hỏng từ đó, và CI không chạy luồng CDC nên không thấy.
 
 Hai tầng:
-  - tĩnh (unit CI): mỗi config CDC + 7 cột metadata == cột của bảng trong CẢ HAI DDL
+  - tĩnh (unit CI): mỗi config CDC + 7 cột metadata == cột của bảng trong DDL (bản sao create_cdc_tables.py đã xoá 2026-09-30)
   - Spark (integration): validate_and_split thật trên một batch Kafka giả cho ra
     đúng tập cột đó, và event hỏng đi DLQ
 """
@@ -33,7 +33,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "code_etl" / "cdc" / "config"
 DDL_FILES = {
     "04_ddl_bronze_cdc.sql": REPO_ROOT / "docker" / "init_iceberg" / "04_ddl_bronze_cdc.sql",
-    "create_cdc_tables.py": REPO_ROOT / "code_etl" / "cdc" / "create_cdc_tables.py",
 }
 META_COLUMNS = [
     "__cdc_operation",

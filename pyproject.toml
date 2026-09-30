@@ -102,7 +102,6 @@ source = ["code_etl", "data_generator", "api", "ml"]
 omit = [
     "*/tests/*",
     "*/__pycache__/*",
-    "code_etl/bronze/bootstrap/test_jdbc.py",
 ]
 
 [tool.coverage.report]

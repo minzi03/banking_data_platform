@@ -7,7 +7,6 @@ Trang này trả lời một câu: **bạn là ai, và cần đọc gì.**
 ```text
 docs/
 ├── INDEX.md                  ← bạn đang ở đây
-├── 01-getting-started/       (đã hợp nhất vào DEMO_GUIDE.md)
 ├── 02-architecture/          kiến trúc + adr/ (14 quyết định)
 ├── 03-data/                  tra cứu: dictionary · glossary · contracts · lineage
 ├── 04-operations/            vận hành + sự cố
@@ -94,7 +93,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [`LINEAGE.md`](03-data/LINEAGE.md) | **Sinh tự động** — đồ thị phụ thuộc, tham chiếu treo, dataset không có consumer |
 | [`DATA_VAULT_MAPPING.md`](03-data/DATA_VAULT_MAPPING.md) | Ánh xạ Kimball star schema → Data Vault 2.0 |
 | [`dbt/README.md`](../dbt/README.md) | Tầng serving qua dbt + Trino |
-| [`dbt/README.md`](../dbt/README.md) · [`dbt/SUMMARY.md`](../dbt/SUMMARY.md) | dbt project |
+| [`dbt/README.md`](../dbt/README.md) | dbt project |
 | [`api/README.md`](../api/README.md) | Customer 360 REST API |
 | [`openmetadata/README.md`](../openmetadata/README.md) | Catalog và lineage |
 

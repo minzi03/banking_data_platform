@@ -2,7 +2,12 @@
 
 ## Overview
 
-This directory contains scripts to register all data assets in OpenMetadata catalog for the Banking Data Platform.
+This directory contains scripts to register data assets in an OpenMetadata catalog for the Banking Data Platform.
+
+> **Status (2026-09-30): historical, not verified.** OpenMetadata is outside the assignment's scope and has not
+> been run against the current lakehouse. The counts below describe an earlier layout, and `register_tables.py`
+> still uses old table names (e.g. `core_banking_customer`; Bronze is now `lakehouse.bronze.core_customer`).
+> The duplicate `register_all_tables.sh` was removed (TD-20).
 
 ## What's Registered
 
@@ -26,8 +31,7 @@ This directory contains scripts to register all data assets in OpenMetadata cata
 
 ## Files
 
-- `register_all_tables.sh` — Main registration script (bash)
-- `register_tables.py` — Python version (backup)
+- `register_tables.py` — registration script (table list is stale, see status above)
 - `README.md` — This file
 
 ## Usage
@@ -40,7 +44,7 @@ This directory contains scripts to register all data assets in OpenMetadata cata
 ### Run Registration
 ```bash
 cd banking_data_platform
-bash openmetadata/register_all_tables.sh
+python openmetadata/register_tables.py
 ```
 
 ### What the Script Does

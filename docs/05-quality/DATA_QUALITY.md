@@ -37,8 +37,7 @@ nó chỉ nói cho bạn biết chuyện đã xảy ra.
 
 ## 2. Dòng thời gian, và khoảng hở trong đó
 
-Lấy từ `schedule_interval` của từng DAG (không phải từ
-`production_schedule.yml` — xem §10):
+Lấy từ `schedule_interval` của từng DAG (xem §10):
 
 ```text
 02:00  Bronze  ×3 DAG   (core_banking · card_crm · digital_banking)
@@ -533,26 +532,12 @@ Cách xử lý khi phát hiện: [`../04-operations/INCIDENT_RUNBOOK.md`](../04-
 
 ---
 
-## 10. `production_schedule.yml` là dự định, không phải cấu hình
+## 10. Lịch chạy chỉ nằm trong DAG
 
-File này tự khai đúng vai của nó:
-
-> *"DAGs will be updated to use these schedules when deployed to production."*
-
-Không file `.py` nào đọc nó. Lịch thật nằm trong `schedule_interval` của từng
-DAG. Tôi đã đối chiếu từng dòng: với những DAG nó có liệt, hai bên **khớp**
-(Bronze 02:00, Silver 04:00, Gold 06:00, dbt 07:00, DQ 08:00, quarantine 09:00).
-
-Nhưng nó thiếu **4** trong 20 DAG file:
-
-```text
-data_quality/dbt_data_quality_dag.py     (08:00)
-compliance/regulatory_reporting_dag.py
-ops/ops_schema_drift_dag.py              (09:00)
-ops/ops_ml_churn_dag.py
-```
-
-Không test nào so hai bên, nên khoảng lệch này sẽ tiếp tục rộng ra.
+Lịch thật là `schedule_interval` của từng DAG. `airflow/dags/production_schedule.yml` (bản
+"dự định", không file nào đọc, thiếu 4 DAG) đã xoá 2026-09-30 (TD-20), nên chỉ còn một
+nguồn. Thứ tự giờ chạy giữa các DAG chờ cờ được test canh:
+`tests/governance/test_airflow_dag_contracts.py::TestFlagWaitingDagsAreScheduled`.
 
 ---
 
@@ -628,7 +613,6 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 | Đồng bộ từ vựng severity | DQ 2 mức, quarantine 3 mức, không gì so chúng |
 | dbt test ghi vào `data_quality_log` | 137 test không để lại dấu vết (§8) |
 | Ngưỡng SLA độ tươi | `SLA_AND_FRESHNESS.md` chưa có |
-| Kiểm `production_schedule.yml` ↔ DAG | thiếu 4 DAG, không gì bắt (§10) |
 
 ---
 

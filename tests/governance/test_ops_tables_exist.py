@@ -76,7 +76,6 @@ def test_referenced_table_is_created_at_stack_init(table: str):
 # chỉ một bảng có writer — người đọc truy vấn nhầm bảng rỗng (TD-13).
 LINEAGE_TABLES = {
     "lineage_log": "cấp bảng — ops_lineage_dag ghi",
-    "data_lineage_audit": "cấp cột cho audit regulatory — CHƯA có writer, chờ REGULATORY_MAPPING.md",
 }
 
 

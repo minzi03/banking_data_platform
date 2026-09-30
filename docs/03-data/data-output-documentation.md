@@ -390,10 +390,14 @@ Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Cus
 | Champions | >= 13 | Khach hang tot nhat |
 | Loyal Customers | 10-12 | Khach trung thanh |
 | Potential Loyalists | 7-9 | Tiem nang trung thanh |
-| New Customers | 6 | Khach moi |
-| At Risk | 4-5 | Co nguy roi bo |
-| Hibernating | 2-3 | Dang ngu dong |
-| Lost | 1 | Da mat |
+| New Customers | 5-6 | Khach moi |
+| At Risk | 3-4 | Co nguy roi bo |
+| Hibernating | >= 2 (khong xay ra) | Dang ngu dong |
+| Lost | < 2 (khong xay ra) | Da mat |
+
+Nguong theo KPI dictionary cua de bai (chot 2026-09-30). Tong ba NTILE(5) nam trong 3-15,
+nen Hibernating va Lost cua dictionary khong bao gio xay ra; CASE van giu hai nhanh do cho
+khop dac ta. Test: `tests/gold/test_rfm_segment_cutoffs.py`.
 
 ### 5.2. Segmentation (4 tables)
 

@@ -12,8 +12,8 @@ lakehouse.gold.<model>  (Spark, nhiều cob_dt)
 iceberg.serving.<model>_current  (dbt/Trino, đúng một cob_dt, 1 dòng/khoá)
 ```
 
-Tài liệu này thay thế `dbt/SUMMARY.md` và `docs/04-operations/DBT_DEPLOYMENT.md`
-(mô tả "12 ephemeral semantic models" đã lỗi thời).
+Tài liệu này là nguồn duy nhất cho dbt (thay `dbt/SUMMARY.md` và `DBT_DEPLOYMENT.md` cũ — mô tả
+"12 ephemeral semantic models" đã lỗi thời, hai file đã xoá 2026-09-30).
 
 ## Thành phần (đo bằng `dbt parse`, dbt-core 1.12.0 + dbt-trino 1.9.0)
 
