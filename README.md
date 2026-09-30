@@ -261,6 +261,15 @@ counts are ambiguous without them.
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
+> **The table above is the last promoted measurement (manifest commit `30458be`,
+> 2026-09-29).** The 2026-09-30 audit remediation changed some static counts, recomputed
+> with the manifest's own collectors: Silver SCD2 dimensions **2 → 4** (product and
+> branch now keep history), SCD1 **8 → 6**, `def test_*` functions **972 → 1,034**,
+> pytest nodes **1,909 → 2,016**. Every other static count is unchanged. The table is
+> rebound only when `scripts/generate_metrics_manifest.py` is re-run against a live
+> stack and promoted — runtime rows (transactions, CDC rows, dbt build) have not been
+> re-measured since the fixes. See [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
+
 **Curated transactions** replaces the previous `4.6M+` claim. That figure counted
 `COUNT(*)` across accumulated full-snapshot fact partitions, so the same
 transactions were counted once per `cob_dt`. The verified figure counts distinct
@@ -418,6 +427,21 @@ exactly the fact the flag was erasing.
 
 ---
 
+### Audit 2026-09-30 — five defects that every green check missed
+
+A full audit against the original assignment found defects that no job log, test or
+metric had surfaced. Each is now covered by a test that fails on the old code.
+
+| Defect | Why nothing caught it | Fix | Guard |
+|---|---|---|---|
+| RFM scores inverted (inherited from the course template): `NTILE` gave the best customer 1, so "Champions" were the worst customers and campaign Upsell targeted them | Tests checked that segment *names* were valid, never the direction | Order worst-first so 5 = best, as the KPI dictionary defines | `tests/gold/test_rfm_scoring_direction.py` |
+| CDC consolidation turned `date_of_birth`, `register_date`, `open_date`, `close_date`, `balance` into NULL: `col != ""` on a numeric column is NULL | Evidence showed only e-mail changes; no test ran `cast_columns` | `try_cast`, `timestamp_micros` | `tests/cdc/test_cdc_consolidation.py` |
+| `{{ ds }}` is a UTC date; DAGs before and after 07:00 ICT got different `cob_dt`s, so scheduled dbt/DQ/PII runs could never see their Gold flag | All evidence came from manual triggers, where both dates match | One `cob_dt` definition (ICT, `conf` override) | Rendered with Airflow 2.10.0; `TestSingleCobDtDefinition` |
+| 18/22 Bronze tables unpartitioned, so `overwritePartitions()` replaced the whole table: no product/branch history anywhere | The overwrite succeeds; only history disappears | Partition every Bronze table by `cob_dt`, refuse unpartitioned writes | `TestPartitionGuard` |
+| product/branch were SCD1 although the assignment requires their history | — | SCD2 (hybrid Type 1 attributes, close missing keys, backfill guard) | `tests/silver/test_scd_type2.py` |
+
+---
+
 # Batch Pipeline
 
 ## Data Flow
@@ -446,7 +470,12 @@ Batch ingestion is driven by reusable YAML configuration and Spark ETL jobs.
 
 ## Bronze Batch
 
-The Bronze Batch layer stores source-aligned data ingested through PostgreSQL JDBC.
+The Bronze Batch layer stores source-aligned data ingested through PostgreSQL JDBC:
+one full snapshot per `cob_dt`, and **every** Bronze table is partitioned by `cob_dt`.
+`overwritePartitions()` on an unpartitioned table replaces the whole table — 18 of the
+22 tables used to be unpartitioned, so each load erased the previous snapshots.
+`write_to_iceberg()` now refuses to write a snapshot into a table not partitioned by
+`cob_dt`; `make bronze-partition-migrate` evolves an existing stack once.
 
 It provides a stable landing layer for:
 
@@ -471,19 +500,27 @@ Bronze Batch
 The batch Silver layer contains:
 
 - **10 dimensions**
-  - 2 SCD Type 2
-  - 8 SCD Type 1
+  - 4 SCD Type 2 — the assignment requires history for customer, account, product and branch
+  - 6 SCD Type 1
 - **6 fact tables**
 
 ### SCD Type 2
 
 - `dim_customer`
 - `dim_account`
+- `dim_product`
+- `dim_branch`
+
+Hybrid Type 2 + Type 1: a change in a `tracked_columns` attribute closes the current
+version and opens a new one; a change in any other attribute overwrites the current
+version in place. A key that disappears from the full snapshot is closed
+(`close_missing_keys`). Re-running an older `cob_dt` than the newest version is refused.
+Facts and Gold join the version valid **at `cob_dt`**
+(`cob_dt BETWEEN effective_from AND effective_to`), not `is_current = 1`, so a rerun
+of an earlier date sees that date's dimensions.
 
 ### SCD Type 1
 
-- `dim_branch`
-- `dim_product`
 - `dim_card`
 - `dim_employee`
 - `dim_device`
@@ -554,8 +591,8 @@ Gold is produced from the **batch Silver analytical model**.
 Current portfolio baseline:
 
 ```text
-14 historical Gold tables   (Spark, partitioned by cob_dt)
-13 current-serving tables   (dbt via Trino, iceberg.serving.*)
+15 historical Gold tables   (Spark, partitioned by cob_dt)
+16 current-serving tables   (dbt via Trino, iceberg.serving.*)
 ```
 
 The 8 `gold.*_current` CTAS tables and the Spark-only
@@ -776,16 +813,28 @@ PostgreSQL remains the operational source of truth.
 
 # Watermark & Restart Recovery
 
-CDC consolidation stores processing progress per target table:
+CDC consolidation separates **progress** from **ordering**:
 
 ```text
-table_name
-+ last_cdc_timestamp_ms
-+ last_spark_batch_id
+progress : last Iceberg snapshot of the Bronze CDC table already merged
+           (meta.cdc_watermark.last_snapshot_id, per target table)
+ordering : (__cdc_timestamp_ms, __spark_batch_id)
 ```
 
-Incremental reads select events after that pair, ordered by
-`(__cdc_timestamp_ms, __spark_batch_id)`.
+Each run pins one end snapshot and reads exactly the appends in
+`(watermark, end]` — every action of the run (count, MERGE, watermark update) sees
+the same window. Bronze CDC is append-only, so "unprocessed events" are exactly the
+appends after the last processed snapshot. If that snapshot was expired, the run
+falls back to a full read at `end`, which is safe because of the MERGE ordering guard.
+
+The earlier watermark was `(max __cdc_timestamp_ms, max __spark_batch_id)`, re-read
+the live table at every action, and had two gaps: an event landing in Bronze late with
+a smaller timestamp was skipped forever, and events appended between the MERGE and the
+watermark computation were counted as processed without being merged (2026-09-30 audit).
+
+The MERGE applies an event only when it is not older than the stored state
+(`s.__cdc_timestamp_ms >= t.__cdc_timestamp_ms`), so a late or replayed event cannot
+move the current state backwards.
 
 ### Watermark Benefits
 
@@ -801,7 +850,7 @@ the valid-event path. Progress is tracked per table, not per
 `(topic, partition)`:
 
 ```text
-implemented today   : watermark = CDC timestamp + Spark batch id
+implemented today   : progress = Iceberg snapshot id; ordering = CDC timestamp + Spark batch id
 not implemented yet : per-partition Kafka offset watermark
 ```
 
@@ -812,7 +861,8 @@ the valid Bronze CDC path first. The evidence manifest tracks this explicitly:
 
 ```yaml
 consolidation_watermark:
-  implementation: timestamp_plus_spark_batch_id
+  implementation: iceberg_snapshot_id
+  event_ordering: cdc_timestamp_ms_then_spark_batch_id
   partition_aware: false
   kafka_offsets_persisted_in_valid_bronze: false
 ```
@@ -1133,13 +1183,13 @@ Spark
 │
 ├── Bronze
 ├── Silver
-└── Historical Gold (14 tables, partitioned by cob_dt)
+└── Historical Gold (15 tables, partitioned by cob_dt)
           │
           ▼
       dbt via Trino
           │
           ▼
-Current Serving Layer (11 materialized Iceberg tables)
+Current Serving Layer (16 materialized Iceberg tables)
           │
           ├── Trino
           └── SQL consumers
@@ -1166,10 +1216,10 @@ warehouse as `lakehouse`. Same data, two engine-local names.
 
 dbt acts as the **serving publisher**, not the primary transformation engine.
 Historical analytical transformations remain in Spark Gold, while dbt
-materializes 9 current-serving tables through Trino for a requested `cob_dt`.
+materializes 16 current-serving tables through Trino for a requested `cob_dt`.
 
 ```text
-9 dbt models  →  iceberg.serving.*
+16 dbt serving models  →  iceberg.serving.*
 ```
 
 Serving models are `materialized: table`, not views: the Trino Iceberg REST
@@ -1213,9 +1263,10 @@ Governance is implemented as a cross-cutting platform capability.
 ```
 
 Contracts define expectations including schema, field constraints, ownership,
-quality rules and freshness expectations. They are enforced at the boundary
-between layers, so a breaking change is caught where it is introduced rather
-than where it surfaces.
+quality rules and freshness expectations. `ops_contract_validation_dag` checks them
+daily at 09:00 for the day's `cob_dt`, **after** Silver, Gold and serving have been
+published — contracts are detective, not a gate between layers. The only checks that
+stop a write are the fail-loud guards inside the Gold job and the dbt serving tests.
 
 Two further controls sit alongside them and are worth naming, because they are
 the ones that catch drift rather than validate a declaration:
@@ -1226,10 +1277,9 @@ the ones that catch drift rather than validate a declaration:
   check. Detecting a removed column after Gold has published is too late, which
   is why the roadmap tracks giving drift the same blocking authority that
   `assert_source_snapshots()` already has at the partition level.
-- **Reconciliation** — `code_etl/cdc/reconcile_cdc.py` compares CDC-derived
-  current state against the batch-derived SCD2 view. The two paths are
-  independent by design, so a difference between them is a signal about one of
-  the paths rather than a known offset to be tolerated.
+- **Reconciliation** — `code_etl/cdc/reconcile_cdc.py` compares source row counts
+  with Bronze CDC row counts per captured table (against expected seed volumes). It
+  does not yet compare CDC current state with the batch SCD2 view.
 
 ---
 
@@ -1347,6 +1397,20 @@ dbt serving build fails       → no SERVING_COMPLETE
 Using a flag rather than a sensor on `gold_mart360_dag` keeps consumers
 decoupled from producer topology: if Gold is later split across several DAGs,
 only the final producer writes the flag and no consumer changes.
+
+### One `cob_dt` for every DAG
+
+Every DAG takes its `cob_dt` from `airflow/plugins/cob_dt.py`:
+`dag_run.conf["cob_dt"]` when given (manual runs, backfills), otherwise the
+**ICT date of `data_interval_start`** — the business day that just ended, identical
+for every daily DAG regardless of its hour.
+
+The DAGs used `{{ ds }}`, which is the **UTC** date of the logical date. With schedules
+in ICT, 07:00 ICT is 00:00 UTC: rendered with Airflow 2.10.0 for the runs of
+2026-09-30, Bronze/Silver/Gold (02:00–06:00) got `2026-09-28` while dbt, DQ, PII and
+contract DAGs (07:00–09:00) got `2026-09-29` — so every scheduled serving publish waited
+for a `GOLD_COMPLETE` that did not exist yet. After the fix, all 13 daily-scheduled DAGs render
+the same `cob_dt` (`2026-09-29`), and `--conf '{"cob_dt": …}'` overrides it for all of them.
 
 > Airflow orchestrates jobs.  
 > Spark Structured Streaming processes the continuous Kafka stream.
@@ -1503,9 +1567,10 @@ covering areas such as:
 
 # Demo
 
-A 5-minute walkthrough is available at:
+The authoritative end-to-end walkthrough — what, why, exact command, expected result,
+verification and talking points for every step — is:
 
-**[docs/demo/demo.md](docs/01-getting-started/demo.md)**
+**[DEMO_GUIDE.md](DEMO_GUIDE.md)**
 
 Typical demo flow:
 
@@ -1539,50 +1604,35 @@ Runtime evidence:
 
 # Quick Query Examples
 
-## Customer 360
+Trino accepts only HTTPS with a password (ADR-0016); inside the container the CLI user
+`trino` reads `TRINO_PASSWORD` from `secrets/trino/env/trino-server.env`. The catalog
+is `iceberg` (Spark calls the same warehouse `lakehouse`).
 
 ```bash
-docker exec banking-trino trino \
-  --catalog lakehouse \
-  --execute "
-    SELECT COUNT(*)
-    FROM gold.mart_customer_360
-  "
+TQ() { docker exec -i banking-trino trino --server https://localhost:8443 \
+        --truststore-path /etc/trino/secrets/trino.pem --user trino --password \
+        --catalog iceberg --execute "$1"; }
 ```
 
----
-
-## RFM Distribution
+## Customer 360 — current serving, 1 row per customer
 
 ```bash
-docker exec banking-trino trino \
-  --catalog lakehouse \
-  --execute "
-    SELECT
-        rfm_segment,
-        COUNT(*) AS customer_count
-    FROM gold.rfm_segment
-    GROUP BY rfm_segment
-    ORDER BY customer_count DESC
-  "
+TQ "SELECT COUNT(*), COUNT(DISTINCT customer_id), MIN(cob_dt), MAX(cob_dt)
+    FROM serving.mart_customer_360_current"
 ```
 
----
-
-## Silver Current Customer
+## RFM distribution
 
 ```bash
-docker exec banking-trino trino \
-  --catalog lakehouse \
-  --execute "
-    SELECT
-        customer_id,
-        email,
-        __cdc_operation,
-        __cdc_timestamp_ms
-    FROM silver.dim_customer_current
-    WHERE customer_id = 1001
-  "
+TQ "SELECT rfm_segment, COUNT(*) AS customers, ROUND(AVG(monetary), 0) AS avg_monetary
+    FROM serving.rfm_segment_current GROUP BY rfm_segment ORDER BY avg_monetary DESC"
+```
+
+## Silver Current customer
+
+```bash
+TQ "SELECT customer_id, email, date_of_birth, __cdc_operation, __cdc_timestamp_ms
+    FROM silver.dim_customer_current WHERE customer_id = 1001"
 ```
 
 ---
@@ -1609,27 +1659,34 @@ Because the platform runs multiple services locally, sufficient Docker memory al
 git clone https://github.com/minzi03/banking_data_platform.git
 cd banking_data_platform
 
-# Configure environment
+# Configure environment — then replace every CHANGE_ME in docker/.env
 cp docker/.env.example docker/.env
 
-# Start infrastructure
-cd docker
-docker compose up -d
-```
+# Generate Trino secrets (docker/secrets/trino/, gitignored) and start the stack.
+# `make up` refuses to start without docker/.env; compose needs the secrets.
+make up                        # Windows without python3: make PYTHON="py -3" up
 
-Generate seed data if required:
-
-```bash
-python data_generator/generate_all.py \
-  --host localhost \
-  --port 5432 \
-  --as-of 2026-09-22   # the cob_dt you will load; default today
+# Seed the source for the cob_dt you will load
+make seed AS_OF=2026-09-29
 ```
 
 `--as-of` anchors the generated timeline: the newest transaction falls on that date.
 Load a `cob_dt` far from the one you seeded for, and 30-day KPIs go to zero (TD-16).
 
-Then open Airflow and run the required workflows according to their dependencies.
+Then run the batch chain for that `cob_dt` (every DAG reads `dag_run.conf["cob_dt"]`):
+
+```bash
+docker exec banking-airflow-scheduler airflow variables set pii_hash_salt "$(openssl rand -hex 32)"
+for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag \
+         silver_all_dag gold_all_dag dbt_serving_publish; do
+  docker exec banking-airflow-scheduler airflow dags unpause $d
+  docker exec banking-airflow-scheduler airflow dags trigger $d --conf '{"cob_dt": "2026-09-29"}'
+done
+```
+
+The full walkthrough, with verification queries, is **[DEMO_GUIDE.md](DEMO_GUIDE.md)**.
+A stack created before every Bronze table was partitioned by `cob_dt` needs
+`make bronze-partition-migrate` once (Bronze jobs refuse to write until it runs).
 
 ---
 
@@ -1641,9 +1698,9 @@ Then open Airflow and run the required workflows according to their dependencies
 | MinIO Console            | http://localhost:9001         | Object storage UI                |
 | Spark Master UI          | http://localhost:9090         | Spark cluster UI                 |
 | Spark Worker UI          | http://localhost:9091         | Spark worker UI                  |
-| Kafka UI                 | http://localhost:8081         | Kafka inspection                 |
+| Kafka UI                 | http://localhost:8089         | Kafka inspection                 |
 | Kafka Connect / Debezium | http://localhost:8083         | CDC connector API                |
-| Trino                    | http://localhost:8085         | SQL query engine                 |
+| Trino                    | https://localhost:8453        | SQL query engine (HTTPS + password; plain HTTP on 8085 answers 403) |
 | Iceberg REST Catalog     | http://localhost:8181         | Iceberg catalog                  |
 | OpenMetadata             | http://localhost:8585         | Catalog / lineage                |
 | Streamlit                | http://localhost:8501         | Dashboard code, not runtime-verified — see TD-7 |
@@ -1681,6 +1738,9 @@ Current boundaries include:
 - The freshness metric primarily measures data age rather than complete source-to-target processing lag.
 - CDC current-state freshness is bounded by the consolidation cron (`*/10`), not by processing time; there is no event-driven trigger from streaming ingestion to consolidation.
 - The platform does not claim end-to-end exactly-once semantics.
+- A CDC key that was deleted and then receives an older, late event is re-inserted: Silver Current keeps no tombstones.
+- The 2026-09-30 fixes (RFM direction, CDC casts and watermark, single `cob_dt`, Bronze partitioning, SCD2 product/branch, API parameters) are covered by unit and Spark regression tests and by rendering every DAG with Airflow 2.10.0, but have **not yet been run on the full Docker stack**; the runtime rows of the metrics table predate them.
+- `regulatory_reporting` and `dbt_seed` DAGs are non-functional and unscheduled; `ops_ml_churn_dag` is manual and needs `ml/requirements.txt` on the Spark worker. See TD-20.
 - Enterprise mTLS, KMS, Kubernetes, multi-region DR, and production on-call/SLO systems are outside the current portfolio scope.
 
 ---
@@ -1820,7 +1880,7 @@ guess which of the ~40 files applies to you.
 
 | Document                                                       | Purpose                             |
 | -------------------------------------------------------------- | ----------------------------------- |
-| [Demo](docs/01-getting-started/demo.md)                        | 5-minute project walkthrough        |
+| [Demo guide](DEMO_GUIDE.md)                                    | Authoritative end-to-end demo       |
 | [Evidence](docs/evidence)                                      | Runtime verification artifacts      |
 | [P1 CDC Evidence](docs/evidence/p1-cdc-consolidation)          | CDC consolidation verification      |
 | [P2 Observability Evidence](docs/evidence/p2-observability)    | Observability verification          |

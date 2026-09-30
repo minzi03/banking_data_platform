@@ -4,8 +4,9 @@
 
 ### Start All Services
 ```bash
-cd banking_data_platform/docker
-docker compose up -d
+cd banking_data_platform
+cp docker/.env.example docker/.env   # first time only; replace every CHANGE_ME
+make up                              # checks docker/.env, generates Trino secrets, compose up
 ```
 
 ### Stop All Services
@@ -29,11 +30,26 @@ docker compose logs -f [service_name]
 
 ### 1. Start Infrastructure
 ```bash
-cd banking_data_platform/docker
-docker compose up -d
+cd banking_data_platform
+make up            # = env check + scripts/bootstrap_trino_auth.py + docker compose up -d
 # Wait 2 minutes for services to become healthy
-docker compose ps  # Verify all services are healthy
+docker compose -f docker/docker-compose.yml ps  # 25 running, 4 one-shot jobs exited (0)
 ```
+
+On Linux, set `DOCKER_GID` in `docker/.env` to the group of the host socket
+(`stat -c %g /var/run/docker.sock`): Airflow submits every Spark/dbt job with
+`docker exec` and needs access to `/var/run/docker.sock`. Docker Desktop: `0`.
+
+A stack created before every Bronze table was partitioned by `cob_dt` must be
+migrated once — Bronze jobs refuse to write a snapshot into an unpartitioned table:
+
+```bash
+make bronze-partition-migrate   # ALTER … ADD PARTITION FIELD cob_dt + rewrite_data_files
+```
+
+`dim_product` / `dim_branch` (SCD1 → SCD2) need no manual step: the first SCD2 run
+adds `*_sk`, `effective_from`, `effective_to`, `is_current` and marks existing rows
+as current, valid from `1900-01-01`.
 
 ### 2. Generate Seed Data
 ```bash
@@ -53,15 +69,20 @@ python data_generator/generate_all.py --host localhost --port 5432 --as-of 2026-
 2. Enable DAGs
 3. Trigger manually
 
-**Via CLI:**
+**Via CLI — always pass `cob_dt`** (ADR-0017). Every DAG reads
+`dag_run.conf["cob_dt"]`; without it a manual run falls back to the ICT date of its
+own data interval, which can differ between DAGs triggered between their schedules.
+
 ```bash
-docker compose exec airflow-scheduler airflow dags trigger bronze_core_banking_dag
-docker compose exec airflow-scheduler airflow dags trigger bronze_card_crm_dag
-docker compose exec airflow-scheduler airflow dags trigger bronze_digital_banking_dag
-docker compose exec airflow-scheduler airflow dags trigger silver_all_dag
-docker compose exec airflow-scheduler airflow dags trigger gold_all_dag
-docker compose exec airflow-scheduler airflow dags trigger ops_data_quality_dag
+COB=2026-09-29
+for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag \
+         silver_all_dag gold_all_dag dbt_serving_publish ops_data_quality_dag; do
+  docker exec banking-airflow-scheduler airflow dags unpause $d
+  docker exec banking-airflow-scheduler airflow dags trigger $d --conf "{\"cob_dt\": \"$COB\"}"
+done
 ```
+
+Scheduled runs need no `conf`: every daily DAG gets the business day that just ended.
 
 **Without Airflow (bootstrap, one `cob_dt`):** the Silver and Gold bootstraps default
 to one `spark-submit` per job, the same path Airflow uses. `--in-process` runs every job
@@ -83,28 +104,30 @@ and prints it only when the job fails, which is how a failed Gold z-order
 
 ### 4. Query Data
 
-**Via Trino (port 8085):**
+**Via Trino (HTTPS 8453 on the host, 8443 inside the network; catalog `iceberg`).**
+Plain HTTP answers 403 (ADR-0016). Inside the Trino container the CLI user `trino`
+reads its password from `TRINO_PASSWORD`:
+
 ```bash
-docker compose exec trino trino --catalog lakehouse
+make trino    # interactive CLI
 
-# History snapshot table
-SELECT COUNT(*) FROM lakehouse.gold.mart_customer_360;
-
-# Current serving table (1 row/customer)
-SELECT COUNT(*) FROM lakehouse.gold.mart_customer_360_current;
-SELECT customer_segment, COUNT(*) FROM lakehouse.gold.mart_customer_360_current GROUP BY 1;
-
-# Other current-serving customer-grain Gold tables
-SELECT COUNT(*) FROM lakehouse.gold.customer_balance_summary_current;
-SELECT COUNT(*) FROM lakehouse.gold.customer_transaction_summary_current;
-SELECT COUNT(*) FROM lakehouse.gold.customer_product_summary_current;
-SELECT COUNT(*) FROM lakehouse.gold.customer_card_summary_current;
-SELECT COUNT(*) FROM lakehouse.gold.rfm_segment_current;
-SELECT COUNT(*) FROM lakehouse.gold.churn_prediction_current;
-SELECT COUNT(*) FROM lakehouse.gold.cross_sell_segment_current;
-SELECT COUNT(*) FROM lakehouse.gold.campaign_target_current;
+docker exec -i banking-trino trino --server https://localhost:8443 \
+  --truststore-path /etc/trino/secrets/trino.pem --user trino --password \
+  --catalog iceberg --execute "SELECT COUNT(*) FROM serving.mart_customer_360_current"
 ```
 
+```sql
+-- History snapshot table (one partition per cob_dt)
+SELECT cob_dt, COUNT(*) FROM gold.mart_customer_360 GROUP BY cob_dt ORDER BY cob_dt;
+
+-- Current serving tables (dbt, exactly one cob_dt, 1 row/customer)
+SELECT COUNT(*), MIN(cob_dt), MAX(cob_dt) FROM serving.mart_customer_360_current;
+SELECT customer_segment, COUNT(*) FROM serving.mart_customer_360_current GROUP BY 1;
+SELECT rfm_segment, COUNT(*) FROM serving.rfm_segment_current GROUP BY 1;
+SELECT campaign_type, COUNT(*) FROM serving.campaign_target_current GROUP BY 1;
+```
+
+The former `gold.*_current` CTAS tables were retired; serving lives in `serving.*`.
 
 ### 5. Check Data Quality
 
@@ -583,9 +606,9 @@ docker compose restart iceberg-rest
 # Check DAG import errors
 docker compose exec airflow-scheduler airflow dags list-import-errors
 
-# Add missing connections
-docker compose exec airflow-scheduler airflow connections add 'spark_default' \
-  --conn-type 'spark' --conn-host 'spark://spark-master' --conn-port '7077'
+# DAGs use no Spark connection: Spark jobs run inside spark-worker-1 via `docker exec`.
+# "docker: permission denied" → set DOCKER_GID in docker/.env (see §1) and recreate Airflow.
+# "docker: not found" → rebuild the Airflow image (docker/Dockerfile.airflow copies the docker CLI).
 ```
 
 ### SparkSubmit Failed
@@ -613,13 +636,14 @@ docker compose exec airflow-scheduler airflow tasks states-for-dag-run \
 
 ### Check Data Volume
 ```bash
-docker compose exec trino trino --catalog lakehouse
+make trino   # HTTPS + password, catalog iceberg (ADR-0016)
 
-SELECT 'bronze' as layer, COUNT(*) FROM lakehouse.bronze.core_customer
+-- one snapshot per layer (Trino catalog iceberg; replace the date)
+SELECT 'bronze' AS layer, COUNT(*) FROM bronze.core_customer WHERE cob_dt = DATE '2026-09-29'
 UNION ALL
-SELECT 'silver', COUNT(*) FROM lakehouse.silver.dim_customer
+SELECT 'silver', COUNT(*) FROM silver.dim_customer WHERE is_current = 1
 UNION ALL
-SELECT 'gold', COUNT(*) FROM lakehouse.gold.mart_customer_360;
+SELECT 'gold', COUNT(*) FROM gold.mart_customer_360 WHERE cob_dt = DATE '2026-09-29';
 ```
 
 ---
@@ -702,6 +726,29 @@ Author: [Name]
 
 ---
 
+## CDC Consolidation — replay and reset
+
+Progress per target table is the last merged Iceberg snapshot of its Bronze CDC table
+(`meta.cdc_watermark.last_snapshot_id`); each run reads the appends in `(watermark, end]`.
+
+```sql
+-- Trino
+SELECT * FROM meta.cdc_watermark;
+SELECT snapshot_id, made_current_at FROM bronze."core_customer_cdc$history" ORDER BY made_current_at DESC LIMIT 5;
+```
+
+- **Replay everything** (e.g. after fixing a conversion): delete the table's watermark row,
+  then trigger `cdc_consolidation_pipeline`. The run reads all of Bronze CDC; the MERGE
+  never overwrites newer state with an older event, so replay is idempotent.
+  `DELETE FROM lakehouse.meta.cdc_watermark WHERE table_name = 'dim_customer_current'` (Spark SQL).
+- **Watermark snapshot expired** by `ops_maintenance_weekly_dag`: handled automatically —
+  the run logs a WARNING and falls back to a full read.
+- **Stop streaming**: trigger `cdc_streaming_stop_all` (SIGTERM to the `cdc_*` drivers only;
+  it no longer touches the Spark worker). Restart with `cdc_streaming_pipeline`; queries
+  resume from their checkpoints under `s3a://lakehouse/checkpoints/cdc/`.
+
+---
+
 ## Backfill Playbook
 
 ### Prerequisites
@@ -710,25 +757,30 @@ Author: [Name]
 3. Notify downstream consumers of reprocessing
 
 ### Steps
-1. Trigger Bronze for target dates:
-   docker compose exec airflow-scheduler airflow dags trigger bronze_core_banking_dag
+Pass the target date to every DAG with `--conf '{"cob_dt": "YYYY-MM-DD"}'` (ADR-0017).
+
+1. Trigger Bronze for the target date:
+   docker exec banking-airflow-scheduler airflow dags trigger bronze_core_banking_dag --conf '{"cob_dt": "2026-09-20"}'
 2. Wait for Bronze completion (check flag_job_etl)
-3. Trigger Silver:
-   docker compose exec airflow-scheduler airflow dags trigger silver_all_dag
+3. Trigger Silver with the same conf.
+   **SCD2 dims only move forward:** `scd_type2.py` refuses a `cob_dt` older than the
+   newest `effective_from` already stored. Re-running the newest date is safe; older
+   dates need the SCD2 tables rolled back first (Iceberg snapshot rollback below).
+   Facts and Gold for an older date are safe: they join the dim version valid at that date.
 4. Wait for Silver completion
-5. Trigger Gold:
-   docker compose exec airflow-scheduler airflow dags trigger gold_all_dag
+5. Trigger Gold with the same conf.
 6. Verify via reconciliation queries
 7. Rebuild serving tables via dbt
 
 ### Iceberg Snapshot Rollback (Emergency)
 If bad data was written, rollback to previous snapshot:
+Spark SQL (`docker exec -it banking-spark-worker-1 /opt/spark/bin/spark-sql`; catalog `lakehouse`):
 ```sql
 -- List snapshots
-SELECT * FROM lakehouse.gold.mart_customer_360.snapshots
+SELECT snapshot_id, committed_at, operation FROM lakehouse.gold.mart_customer_360.snapshots
 ORDER BY committed_at DESC LIMIT 5;
--- Restore previous version
-CALL iceberg_rest.system.rollback_to_snapshot('gold', 'mart_customer_360', snapshot_id);
+-- Restore a previous version
+CALL lakehouse.system.rollback_to_snapshot('gold.mart_customer_360', <snapshot_id>);
 ```
 ---
 
@@ -740,10 +792,10 @@ CALL iceberg_rest.system.rollback_to_snapshot('gold', 'mart_customer_360', snaps
 | Bronze Card CRM | 02:00 daily | 2h | 2 | Failure |
 | Bronze Digital Banking | 02:00 daily | 2h | 2 | Failure |
 | Silver All | 04:00 daily | 3h | 2 | Failure + SLA |
-| Gold Mart360 | 06:00 daily | 3h | 2 | Failure + SLA |
+| Gold (gold_all_dag) | 06:00 daily | 3h | 2 | Failure + SLA |
 | Ops Data Quality | 08:00 daily | 4h | 2 | Failure |
 | CDC Streaming | Continuous | 1h freshness | 3 | Failure + Freshness |
-| dbt Run | 07:00 daily | 2h | 1 | Failure |
+| dbt Serving Publish | 07:00 daily | 1h | 1 | Failure |
 
 ### Data Freshness SLAs
 | Layer | Max Latency | Check |

@@ -113,12 +113,12 @@ flowchart LR
     subgraph Lakehouse["Apache Iceberg Lakehouse on MinIO — S3-Compatible Object Storage"]
 
         subgraph Bronze["Bronze Layer"]
-            BB["Bronze Batch<br/>16 Source Tables"]
+            BB["Bronze Batch<br/>22 Source Tables<br/>partitioned by cob_dt"]
             BC["Bronze CDC<br/>6 Append-Only Tables<br/><br/>INSERT / UPDATE / DELETE / SNAPSHOT"]
         end
 
         subgraph Silver["Silver Layer"]
-            SA["Silver Analytical<br/><br/>8 Dimensions<br/>2 SCD Type 2<br/>6 SCD Type 1<br/>5 Fact Tables"]
+            SA["Silver Analytical<br/><br/>10 Dimensions<br/>4 SCD Type 2<br/>6 SCD Type 1<br/>6 Fact Tables"]
             SC["Silver Current-State<br/><br/>dim_customer_current — 10K<br/>dim_account_current — 30K"]
         end
 
@@ -409,34 +409,22 @@ The layer preserves source-aligned structures suitable for downstream cleansing,
 
 The batch Silver layer contains:
 
-- **8 dimensions**
-  - 2 SCD Type 2
-  - 6 SCD Type 1
-- **5 fact tables**
+- **10 dimensions**
+  - 4 SCD Type 2 — `dim_customer`, `dim_account`, `dim_product`, `dim_branch`
+    (the assignment requires history for customer, account, product and branch)
+  - 6 SCD Type 1 — `dim_card`, `dim_employee`, `dim_device`, `dim_location`,
+    `dim_deposit`, `dim_loan`
+- **6 fact tables** — `fact_txn_account`, `fact_card_txn`, `fact_online_transaction`,
+  `fact_crm_interaction`, `fact_support_ticket`, `fact_loan_payment`
 
-### SCD Type 2
+SCD2 is hybrid: a change in a `tracked_columns` attribute closes the current version and
+opens a new one; any other attribute is overwritten in place on the current version; a
+key missing from the full snapshot is closed. Facts and Gold join the version valid at
+`cob_dt`, not `is_current = 1`.
 
-- `dim_customer`
-- `dim_account`
-
-### SCD Type 1
-
-- `dim_branch`
-- `dim_product`
-- `dim_card`
-- `dim_employee`
-- `dim_device`
-- `dim_location`
-
-### Fact Tables
-
-- `fact_txn_account`
-- `fact_card_txn`
-- `fact_online_transaction`
-- `fact_crm_interaction`
-- `fact_support_ticket`
-
-The analytical Silver model contains more than **4.6M curated financial transaction records** across the main financial transaction facts.
+One verified Silver snapshot holds **2,300,000 distinct curated transactions**
+(account 1.2M, card 600K, online 500K). The retired `4.6M+` figure counted the same
+transactions once per `cob_dt` partition.
 
 ### Historical semantics
 
@@ -470,8 +458,8 @@ Gold tables are produced from the **batch Silver analytical model**.
 
 The current portfolio baseline contains:
 
-- **14 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
-- **9 current-serving tables** — dbt-managed in `iceberg.serving`, published
+- **15 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
+- **16 current-serving tables** — dbt-managed in `iceberg.serving`, published
   through Trino
 
 The 8 `gold.*_current` CTAS tables and the Spark-only
@@ -716,61 +704,41 @@ The engine performs:
 
 ---
 
-# 10. Composite Watermark Design
+# 10. Watermark Design — progress vs ordering
 
-The consolidation process persists processing progress in:
-
-```text
-meta.cdc_watermark
-```
-
-Conceptual schema:
+The consolidation job persists progress per target table in `meta.cdc_watermark`:
 
 ```sql
 CREATE TABLE meta.cdc_watermark (
-    table_name           VARCHAR,
-    kafka_topic          VARCHAR,
-    kafka_partition      INTEGER,
-    last_cdc_timestamp   TIMESTAMP(6) WITH TIME ZONE,
-    last_kafka_offset    BIGINT,
-    last_processed_at    TIMESTAMP(6) WITH TIME ZONE
+    table_name              STRING,
+    last_snapshot_id        BIGINT,     -- progress: last merged Bronze CDC snapshot
+    last_cdc_timestamp_ms   BIGINT,     -- observability only
+    last_spark_batch_id     BIGINT,     -- observability only
+    last_processed_at       TIMESTAMP
 );
 ```
 
-The logical watermark identity is:
+**Progress** is the Iceberg snapshot of the append-only Bronze CDC table. Each run pins
+one end snapshot and reads exactly the appends in `(last_snapshot_id, end]` with an
+Iceberg incremental read, so every action of the run sees the same window and an event
+that lands late is still read. If the watermark snapshot was expired, the run falls back
+to a full read at `end`.
 
-```text
-table_name
-+ kafka_topic
-+ kafka_partition
-```
-
-This is important because Kafka offsets are only meaningful **within an individual partition**.
-
-Example:
-
-```text
-customer_topic / partition 0 → offset 1500
-customer_topic / partition 1 → offset 921
-```
-
-Offset `1500` in partition 0 cannot be globally compared with offset `921` in partition 1 to determine which event is newer.
-
-The watermark therefore tracks progress independently per partition.
-
-### What the watermark provides
-
-- incremental processing
-- restart recovery
-- partition-specific progress tracking
-- reduced unnecessary rescans
-- replay-safe failure recovery
+**Ordering** is `(__cdc_timestamp_ms, __spark_batch_id)` (ADR-0010). It decides which
+event wins during deduplication and guards the MERGE: an event is applied only if it is
+not older than the stored state.
 
 ### What it does not provide
 
-The watermark does **not** create global ordering across Kafka partitions.
+- It is **not** partition-aware, and Kafka topic/partition/offset are not persisted on
+  the valid Bronze CDC path (only in the DLQ). Replay is by snapshot window, not by offset.
+- No global ordering across Kafka partitions (each captured table uses one topic).
+- A deleted key that later receives an older, late event is re-inserted — the current
+  table keeps no tombstones.
 
-Kafka ordering remains partition-local.
+The previous design, `(max __cdc_timestamp_ms, max __spark_batch_id)` read from the live
+table at every action, skipped late events and could advance past events appended during
+the run (fixed 2026-09-30, `tests/cdc/test_cdc_consolidation.py`).
 
 ---
 
@@ -1428,9 +1396,9 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | Spark Master UI            |      9090 |          8080 | http://localhost:9090         |
 | Spark Worker UI            |      9091 |          8081 | http://localhost:9091         |
 | Airflow                    |      8080 |          8080 | http://localhost:8080         |
-| Kafka UI                   |      8081 |          8080 | http://localhost:8081         |
+| Kafka UI                   |      8089 |          8080 | http://localhost:8089         |
 | Debezium / Kafka Connect   |      8083 |          8083 | http://localhost:8083         |
-| Trino                      |      8085 |          8080 | http://localhost:8085         |
+| Trino (HTTPS + password)   |      8453 |          8443 | https://localhost:8453 (HTTP 8085 → 403) |
 | Iceberg REST               |      8181 |          8181 | http://localhost:8181         |
 | OpenMetadata               |      8585 |          8585 | http://localhost:8585         |
 | Streamlit                  |      8501 |          8501 | http://localhost:8501         |

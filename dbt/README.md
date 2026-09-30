@@ -1,111 +1,65 @@
-# dbt — Semantic Layer (Banking Data Platform)
+# dbt — Current-Serving Layer (Banking Data Platform)
 
-## Architecture
+dbt ở đây **không** biến đổi dữ liệu phân tích. Spark sở hữu Bronze → Silver →
+Gold lịch sử (`lakehouse.gold.*`, partition theo `cob_dt`). dbt, chạy qua Trino,
+chỉ **xuất bản** lát cắt hiện hành của Gold cho **một `cob_dt` được chỉ định**
+thành bảng `iceberg.serving.*_current`, rồi kiểm tra nó.
 
+```text
+lakehouse.gold.<model>  (Spark, nhiều cob_dt)
+        │  dbt build --select serving --vars '{"cob_dt": "YYYY-MM-DD"}'
+        ▼
+iceberg.serving.<model>_current  (dbt/Trino, đúng một cob_dt, 1 dòng/khoá)
 ```
-Spark (PySpark) ──→ Bronze → Silver → Gold     (Airflow DAGs orchestrate)
-dbt ──→ Semantic layer TRÊN Gold                (metrics, docs, lineage)
-```
 
-- **Spark** xử lý toàn bộ transform: Bronze → Silver → Gold
-- **dbt** chỉ làm semantic layer trên Gold tables
+Tài liệu này thay thế `dbt/SUMMARY.md` và `docs/04-operations/DBT_DEPLOYMENT.md`
+(mô tả "12 ephemeral semantic models" đã lỗi thời).
 
-## Components
+## Thành phần (đo bằng `dbt parse`, dbt-core 1.12.0 + dbt-trino 1.9.0)
 
-### Gold Sources (19 tables)
-Trỏ vào Spark-created Iceberg tables trong `lakehouse.gold`:
+| Loại | Số | Ở đâu |
+|---|---:|---|
+| Model serving (`materialized: table`) | 16 | `models/serving/*.sql` |
+| Model semantic (time spine MetricFlow) | 1 | `models/semantic/metricflow_time_spine.sql` |
+| Data test (generic + singular) | 137 | `models/serving/_serving_models.yml`, `tests/*.sql` |
+| Source (bảng Gold) | 15 | `models/gold/_gold_sources.yml` |
+| Semantic model / metric (MetricFlow) | 2 / 13 | `models/semantic/_semantic_models.yml` |
 
-| Table | Description |
-|-------|-------------|
-| `mart_customer_360` | Customer 360° view — 28+ KPIs |
-| `mart_customer_360_current` | Current-serving Customer 360 — 1 row/customer |
-| `customer_balance_summary` | Balance aggregations |
-| `customer_balance_summary_current` | Current-serving balance summary |
-| `customer_transaction_summary` | Transaction aggregations |
-| `customer_transaction_summary_current` | Current-serving transaction summary |
-| `customer_product_summary` | Product ownership |
-| `customer_product_summary_current` | Current-serving product summary |
-| `customer_card_summary` | Card portfolio |
-| `customer_card_summary_current` | Current-serving card summary |
-| `rfm_segment` | RFM segmentation |
-| `rfm_segment_current` | Current-serving RFM segment |
-| `churn_prediction` | Churn risk scoring |
-| `churn_prediction_current` | Current-serving churn prediction |
-| `cross_sell_segment` | Cross-sell opportunities |
-| `cross_sell_segment_current` | Current-serving cross-sell segment |
-| `campaign_target` | Campaign targeting |
-| `campaign_target_current` | Current-serving campaign target |
-| `mart_branch_monthly_summary` | Branch monthly performance |
+## Vì sao `table`, không phải view
 
-### Semantic Models (12 models)
-Ephemeral models trên Gold tables:
+Iceberg REST catalog của Trino không hỗ trợ `createView` (ADR-0003). Vì vậy serving
+chỉ tươi khi được build lại: `dbt_serving_publish` chạy mỗi ngày sau `GOLD_COMPLETE`
+của cùng `cob_dt`.
 
-| Model | Source Tables | Purpose |
-|-------|---------------|---------|
-| `sm_customer` | `mart_customer_360` | Customer dimension for metrics |
-| `sm_customer_current` | `mart_customer_360_current` | Current-serving customer 360 |
-| `sm_account` | `customer_balance_summary_current` | Account dimension for metrics |
-| `sm_balance_current` | `customer_balance_summary_current` | Current-serving balance summary |
-| `sm_transaction_current` | `customer_transaction_summary_current` | Current-serving transaction summary |
-| `sm_product_current` | `customer_product_summary_current` | Current-serving product summary |
-| `sm_card_current` | `customer_card_summary_current` | Current-serving card summary |
-| `sm_rfm_current` | `rfm_segment_current` | Current-serving RFM segment |
-| `sm_churn_current` | `churn_prediction_current` | Current-serving churn prediction |
-| `sm_cross_sell_current` | `cross_sell_segment_current` | Current-serving cross-sell segment |
-| `sm_campaign_current` | `campaign_target_current` | Current-serving campaign target |
+## Vì sao `cob_dt` tường minh
 
-### Exposures (4 exposures)
-| Exposure | Type | Description |
-|----------|------|-------------|
-| `superset_customer_360` | dashboard | Superset dashboard |
-| `powerbi_customer_360` | dashboard | Power BI dataset |
-| `notebook_customer_analytics` | notebook | Notebook analytics |
-| `ai_serving_customer` | ml | AI serving |
+Mỗi model lọc `WHERE cob_dt = date '{{ var("cob_dt") }}'`, không dùng `MAX(cob_dt)`.
+`MAX` sẽ âm thầm phục vụ dữ liệu hôm qua khi pipeline hôm nay hỏng. Thiếu var →
+sentinel `1900-01-01` → bảng rỗng → `assert_serving_snapshot_alignment` FAIL.
 
-### Macros (1 macro)
-- `generate_schema_name.sql` — Custom schema naming
+## Chạy
 
-## Usage
+Trong stack (container `banking-dbt`, user Trino `dbt`, HTTPS + mật khẩu từ
+`secrets/trino/env/dbt.env`):
 
 ```bash
-# Set alias for dbt-core (not dbt-fusion)
-alias dbt="C:/Users/miynzi/AppData/Local/Python/pythoncore-3.14-64/Scripts/dbt.exe"
-
-# Debug connection
-dbt debug
-
-# Install dependencies
-dbt deps
-
-# Parse models
-dbt parse
-
-# Compile models
-dbt compile
-
-# Run models (ephemeral, no materialization)
-dbt run
-
-# Test data quality (52 tests)
-dbt test
-
-# Generate docs
-dbt docs generate
-
-# Serve docs (port 8082)
-dbt docs serve --port 8082
+docker exec banking-dbt sh -lc "cd /usr/src/dbt && dbt deps && \
+  dbt build --target docker --select serving --vars '{\"cob_dt\": \"2026-09-29\"}'"
 ```
 
-## Connection
+Qua Airflow: `dbt_serving_publish` (07:00; chờ `GOLD_COMPLETE(cob_dt)`, `dbt build`,
+rồi ghi `SERVING_COMPLETE(cob_dt)`). Chạy tay cho một ngày cụ thể:
 
-- **Catalog**: `lakehouse`
-- **Schema**: `semantic` (for dbt models)
-- **Host**: `localhost:8085` (Trino)
-
-## Test Results
-
+```bash
+docker exec banking-airflow-scheduler airflow dags trigger dbt_serving_publish \
+  --conf '{"cob_dt": "2026-09-29"}'
 ```
-dbt compile: Found 12 models, 52 data tests, 19 sources, 4 exposures
-dbt test:    52/52 PASS
-dbt docs:    Generated successfully
-```
+
+Kiểm tra tĩnh (không cần Trino): `dbt parse --target docker`.
+
+## Lưu ý
+
+- `dbt build` dựng model trước rồi mới test: nếu test fail, bảng serving **đã bị
+  thay** nhưng `SERVING_COMPLETE` không được ghi. Consumer nên dựa vào cờ đó.
+- `serving` và `semantic` đều ghi vào schema `serving` vì user `dbt` chỉ được tạo
+  bảng ở đó (ADR-0016, `governance/rbac.py`).

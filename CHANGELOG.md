@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased — audit remediation 2026-09-30
+
+A full audit against the original assignment (Customer 360 + cross-sell lakehouse:
+`mart_customer_360` with 25+ KPIs, automatic campaign segmentation, history for
+customer/account/product/branch). Every fix below is covered by a test that fails on
+the previous code. Nothing here has run on the full Docker stack yet (TD-20).
+
+### Data correctness
+
+- **RFM scores were inverted** (inherited from the course template): `NTILE` gave the
+  best customer 1, so "Champions" were the worst customers and `campaign_target`
+  sent Upsell to them. Scores now follow the KPI dictionary (5 = best), with a
+  `customer_id` tie-breaker. `rfm_segment.yml`, `customer_360.yml`. Segment
+  cut-offs are unchanged and differ from the KPI dictionary (open question, TD-20).
+- Recency, `days_since_last_txn` and churn flags used `CAST(ts AS DATE)` (UTC day);
+  they now use the ICT business date like every other Gold window.
+- **CDC consolidation nulled columns**: `cast_columns` compared numeric columns with
+  `""`, so `date_of_birth`, `register_date`, `open_date`, `close_date` and `balance`
+  were NULL in Silver Current. Uses `try_cast` / `timestamp_micros` now.
+- CDC progress is the last merged **Iceberg snapshot** of Bronze CDC; each run reads a
+  pinned `(watermark, end]` window. The MERGE never overwrites newer state with an older
+  event. The old `(max ts, max batch)` watermark skipped late events and could count
+  events appended mid-run as processed.
+- DLQ: Kafka tombstones are no longer counted as `PARSE_ERROR`. The documented
+  primary-key check (`MISSING_PRIMARY_KEY`) is implemented.
+- **Bronze**: 18 of 22 tables were unpartitioned, so `overwritePartitions()` replaced
+  the whole table every load. Every Bronze table is now partitioned by `cob_dt`;
+  writes into an unpartitioned table are refused; `make bronze-partition-migrate`.
+- **SCD2**: `dim_product` and `dim_branch` keep history (assignment requirement).
+  Untracked columns are updated in place (Type 1). Keys missing from the snapshot are
+  closed. Empty snapshots and backward backfills fail. Facts and Gold join the dimension
+  version valid at `cob_dt`, not `is_current`.
+
+### Orchestration and reproducibility
+
+- **One `cob_dt` for every DAG** (ADR-0017). `{{ ds }}` is a UTC date: DAGs before
+  07:00 ICT got D-2, later ones D-1, so scheduled dbt/DQ/PII runs never found their
+  Gold flag. Verified by rendering every DAG with Airflow 2.10.0.
+- `init_all.sh`: `pipefail`, explicit namespaces, and runs `06_ddl_silver_cdc_current.sql`,
+  which no script ran before.
+- `make up` checks `docker/.env` and generates the Trino secrets compose requires.
+  `make trino` / `make psql` use HTTPS + password and the container's credentials.
+- Airflow image: docker CLI added (DAGs run `docker exec` but the image never had it);
+  Java, pyspark and the Spark provider removed (no DAG runs Spark locally any more).
+  `group_add: DOCKER_GID` for the socket.
+- PII masking and Iceberg maintenance DAGs used `SparkSubmitOperator` from the Airflow
+  container, which has no Iceberg jars. They now run in the Spark worker via `docker exec`.
+- `cdc_streaming_stop_all` could stop the Spark worker (`stop-slave.sh`), and a `#`
+  commented out the rest of its command. Now SIGTERMs only the `cdc_*` drivers.
+- Bronze DAGs no longer query the metadata DB at parse time, and the JDBC password
+  goes through env, not argv.
+- `regulatory_reporting` and `dbt_seed` are unscheduled (non-functional; see TD-20).
+  `ops_ml_churn_dag` is manual; its SQL quoting bug and label leakage are fixed.
+
+### API
+
+- `cob_dt` is a validated `date` query parameter bound with `?`, not interpolated into SQL.
+- Joined endpoints qualify `cob_dt`, which was ambiguous.
+
+### Documentation
+
+- `DEMO_GUIDE.md` is the single authoritative demo. Older demo and dbt docs are pointer stubs.
+- README, ARCHITECTURE, RUNBOOK, dbt README, data-output documentation, ADR-0010 and
+  ADR-0017 match the code. The README metrics table stays bound to the last promoted
+  manifest, with the known static drift stated under it.
+
 ## portfolio-v1.1
 
 Correctness, serving architecture, and verifiable metrics.

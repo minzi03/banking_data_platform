@@ -1784,3 +1784,72 @@ zookeeper     256 MiB     512 MiB   heap larger than the limit
 These are the images' default `HEAP_OPTS` / `KAFKA_HEAP_OPTS`. Fixing them means
 recreating the Kafka container. Kafka has no volume, so its topics and connector configs
 are lost, and Debezium re-snapshots about 2.3 M rows. That is a separate, disruptive step.
+
+---
+
+## TD-20 — Audit 2026-09-30: runtime re-verification and files proposed for deletion
+
+**Status:** open. The code fixes of the 2026-09-30 audit are done and covered by tests
+(see CHANGELOG, *Unreleased*). What remains needs either a running stack or an explicit
+decision to delete files — the audit session could do neither.
+
+### Needs the running stack
+
+Verified without a stack: 1,876 unit tests, 133 Spark regression tests (PySpark 3.5.3),
+all 21 DAGs imported and every daily DAG's templates rendered with Airflow 2.10.0,
+`dbt parse` (17 models / 137 tests), `docker compose config` for both compose files.
+Not yet run end to end:
+
+- Iceberg-specific paths: SCD2 `MERGE`/`UPDATE` with Type-1 overwrite and
+  `close_missing_keys`, the SCD1 → SCD2 upgrade of `dim_product` / `dim_branch`,
+  `make bronze-partition-migrate`, CDC incremental read by snapshot and the ordered MERGE.
+- Airflow image with the docker CLI and `group_add: DOCKER_GID` — the image never
+  installed the CLI before, so `docker exec` tasks could only have worked on a
+  hand-modified container.
+- API parameter binding against a real Trino.
+- Re-run `scripts/generate_metrics_manifest.py` and promote, so the README table
+  (still at `30458be`) is rebound. Known static drift: SCD2 2 → 4, SCD1 8 → 6,
+  test functions 972 → 1,034, pytest nodes 1,909 → 2,016.
+
+### Open spec question: RFM segment cut-offs
+
+The course KPI dictionary (`customer_360_kpi_dictionary.md`, group 6) sets
+`New Customers ≥ 5` and `At Risk ≥ 3`; the template code and this repo use `≥ 6` and `≥ 4`
+(`rfm_segment.yml`, `customer_360.yml`). The dictionary cannot be applied literally
+either: the sum of three `NTILE(5)` scores is 3–15, so its `Hibernating ≥ 2` and
+`Lost < 2` can never occur. Under the code's cut-offs, `Hibernating` is sum 3 and `Lost`
+is unreachable. The 2026-09-30 audit fixed the score **direction** (5 = best, as the
+dictionary says) and left the cut-offs unchanged, because either choice changes
+campaign targeting and needs the owner's decision.
+
+### Proposed for deletion (reference-checked, not deleted)
+
+Each was checked against imports, Dockerfiles, compose, DAGs, Makefile, CI, dbt, tests
+and docs. Deleting them is a decision for the repository owner.
+
+| File | Why | References to update when deleting |
+|---|---|---|
+| `docker/cookies.txt`, `logs/query_log.sql` | curl cookie jar header / empty file | none |
+| `dbt/.user.yml` | dbt anonymous id; now in `.gitignore` | `git rm --cached` |
+| `docs/images/banking_data_platform_architecture{,_2,_3}.png` | superseded by `_4` | none |
+| `code_etl/shared/cdc/__init__.py` | empty package, never imported | none |
+| `airflow/dags/dbt/dbt_seed_dag.py` | no dbt seeds exist; runs dbt in the Airflow image, which has no dbt. Unscheduled | DAG counts in manifest/README (20/21 → 19/20) |
+| `airflow/dags/compliance/regulatory_reporting_dag.py` + `docker/init_postgres/09_ddl_regulatory.sql` | runs Trino SQL through `PostgresHook` against tables that do not exist. Unscheduled | DAG counts; `DATA_DICTIONARY.md` (regenerate); `GLOSSARY.md` BCBS 239 line; `DATA_QUALITY.md` §schedule |
+| `airflow/dags/production_schedule.yml` | read by nothing; stale counts | `docs/05-quality/DATA_QUALITY.md` |
+| `docker/init_iceberg/04_ddl_bronze_cdc_old.sql`, `05_optimize_tables.sql` | superseded / never executed | `scripts/generate_data_dictionary.py` (`SKIP_DDL`), `tests/governance/test_trino_access_control.py` (`_SKIP_DDL`) |
+| `code_etl/cdc/create_cdc_tables.py` | second copy of `04_ddl_bronze_cdc.sql`, run by nothing | `tests/bronze/test_cdc_bronze_schema.py`, ADR-0010 |
+| `code_etl/bronze/bootstrap/test_jdbc.py`, `code_etl/scripts/insert_missing_data.py` | one-off debug / data-patch scripts | `pyproject.toml` coverage omit; this file |
+| `openmetadata/register_all_tables.sh` | duplicate of `register_tables.py` with invented columns | `openmetadata/README.md` |
+| `docker/dbt/` | old standalone dbt compose; the stack builds `dbt/Dockerfile` | `tests/governance/test_trino_access_control.py` (`CLIENT_USERS`) |
+| `scripts/install_dbt.{sh,bat}` | local install for the retired "semantic layer"; dbt runs in its container | none besides the retired doc |
+| `terraform/` | parallel deployment that drifted from compose (20 vs 29 services, `latest` tags, Spark 3.5.1, no Trino auth); out of the assignment's scope | Makefile `infra-*`, `tests/governance/test_terraform_secrets.py`, docs |
+| `docs/02-architecture/architecture-image-prompt.md` | image prompt with stale counts | `docs/09-analysis/DOCUMENTATION_PLAN.md` |
+| `demo/DEMO_SCRIPT.md`, `docs/01-getting-started/demo.md`, `dbt/SUMMARY.md`, `docs/04-operations/DBT_DEPLOYMENT.md` | now pointer stubs to `DEMO_GUIDE.md` / `dbt/README.md` | none left in README / INDEX |
+
+### Retained on purpose
+
+- `ml/` — out of the assignment's scope, but documented; `ops_ml_churn_dag` is manual.
+- `docs/09-analysis/` and `scripts/measure_jd_corpus.py` — dated research, not runtime.
+- `docs/evidence/0*-*.png` — screenshots from earlier runs; replace after the next demo.
+- `docker/conf/*.der` — mounted by OpenMetadata in compose.
+- `docker/init_postgres/08_ddl_data_vault_example.sql` — illustrates ADR-0014 and `DATA_VAULT_MAPPING.md`.

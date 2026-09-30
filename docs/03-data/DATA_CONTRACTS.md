@@ -102,13 +102,13 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 | `banking.mart_customer_360_current_gold` | 9 | 3 | 5,000 | 24h |
 | `banking.rfm_segment_current_gold` | 11 | 4 | 1,000 | 24h |
 | `banking.dim_account_silver` | 12 | 6 | 5,000 | 24h |
-| `banking.dim_branch_silver` | 6 | 4 | 5 | 24h |
+| `banking.dim_branch_silver` | 10 | 4 | 5 | 24h |
 | `banking.dim_card_silver` | 8 | 6 | 1,000 | 24h |
 | `banking.dim_customer_silver` | 18 | 6 | 5,000 | 24h |
 | `banking.dim_device_silver` | 4 | 3 | 500 | 24h |
 | `banking.dim_employee_silver` | 6 | 4 | 100 | 24h |
 | `banking.dim_location_silver` | 4 | 4 | 200 | 24h |
-| `banking.dim_product_silver` | 4 | 3 | 10 | 24h |
+| `banking.dim_product_silver` | 8 | 3 | 10 | 24h |
 | `banking.fact_card_txn_silver` | 8 | 5 | 10,000 | 24h |
 | `banking.fact_crm_interaction_silver` | 6 | 5 | 5,000 | 24h |
 | `banking.fact_online_transaction_silver` | 7 | 6 | 5,000 | 24h |
