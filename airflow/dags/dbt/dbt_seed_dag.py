@@ -1,5 +1,8 @@
 # =============================================================================
-# Airflow DAG: dbt Seed
+# Airflow DAG: dbt Seed — KHÔNG HOẠT ĐỘNG, chỉ chạy tay
+# Audit 2026-09-30: dbt project không có seed nào, và task chạy `dbt` trong
+# container Airflow (image không cài dbt). Đã tắt lịch @once để không fail khi
+# unpause; đề xuất xoá file này.
 # Business Logic: Load seed data for dbt
 # Pattern: dbt + Airflow integration
 # =============================================================================
@@ -26,7 +29,7 @@ with DAG(
     dag_id='dbt_seed',
     default_args=default_args,
     description='Load seed data for dbt models',
-    schedule_interval='@once',  # Run once
+    schedule_interval=None,  # tắt: không có seed, Airflow không có dbt
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['dbt', 'seed', 'banking'],

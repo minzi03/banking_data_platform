@@ -1,4 +1,4 @@
-﻿"""
+"""
 Airflow DAG: CDC Streaming Pipeline
 
 Starts Spark Structured Streaming jobs to consume CDC events from Kafka
@@ -13,7 +13,6 @@ Schedule: Manual trigger only
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from datetime import datetime
 from pathlib import Path
 import yaml
@@ -21,7 +20,6 @@ import yaml
 
 CONFIG_DIR = "/opt/project/code_etl/cdc/config"
 SPARK_APP = "/opt/project/code_etl/cdc/base_job/cdc_streaming.py"
-SPARK_CONN_ID = "spark_default"
 
 
 def load_cdc_configs():
@@ -76,9 +74,7 @@ with DAG(
         checkpoint = config["kafka"]["checkpoint_location"]
         trigger_interval = config["kafka"].get("trigger_interval", "30 seconds")
 
-        # Use SparkSubmitOperator for streaming jobs
-        # Note: Streaming jobs need to run in background and not block Airflow
-        # We use a BashOperator with nohup to run in background
+        # Streaming job chạy nền (docker exec -d) để không giữ worker slot của Airflow.
         cmd = (
             # Start detached, then fail the Airflow task unless the worker
             # actually retains the submit process. `docker exec -d` returns
@@ -94,6 +90,10 @@ with DAG(
             # spark.executor.instances in spark-defaults.conf). Without this,
             # six CDC queries compete for the worker's six cores and leave
             # some applications permanently WAITING.
+            # Standalone cấp core theo spark.cores.max (spark-defaults: 6), không theo
+            # executor.instances: thiếu dòng này một query lấy 6 core, query thứ hai 2,
+            # 4 query còn lại + consolidation WAITING mãi (đo trên stack 2026-09-30).
+            f"--conf spark.cores.max=1 "
             f"--num-executors 1 "
             f"--conf spark.executor.instances=1 "
             f"--conf spark.dynamicAllocation.enabled=false "
@@ -112,7 +112,7 @@ with DAG(
         task = BashOperator(
             task_id=f"stream_{table_name}",
             bash_command=cmd,
-            doc_md=f"Streaming job for {kafka_topic} â†’ {target_table}",
+            doc_md=f"Streaming job for {kafka_topic} → {target_table}",
         )
         streaming_tasks.append(task)
 
@@ -136,26 +136,19 @@ with DAG(
     doc_md="Stop all CDC streaming jobs",
 ) as stop_dag:
 
+    # Chỉ dừng driver của các query CDC (spark-submit --name cdc_<table>) bằng
+    # SIGTERM; master tự thu hồi executor khi driver thoát. Bản cũ gọi
+    # `stop-slave.sh` (tắt luôn Spark worker), và dấu `#` nằm giữa chuỗi bash một
+    # dòng biến phần pkill / REST kill phía sau thành comment.
     stop_all = BashOperator(
         task_id="stop_all_streaming",
         bash_command=(
             "/usr/bin/docker exec banking-spark-worker-1 "
-            "bash -c '"
-            "for app in $(/opt/spark/bin/spark-history-server --history 2>/dev/null "
-            "  || /opt/spark/sbin/stop-slave.sh 2>/dev/null "
-            "  || true); do "
-            "  echo \"Stopping $app\"; "
-            "done; "
-            "# Kill any running spark-submit streaming apps by name pattern "
-            "pkill -f 'cdc_' 2>/dev/null || true; "
-            "# Also try graceful stop via Spark REST API "
-            "for app_id in $(curl -s http://spark-master:8080/json/ 2>/dev/null "
-            "  | python3 -c 'import sys,json; [print(a[\"id\"]) for a in json.load(sys.stdin).get(\"activeapps\",[])]' 2>/dev/null || true); do "
-            "  echo \"Killing $app_id\"; "
-            "  curl -s -X POST \"http://spark-master:8080/cluster/kill/?id=$app_id\" 2>/dev/null; "
-            "done; "
-            "echo 'Stop signal sent to all streaming jobs'"
-            "' || echo 'No streaming jobs found'"
+            "pkill -TERM -f 'org.apache.spark.deploy.SparkSubmit.*--name cdc_'; "
+            "rc=$?; "
+            'if [ "$rc" -eq 0 ]; then echo "SIGTERM sent to CDC streaming drivers"; '
+            'elif [ "$rc" -eq 1 ]; then echo "No CDC streaming driver running"; '
+            'else echo "pkill failed (exit $rc)"; exit "$rc"; fi'
         ),
     )
 

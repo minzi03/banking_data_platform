@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CDC_SETUP = (REPO_ROOT / "docker" / "init_postgres" / "05-cdc-setup.sh").read_text(encoding="utf-8")
 SLOT_NAME = re.compile(r'"slot\.name":\s*"(\w+)"')
@@ -41,3 +43,25 @@ def test_connector_definitions_agree_on_slot_names():
     )
     assert script, "không tìm thấy slot.name trong register_connectors.py — regex hỏng?"
     assert sorted(script) == sorted(dag), f"script {sorted(script)} ≠ DAG {sorted(dag)}"
+
+
+DECIMAL_MODE = re.compile(r'"decimal\.handling\.mode":\s*"(\w+)"')
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["code_etl/cdc/register_connectors.py", "airflow/dags/cdc/cdc_register_connectors_dag.py"],
+)
+def test_every_connector_sends_decimals_as_strings(path):
+    """
+    Mặc định `precise` gửi NUMERIC dạng bytes base64 ("BxL/1Fg="); cdc_dlq cast sang
+    decimal(18,2) ra NULL, nên balance / txn_amount / amount NULL ở MỌI dòng Bronze CDC
+    (đo trên stack 2026-09-30: core_account_cdc 90.000 dòng, 0 balance khác NULL).
+    """
+    text = (REPO_ROOT / path).read_text(encoding="utf-8")
+    connectors = SLOT_NAME.findall(text)
+    modes = DECIMAL_MODE.findall(text)
+    assert connectors, f"{path}: không tìm thấy connector nào — regex hỏng?"
+    assert modes == ["string"] * len(connectors), (
+        f"{path}: {len(connectors)} connector, decimal.handling.mode = {modes}"
+    )

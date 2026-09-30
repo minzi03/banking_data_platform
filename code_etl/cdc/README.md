@@ -157,7 +157,7 @@ GROUP BY __cdc_operation;
 ## Monitoring
 
 ### Kafka UI
-- URL: http://localhost:8081
+- URL: http://localhost:8089
 - View topics, consumer lag, message rates
 
 ### Spark Master UI

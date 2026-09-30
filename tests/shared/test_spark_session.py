@@ -180,6 +180,75 @@ class TestIcebergUtils:
         assert result == "lakehouse.gold.mart_customer_360"
 
 
+def _df_on_table(partition_fields: list[str] | None, columns=("id", "cob_dt")) -> MagicMock:
+    """
+    DataFrame giả có cột `columns`, ghi vào bảng có metadata table `.partitions`
+    mô tả `partition_fields` (None = bảng không partition → không có cột `partition`).
+    """
+    schema = MagicMock()
+    if partition_fields is None:
+        schema.fieldNames.return_value = ["record_count", "file_count"]
+    else:
+        schema.fieldNames.return_value = ["partition", "record_count"]
+        schema.__getitem__.return_value.dataType.fieldNames.return_value = partition_fields
+    df = MagicMock()
+    df.columns = list(columns)
+    df.sparkSession.table.return_value.schema = schema
+    return df
+
+
+class TestPartitionGuard:
+    """
+    overwritePartitions() trên bảng không partition thay TOÀN BỘ bảng. Bronze từng
+    có 18/22 bảng như vậy: mỗi lần nạp xoá snapshot cũ, lịch sử product/branch mất.
+    """
+
+    def test_partition_fields_read_from_metadata_table(self):
+        df = _df_on_table(["cob_dt"])
+        assert _iceberg_mod.partition_fields(df.sparkSession, "lakehouse.bronze.core_branch") == ["cob_dt"]
+        df.sparkSession.table.assert_called_with("lakehouse.bronze.core_branch.partitions")
+
+    def test_table_is_refreshed_before_reading_partitions(self):
+        """Không REFRESH, `.partitions` trả về metadata cache cũ: ngay sau ALTER … ADD
+        PARTITION FIELD vẫn báo không partition (migration Bronze fail hậu kiểm, 2026-09-30)."""
+        df = _df_on_table(["cob_dt"])
+        session = df.sparkSession
+        _iceberg_mod.partition_fields(session, "lakehouse.bronze.core_branch")
+        calls = [c[0] for c in session.mock_calls if c[0] in ("sql", "table")]
+        assert calls[:2] == ["sql", "table"]
+        session.sql.assert_called_once_with("REFRESH TABLE lakehouse.bronze.core_branch")
+
+    def test_unpartitioned_table_has_no_partition_fields(self):
+        df = _df_on_table(None)
+        assert _iceberg_mod.partition_fields(df.sparkSession, "t") == []
+
+    def test_snapshot_into_unpartitioned_table_is_refused(self):
+        with pytest.raises(RuntimeError, match="ghi đè TOÀN BỘ bảng"):
+            _iceberg_mod.assert_partitioned_by_cob_dt(_df_on_table(None), "lakehouse.bronze.core_branch")
+
+    def test_partitioned_by_something_else_is_refused(self):
+        with pytest.raises(RuntimeError, match="bronze-partition-migrate"):
+            _iceberg_mod.assert_partitioned_by_cob_dt(_df_on_table(["is_current"]), "t")
+
+    def test_partitioned_by_cob_dt_passes(self):
+        _iceberg_mod.assert_partitioned_by_cob_dt(_df_on_table(["cob_dt"]), "t")
+
+    def test_dataframe_without_cob_dt_is_not_checked(self):
+        df = _df_on_table(None, columns=("id",))
+        _iceberg_mod.assert_partitioned_by_cob_dt(df, "t")
+        df.sparkSession.table.assert_not_called()
+
+    def test_every_bronze_ddl_table_is_partitioned_by_cob_dt(self):
+        import re
+
+        ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "01_ddl_bronze.sql").read_text(encoding="utf-8")
+        blocks = re.findall(r"CREATE TABLE IF NOT EXISTS (\S+)\s*\(.*?;", ddl, re.S)
+        tables = re.findall(r"(CREATE TABLE IF NOT EXISTS \S+\s*\(.*?;)", ddl, re.S)
+        assert len(blocks) == len(tables) > 0
+        missing = [re.search(r"EXISTS (\S+)", t).group(1) for t in tables if "PARTITIONED BY (cob_dt)" not in t]
+        assert not missing, f"Bronze DDL không partition theo cob_dt: {missing}"
+
+
 class TestUtcSessionGuard:
     """
     Guard biến precondition ngầm thành lỗi fail-fast.

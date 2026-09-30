@@ -29,6 +29,7 @@ _STUB_MODULES = (
     "airflow.providers.postgres.hooks.postgres",
     "pendulum",
     "etl_flag",
+    "cob_dt",
 )
 
 

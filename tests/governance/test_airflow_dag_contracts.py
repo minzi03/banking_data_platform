@@ -236,3 +236,130 @@ class TestFlagWaitingDagsAreScheduled:
             up_hour = _daily_hour(self.DAGS[upstream][1])
             if up_hour is not None:
                 assert hour >= up_hour, f"{path} chạy {hour}h, trước {upstream} ({up_hour}h) mà nó chờ"
+
+
+# ---------------------------------------------------------------------------
+# cob_dt: một định nghĩa cho mọi DAG (airflow/plugins/cob_dt.py)
+# ---------------------------------------------------------------------------
+# `{{ ds }}` là ngày UTC của logical_date. Với lịch theo giờ ICT, DAG chạy trước
+# 07:00 nhận D-2, DAG chạy từ 07:00 nhận D-1 (render bằng Airflow 2.10.0 thật),
+# nên dbt / DQ / PII chờ cờ của một ngày Gold chưa chạy và timeout mỗi ngày.
+
+PLUGINS_DIR = REPO_ROOT / "airflow" / "plugins"
+
+
+def _load_cob_dt_plugin():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("cob_dt_plugin", PLUGINS_DIR / "cob_dt.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestSingleCobDtDefinition:
+    @pytest.mark.parametrize("dag_path", DAG_FILES, ids=_dag_id)
+    def test_no_dag_uses_utc_ds(self, dag_path):
+        text = dag_path.read_text(encoding="utf-8")
+        offenders = [
+            f"{_dag_id(dag_path)}:{n}: {line.strip()}"
+            for n, line in enumerate(text.splitlines(), start=1)
+            if re.search(r"\{\{\s*ds\s*\}\}|\bds_nodash\b|context\[['\"]ds['\"]\]", line)
+            and not line.strip().startswith("#")
+        ]
+        assert not offenders, "Dùng cob_dt.COB_DT / cob_dt_from_context thay cho ds:\n  " + "\n  ".join(offenders)
+
+    def test_flag_helpers_default_to_shared_cob_dt(self):
+        text = (PLUGINS_DIR / "etl_flag.py").read_text(encoding="utf-8")
+        assert "{{ ds }}" not in text
+        assert "cob_dt: str = COB_DT" in text
+
+    def _render(self, conf, interval_start):
+        jinja2 = pytest.importorskip("jinja2")
+        module = _load_cob_dt_plugin()
+
+        class FakeDagRun:
+            def __init__(self, conf):
+                self.conf = conf
+
+        return jinja2.Template(module.COB_DT).render(dag_run=FakeDagRun(conf), data_interval_start=interval_start)
+
+    def test_conf_override_wins(self):
+        assert self._render({"cob_dt": "2026-09-15"}, None) == "2026-09-15"
+
+    def test_default_is_ict_date_of_interval_start(self):
+        """2026-09-28 23:00 UTC = 2026-09-29 06:00 ICT → cob_dt 2026-09-29 (ds sẽ là 2026-09-28)."""
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+
+        class PendulumLike:
+            def __init__(self, dt):
+                self.dt = dt
+
+            def in_timezone(self, tz):
+                return self.dt.astimezone(ZoneInfo(tz))
+
+        start = PendulumLike(datetime(2026, 9, 28, 23, 0, tzinfo=timezone.utc))
+        assert self._render({}, start) == "2026-09-29"
+        assert self._render(None, start) == "2026-09-29"
+
+
+class TestNoSparkSubmitOperator:
+    """
+    SparkSubmitOperator chạy spark-submit trong container Airflow (không có Iceberg
+    jar) — cùng lỗi mà test docker-exec ở trên bắt, nhưng test đó chỉ tìm chuỗi
+    "spark-submit" nên từng bỏ sót ops_pii_masking_daily_dag và ops_maintenance_weekly_dag.
+    """
+
+    @pytest.mark.parametrize("dag_path", DAG_FILES, ids=_dag_id)
+    def test_dag_does_not_use_spark_submit_operator(self, dag_path):
+        code = [ln for ln in dag_path.read_text(encoding="utf-8").splitlines() if not ln.strip().startswith("#")]
+        assert not any("SparkSubmitOperator(" in ln or "import SparkSubmitOperator" in ln for ln in code), _dag_id(
+            dag_path
+        )
+
+
+class TestCdcStreamingFitsTheWorker:
+    """
+    Standalone cấp core cho app theo `spark.cores.max` (spark-defaults: 6), không theo
+    `spark.executor.instances`. Thiếu giới hạn, query CDC đầu lấy 6/8 core, query thứ
+    hai 2, bốn query còn lại và consolidation WAITING vô hạn — Airflow vẫn báo success
+    (đo trên stack 2026-09-30).
+    """
+
+    STREAMING_DAG = DAGS_DIR / "cdc" / "cdc_streaming_dag.py"
+    CDC_CONFIGS = sorted((REPO_ROOT / "code_etl" / "cdc" / "config").glob("cdc_*.yml"))
+    ENV_EXAMPLE = REPO_ROOT / "docker" / ".env.example"
+
+    def test_each_query_caps_its_cores(self):
+        caps = re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))
+        assert caps, "cdc_streaming_dag không đặt --conf spark.cores.max cho query streaming"
+
+    def test_all_queries_leave_room_for_consolidation(self):
+        cap = int(re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))[0])
+        worker_cores = int(re.search(r"^SPARK_WORKER_CORES=(\d+)", self.ENV_EXAMPLE.read_text(), re.M).group(1))
+        used = cap * len(self.CDC_CONFIGS)
+        assert len(self.CDC_CONFIGS) == 6
+        assert used < worker_cores, (
+            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker"
+        )
+
+
+BATCH_DAGS = [
+    "bronze/bronze_card_crm_dag.py",
+    "bronze/bronze_core_banking_dag.py",
+    "bronze/bronze_digital_banking_dag.py",
+    "silver/silver_all_dag.py",
+    "gold/gold_mart360_dag.py",
+]
+
+
+@pytest.mark.parametrize("relative", BATCH_DAGS)
+def test_batch_dag_runs_one_at_a_time(relative):
+    """
+    Unpause một DAG có lịch tạo ngay lượt chạy cho khoảng gần nhất; DEMO_GUIDE trigger
+    thêm lượt tay cho cùng cob_dt. Không giới hạn (mặc định 16), hai lượt cùng ghi đè một
+    partition và cùng MERGE SCD2 một bảng dim (đo trên stack 2026-09-30).
+    """
+    text = (DAGS_DIR / relative).read_text(encoding="utf-8")
+    assert re.search(r"^\s*max_active_runs=1,", text, re.M), f"{relative} thiếu max_active_runs=1"

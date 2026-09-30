@@ -113,6 +113,10 @@ def main():
                 # replication slot/offset instead of duplicating the source.
                 "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
+                # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+                # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+                # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+                "decimal.handling.mode": "string",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",
@@ -141,6 +145,10 @@ def main():
                 # replication slot/offset instead of duplicating the source.
                 "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
+                # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+                # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+                # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+                "decimal.handling.mode": "string",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",
@@ -171,6 +179,10 @@ def main():
                 # replication slot/offset instead of duplicating the source.
                 "snapshot.mode": "initial",
                 "tombstones.on.delete": "true",
+                # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+                # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+                # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+                "decimal.handling.mode": "string",
                 "transforms": "unwrap",
                 "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
                 "transforms.unwrap.drop.tombstones": "false",

@@ -63,7 +63,7 @@ sql: |
           customer_id,
           customer_sk
       FROM lakehouse.silver.dim_customer
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
   -- Account transactions — aggregate về grain customer_id trước khi join
   acct_txn AS (
@@ -99,12 +99,13 @@ sql: |
           -- Sentinel 1900-01-01 giữ nguyên semantics cũ: khách không có giao dịch
           -- nào trong cửa sổ vẫn ra recency rất lớn thay vì NULL.
           -- COALESCE trước GREATEST để khách chỉ có 1 kênh vẫn lấy đúng ngày.
+          -- Ngày nghiệp vụ ICT, derive tường minh (không CAST timestamp trần).
           DATEDIFF(
               DATE '{{ cob_dt }}',
-              CAST(GREATEST(
+              CAST(from_utc_timestamp(GREATEST(
                   COALESCE(a.acct_last_txn_date, TIMESTAMP '1900-01-01 00:00:00'),
                   COALESCE(k.card_last_txn_date, TIMESTAMP '1900-01-01 00:00:00')
-              ) AS DATE)
+              ), 'Asia/Ho_Chi_Minh') AS DATE)
           ) AS recency_days,
           COALESCE(a.acct_txn_count, 0) + COALESCE(k.card_txn_count, 0) AS frequency,
           COALESCE(a.acct_txn_amount, 0) + COALESCE(k.card_txn_amount, 0) AS monetary
@@ -114,9 +115,13 @@ sql: |
   ),
   rfm_scored AS (
       SELECT *,
-          NTILE(5) OVER (ORDER BY recency_days ASC) AS r_score,
-          NTILE(5) OVER (ORDER BY frequency DESC) AS f_score,
-          NTILE(5) OVER (ORDER BY monetary DESC) AS m_score
+          -- 5 = TỐT NHẤT (KPI dictionary). NTILE gán 1 cho nhóm đứng đầu thứ tự,
+          -- nên sắp "tệ nhất trước": recency DESC, frequency ASC, monetary ASC.
+          -- Bản cũ sắp ngược nên "Champions" (tổng >= 13) là khách tệ nhất.
+          -- customer_id là tie-breaker để kết quả tất định khi bằng điểm.
+          NTILE(5) OVER (ORDER BY recency_days DESC, customer_id) AS r_score,
+          NTILE(5) OVER (ORDER BY frequency ASC, customer_id) AS f_score,
+          NTILE(5) OVER (ORDER BY monetary ASC, customer_id) AS m_score
       FROM rfm_base
   )
   SELECT

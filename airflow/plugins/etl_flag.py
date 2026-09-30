@@ -16,6 +16,8 @@ Quy tắc:
     - Downstream DAGs check theo job_name (dag_id), không theo table_name
 """
 
+from cob_dt import COB_DT
+
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 
 POSTGRES_ETL_CONN_ID = "postgres-etl"
@@ -42,7 +44,7 @@ def make_start_flag_task(
     dag_id: str,
     layer: str,
     dag,
-    cob_dt: str = "{{ ds }}",
+    cob_dt: str = COB_DT,
 ) -> PostgresOperator:
     """INSERT một R (Running) flag row khi DAG bắt đầu."""
     return PostgresOperator(
@@ -63,7 +65,7 @@ def make_end_flag_task(
     dag_id: str,
     layer: str,
     dag,
-    cob_dt: str = "{{ ds }}",
+    cob_dt: str = COB_DT,
 ) -> PostgresOperator:
     """INSERT một S (Success) flag row khi DAG hoàn thành."""
     return PostgresOperator(

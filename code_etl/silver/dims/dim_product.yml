@@ -1,6 +1,6 @@
-# Silver: dim_product (SCD Type 1 — UPSERT, no history)
+# Silver: dim_product (SCD Type 2 — full history; last_updated là cột Type 1)
 job:
-  type: scd_type1
+  type: scd_type2
 
 source:
   tables:
@@ -13,6 +13,26 @@ target:
 
 business_key:
   - product_code
+
+scd:
+  type: 2
+  effective_from_column: effective_from
+  effective_to_column: effective_to
+  current_flag_column: is_current
+  sk_column: product_sk
+  # Full snapshot: key biến mất khỏi nguồn = bản ghi đã bị xoá → đóng version.
+  close_missing_keys: true
+
+# Đề bài yêu cầu lưu lịch sử thay đổi của product/branch. Trước đây bảng này là
+# SCD1 (ghi đè), nên lịch sử mất hẳn. Cột không liệt kê ở đây (last_updated) được
+# ghi đè tại chỗ trên version hiện hành (Type 1).
+tracked_columns:
+  - product_name
+  - product_group
+  - product_type
+  - currency
+  - is_active
+  - launch_date
 
 sql: |
   SELECT

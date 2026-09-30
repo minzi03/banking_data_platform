@@ -140,8 +140,9 @@ class TestRepoCollectors:
 
     def test_silver_dimension_split(self):
         assert gen._silver_dims(None) == 10
-        assert gen._silver_dims("scd_type1") == 8
-        assert gen._silver_dims("scd_type2") == 2
+        # dim_product / dim_branch là SCD2 (đề bài: lưu lịch sử customer/account/product/branch)
+        assert gen._silver_dims("scd_type1") == 6
+        assert gen._silver_dims("scd_type2") == 4
 
     def test_dq_check_types(self, contract):
         assert gen._dq_check_types(contract) == 9

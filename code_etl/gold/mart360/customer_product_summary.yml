@@ -39,8 +39,8 @@ sql: |
       CASE WHEN COUNT(DISTINCT l.loan_id) > 0 THEN 1 ELSE 0 END AS has_loan,
       DATE '{{ cob_dt }}' AS cob_dt
   FROM lakehouse.silver.dim_customer c
-  LEFT JOIN lakehouse.silver.dim_account a ON c.customer_id = a.customer_id AND a.is_current = 1
+  LEFT JOIN lakehouse.silver.dim_account a ON c.customer_id = a.customer_id AND DATE '{{ cob_dt }}' BETWEEN a.effective_from AND a.effective_to
   LEFT JOIN lakehouse.silver.dim_card cd ON c.customer_id = cd.customer_id
   LEFT JOIN lakehouse.silver.dim_loan l ON c.customer_id = l.customer_id
-  WHERE c.is_current = 1
+  WHERE DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
   GROUP BY c.customer_id, c.customer_sk

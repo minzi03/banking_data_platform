@@ -42,5 +42,5 @@ sql: |
       ON p.loan_id = l.loan_id
   LEFT JOIN lakehouse.silver.dim_customer c
       ON l.customer_id = c.customer_id
-      AND c.is_current = 1
+      AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
   WHERE p.cob_dt = DATE '{{ cob_dt }}'

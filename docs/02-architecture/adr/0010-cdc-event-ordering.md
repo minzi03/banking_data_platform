@@ -1,6 +1,6 @@
 # ADR-0010 — Thứ tự sự kiện CDC dùng `(timestamp_ms, batch_id)`, không dùng Kafka offset
 
-**Status**: Accepted
+**Status**: Superseded một phần (2026-09-30) — Bronze CDC giờ lưu `__kafka_partition` / `__kafka_offset`; xem mục cuối
 **Ngày**: 2026-09 · chuyển thể thành ADR 2026-09-22
 **Liên quan**: [`0007`](0007-overwrite-partitions-by-cob-dt.md)
 
@@ -77,7 +77,7 @@ code_etl/cdc/consolidation/cdc_consolidation.py     docstring nêu rõ limitatio
 code_etl/cdc/create_cdc_tables.py                   schema Bronze CDC, không có cột Kafka
 code_etl/cdc/base_job/cdc_dlq.py:36-38              DLQ có kafka_partition/offset/timestamp
 code_etl/cdc/reconcile_cdc.py                       gate read-only, exit != 0 khi invariant vỡ
-lakehouse.meta.cdc_watermark                        last_cdc_timestamp_ms + last_spark_batch_id
+lakehouse.meta.cdc_watermark                        last_snapshot_id (tiến độ) + last_cdc_timestamp_ms / last_spark_batch_id (quan sát)
 ```
 
 **Nếu xem lại quyết định này**: thêm `kafka_partition`/`kafka_offset` vào Bronze CDC và chuyển thứ tự sang offset sẽ loại bỏ cả ba nhược điểm đầu. Chi phí là một lần schema evolution trên bảng append-only — rẻ hơn nhiều so với sửa sau khi đã có sự cố thứ tự.
@@ -110,3 +110,46 @@ in the DLQ only. `tests/bronze/test_cdc_bronze_schema.py` covers this in two par
 
 Persisting offsets into Bronze is still the "if revisited" option above. It is a schema
 change, not something to reintroduce into the write path unannounced.
+
+## Cập nhật 2026-09-30 — tách tiến độ khỏi thứ tự
+
+Quyết định về **thứ tự** giữ nguyên: `(__cdc_timestamp_ms, __spark_batch_id)`. Cái đổi
+là **tiến độ**. Watermark cũ `(max ts, max batch)` dùng chính khoá thứ tự làm mốc đã
+đọc, và đọc lại bảng mới nhất ở mỗi action, nên có hai lỗ hổng:
+
+- event về Bronze muộn với `ts` nhỏ hơn watermark bị bỏ qua vĩnh viễn;
+- event append giữa lúc MERGE và lúc tính `max` bị tính là đã xử lý mà chưa MERGE.
+
+Tiến độ giờ là **snapshot Iceberg** của bảng Bronze CDC (append-only): mỗi lượt chốt một
+snapshot cuối và đọc đúng các append trong `(watermark, end]` bằng incremental read của
+Iceberg. MERGE thêm guard `s.ts >= t.ts`, nên event muộn hoặc replay không kéo trạng
+thái lùi. Snapshot watermark bị expire → đọc lại toàn bộ tại `end` (an toàn nhờ guard).
+Test: `tests/cdc/test_cdc_consolidation.py`. Chưa chạy trên stack.
+
+## Cập nhật 2026-09-30 (runtime) — offset vào Bronze CDC
+
+Chạy trên stack thật, nhược điểm thứ hai ở trên xảy ra ngay: `INSERT` rồi `UPDATE` cùng
+khoá trong **một transaction** có cùng `__ts_ms` (Debezium gán theo ms xử lý) và rơi vào
+cùng micro-batch, nên `row_number()` chọn ngẫu nhiên giữa hai bản.
+
+```text
+customer 990004  INSERT  ts_ms 1790742688429  batch 4  offset 30012
+customer 990004  UPDATE  ts_ms 1790742688429  batch 4  offset 30013
+```
+
+Đã làm theo đúng "nếu xem lại" của ADR này:
+
+- `cdc_dlq.validate_and_split` giữ `__kafka_partition` / `__kafka_offset` trong luồng hợp lệ
+  (chỉ hai cột; topic / timestamp / raw_payload vẫn chỉ ở DLQ).
+- Hai DDL (`04_ddl_bronze_cdc.sql`, `create_cdc_tables.py`) có hai cột đó. Bảng tạo trước được
+  `ensure_kafka_coordinate_columns` thêm cột khi stream khởi động (dòng cũ mang NULL).
+- `deduplicate_latest` xếp `ts_ms DESC, batch DESC, offset DESC NULLS LAST`. Debezium key =
+  khoá chính → mọi event của một khoá cùng partition, nên offset phân định dứt khoát.
+- Guard MERGE giữa các lượt vẫn so `ts` (`s.ts >= t.ts`).
+
+Kiểm chứng: sau thay đổi, 990003 / 990004 / 990005 (INSERT + UPDATE cùng transaction) đều ra
+bản `UPDATE` cuối trong Silver Current; test `TestDeduplicateLatest` (hai thứ tự đầu vào,
+repartition 4) và `TestKafkaCoordinateColumns`.
+
+Còn lại: dòng Bronze CDC ghi trước thay đổi không có offset; đồng hồ nguồn vẫn là khoá thứ tự
+chính giữa các lượt.

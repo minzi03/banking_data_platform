@@ -1,20 +1,26 @@
 -- =============================================================================
--- Iceberg Schema Creation — Banking Data Platform
--- Run via Spark SQL after Iceberg REST catalog is ready
--- This is a reference script; schemas are auto-created by the first write.
+-- Iceberg Namespace Creation — Banking Data Platform
+-- Chạy ĐẦU TIÊN bởi init_all.sh, trước mọi DDL bảng. Không dựa vào việc catalog
+-- tự tạo namespace khi tạo bảng.
 -- =============================================================================
 
--- Bronze layer — raw data from sources
-CREATE SCHEMA IF NOT EXISTS lakehouse.bronze;
+-- Bronze layer — raw data from sources (batch snapshots + CDC change history)
+CREATE NAMESPACE IF NOT EXISTS lakehouse.bronze;
 
--- Silver layer — cleaned, deduplicated, SCD-tracked
-CREATE SCHEMA IF NOT EXISTS lakehouse.silver;
+-- Silver layer — cleaned, SCD-tracked dims, facts, CDC current state
+CREATE NAMESPACE IF NOT EXISTS lakehouse.silver;
 
--- Gold layer — analytics-ready marts
-CREATE SCHEMA IF NOT EXISTS lakehouse.gold;
+-- Gold layer — historical analytics marts (Spark)
+CREATE NAMESPACE IF NOT EXISTS lakehouse.gold;
+
+-- Serving layer — current-serving tables (dbt via Trino)
+CREATE NAMESPACE IF NOT EXISTS lakehouse.serving;
 
 -- Sandbox layer — PII-masked data for non-production teams
-CREATE SCHEMA IF NOT EXISTS lakehouse.sandbox;
+CREATE NAMESPACE IF NOT EXISTS lakehouse.sandbox;
 
--- Staging layer — temporary data for CDC and intermediate processing
-CREATE SCHEMA IF NOT EXISTS lakehouse.staging;
+-- Quarantine — records flagged by ops/quarantine.py
+CREATE NAMESPACE IF NOT EXISTS lakehouse.quarantine;
+
+-- Meta — CDC consolidation watermark
+CREATE NAMESPACE IF NOT EXISTS lakehouse.meta;

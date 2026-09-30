@@ -8,16 +8,16 @@ from datetime import timedelta
 
 from airflow import DAG
 from airflow.models import Variable
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.operators.bash import BashOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 DAG_ID              = "ops_pii_masking_daily_dag"
 APPLICATION_PATH    = "/opt/project/code_etl/shared/ops/pii_masking.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
-COB_DT              = "{{ ds }}"
 PII_SALT_VARIABLE   = "pii_hash_salt"
 
 DEFAULT_ARGS = {
@@ -28,11 +28,16 @@ DEFAULT_ARGS = {
     "email_on_failure": False,
 }
 
-SPARK_CONF = {
-    "spark.driver.memory":   "512m",
-    "spark.executor.memory": "768m",
-    "spark.executor.cores":  "1",
-}
+# spark-submit chạy TRONG spark-worker-1 (có Iceberg jar), không trong container
+# Airflow (chỉ có pyspark). Salt đi qua env của BashOperator rồi `docker exec -e`,
+# không qua argv — argv hiện ở `ps` và Spark UI.
+SPARK_SUBMIT = (
+    "/usr/bin/docker exec -e PII_HASH_SALT banking-spark-worker-1 "
+    "/opt/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client "
+    "--conf spark.driver.memory=512m "
+    "--conf spark.executor.memory=768m "
+    "--conf spark.executor.cores=1"
+)
 
 _MISSING_SALT_MESSAGE = (
     f"Airflow Variable '{PII_SALT_VARIABLE}' chưa được đặt (hoặc rỗng), "
@@ -118,25 +123,19 @@ wait_silver = SqlSensor(
 
 start = make_start_flag_task("start", DAG_ID, "ops", dag, cob_dt=COB_DT)
 
-mask_dim_customer = SparkSubmitOperator(
+mask_dim_customer = BashOperator(
     task_id="mask_silver_dim_customer",
-    application=APPLICATION_PATH,
-    conn_id="spark_default",
-    conf=SPARK_CONF,
-    env_vars=PII_ENV,
-    application_args=["--cob_dt", COB_DT, "--target", "dim_customer"],
-    verbose=True,
+    bash_command=f"{SPARK_SUBMIT} {APPLICATION_PATH} --cob_dt {COB_DT} --target dim_customer",
+    env=PII_ENV,
+    append_env=True,
     dag=dag,
 )
 
-mask_mart_360 = SparkSubmitOperator(
+mask_mart_360 = BashOperator(
     task_id="mask_gold_mart_customer_360",
-    application=APPLICATION_PATH,
-    conn_id="spark_default",
-    conf=SPARK_CONF,
-    env_vars=PII_ENV,
-    application_args=["--cob_dt", COB_DT, "--target", "mart_360"],
-    verbose=True,
+    bash_command=f"{SPARK_SUBMIT} {APPLICATION_PATH} --cob_dt {COB_DT} --target mart_360",
+    env=PII_ENV,
+    append_env=True,
     dag=dag,
 )
 

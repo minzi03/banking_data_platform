@@ -313,15 +313,18 @@ class TestCrossReferences:
 class TestNoUnimplementedClaims:
     def test_cdc_watermark_state_is_honest(self, manifest):
         """
-        Chốt chặn chống README drift quay lại: hai field này chỉ được đặt true
-        khi P1 thực sự persist Kafka metadata vào valid Bronze CDC.
-        Hiện tại cdc_dlq.py drop kafka metadata và meta.cdc_watermark chỉ có
-        table_name → cả hai phải là false.
+        Manifest phải nói đúng điều code làm. Từ 2026-09-30 cdc_dlq.py giữ
+        __kafka_partition / __kafka_offset trong valid Bronze CDC và dedup dùng offset
+        làm khoá cuối (ADR-0010). meta.cdc_watermark vẫn theo snapshot Iceberg của
+        bảng, không theo partition → partition_aware vẫn false.
         """
         wm = manifest["metrics"]["cdc"]["consolidation_watermark"]
-        assert wm["implementation"] == "timestamp_plus_spark_batch_id"
+        assert wm["implementation"] == "iceberg_snapshot_id"
+        assert wm["event_ordering"] == "cdc_timestamp_ms_then_spark_batch_id_then_kafka_offset"
         assert wm["partition_aware"] is False
-        assert wm["kafka_offsets_persisted_in_valid_bronze"] is False
+        assert wm["kafka_offsets_persisted_in_valid_bronze"] is True
+        dlq = (EVIDENCE_DIR.parents[1] / "code_etl" / "cdc" / "base_job" / "cdc_dlq.py").read_text(encoding="utf-8")
+        assert '"__kafka_offset"' in dlq, "manifest nói offset được lưu nhưng cdc_dlq.py không ghi"
 
     def test_superseded_transaction_claim_is_recorded_not_reused(self, manifest):
         """

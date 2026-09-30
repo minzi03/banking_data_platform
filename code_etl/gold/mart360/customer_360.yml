@@ -70,7 +70,7 @@ sql: |
           branch_code AS primary_branch_code,
           customer_segment, kyc_status, register_date
       FROM lakehouse.silver.dim_customer
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
   -- Account holding
   acct AS (
@@ -81,7 +81,7 @@ sql: |
           COUNT(DISTINCT CASE WHEN account_type = 'TIME_DEPOSIT' AND status = 'ACTIVE' THEN account_id END) AS cnt_td_active,
           COALESCE(SUM(CASE WHEN status = 'ACTIVE' THEN balance END), 0) AS total_account_balance
       FROM lakehouse.silver.dim_account
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
       GROUP BY customer_id
   ),
   -- Card holding
@@ -256,6 +256,27 @@ sql: |
       LEFT JOIN rfm_txn_acct rfa ON c.customer_id = rfa.customer_id
       LEFT JOIN rfm_txn_card rfc ON c.customer_id = rfc.customer_id
       LEFT JOIN digital_agg dg ON c.customer_id = dg.customer_id
+  ),
+  -- Ngày nghiệp vụ (ICT) của giao dịch gần nhất — cùng quy tắc với mọi CTE ở trên:
+  -- derive tường minh qua from_utc_timestamp, không CAST timestamp trần.
+  dated AS (
+      SELECT *,
+          DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(last_txn_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS days_since_last_txn_ict,
+          DATEDIFF(DATE '{{ cob_dt }}', CAST(from_utc_timestamp(rfm_last_txn_date_90d, 'Asia/Ho_Chi_Minh') AS DATE)) AS rfm_recency_days_90d
+      FROM combined
+  ),
+  -- RFM scoring: 90-day window (canonical, khớp rfm_segment.yml).
+  -- Chiều điểm theo KPI dictionary: 5 = TỐT NHẤT (gần nhất / nhiều nhất / chi
+  -- nhiều nhất). NTILE gán 1 cho nhóm đứng ĐẦU thứ tự sắp xếp, nên thứ tự phải là
+  -- "tệ nhất trước": recency DESC, frequency ASC, monetary ASC. Bản cũ sắp ngược
+  -- (recency ASC / DESC / DESC) nên "Champions" rơi vào khách tệ nhất.
+  -- customer_id là tie-breaker để NTILE tất định khi nhiều khách bằng điểm.
+  rfm_scored AS (
+      SELECT *,
+          NTILE(5) OVER (ORDER BY rfm_recency_days_90d DESC, customer_id) AS rfm_recency_score,
+          NTILE(5) OVER (ORDER BY rfm_frequency_90d ASC, customer_id) AS rfm_frequency_score,
+          NTILE(5) OVER (ORDER BY rfm_monetary_90d ASC, customer_id) AS rfm_monetary_score
+      FROM dated
   )
   SELECT
       customer_id, customer_sk, full_name_masked,
@@ -276,7 +297,7 @@ sql: |
       END AS aum_bucket,
       txn_count_30d, ROUND(txn_amount_30d, 2) AS txn_amount_30d,
       last_txn_date,
-      DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) AS days_since_last_txn,
+      days_since_last_txn_ict AS days_since_last_txn,
       primary_channel,
       interaction_count_90d, last_interaction_date,
       digital_txn_count_30d,
@@ -284,37 +305,24 @@ sql: |
       digital_channel_count_30d, digital_device_count_30d,
       last_digital_txn_date,
       CASE WHEN digital_txn_count_30d > 0 THEN 1 ELSE 0 END AS is_digital_active,
-      -- RFM scoring: 90-day window (canonical, matches rfm_segment.yml exactly)
-      NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC) AS rfm_recency_score,
-      NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC) AS rfm_frequency_score,
-      NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC) AS rfm_monetary_score,
+      rfm_recency_score,
+      rfm_frequency_score,
+      rfm_monetary_score,
       CASE
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 13 THEN 'Champions'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 10 THEN 'Loyal Customers'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 7 THEN 'Potential Loyalists'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 6 THEN 'New Customers'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 4 THEN 'At Risk'
-          WHEN (NTILE(5) OVER (ORDER BY DATEDIFF(DATE '{{ cob_dt }}', CAST(rfm_last_txn_date_90d AS DATE)) ASC)
-               + NTILE(5) OVER (ORDER BY rfm_frequency_90d DESC)
-               + NTILE(5) OVER (ORDER BY rfm_monetary_90d DESC)) >= 2 THEN 'Hibernating'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 13 THEN 'Champions'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 10 THEN 'Loyal Customers'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 7 THEN 'Potential Loyalists'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 6 THEN 'New Customers'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 4 THEN 'At Risk'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 2 THEN 'Hibernating'
           ELSE 'Lost'
       END AS rfm_segment,
       CASE
-          WHEN DATEDIFF(DATE '{{ cob_dt }}', CAST(last_txn_date AS DATE)) > 90
+          WHEN days_since_last_txn_ict > 90
            OR last_txn_date IS NULL THEN 1 ELSE 0
       END AS churn_flag,
       CASE
           WHEN aum_total >= 100000000 AND has_credit_card = 0 THEN 1 ELSE 0
       END AS cross_sell_credit_card_flag,
       DATE '{{ cob_dt }}' AS cob_dt
-  FROM combined
+  FROM rfm_scored

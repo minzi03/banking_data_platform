@@ -81,7 +81,7 @@ docker compose stop debezium
 ```
 
 ### Monitor CDC
-- **Kafka UI**: http://localhost:8081
+- **Kafka UI**: http://localhost:8089
 - **Spark Master**: http://localhost:9090
 - **Debezium REST**: http://localhost:8083
 

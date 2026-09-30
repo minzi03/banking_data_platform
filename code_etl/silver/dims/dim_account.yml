@@ -21,6 +21,8 @@ scd:
   effective_to_column: effective_to
   current_flag_column: is_current
   sk_column: account_sk
+  # Full snapshot: key biến mất khỏi nguồn = bản ghi đã bị xoá → đóng version.
+  close_missing_keys: true
 
 tracked_columns:
   - balance

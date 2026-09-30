@@ -3,9 +3,12 @@
 # Quick commands for managing the data platform
 # =============================================================================
 
-.PHONY: help up down restart logs status clean seed superset superset-init
+.PHONY: help env-check secrets up down restart logs status clean seed superset superset-init
 
 COMPOSE_FILE := docker/docker-compose.yml
+# Image Spark không đưa /opt/spark/bin vào PATH: `docker exec … spark-submit` trần
+# báo "executable file not found" (đo 2026-09-30). DAG cũng dùng đường dẫn đầy đủ.
+SPARK_SUBMIT := /opt/spark/bin/spark-submit
 DC := docker compose -f $(COMPOSE_FILE)
 
 # Default target
@@ -31,6 +34,7 @@ help:
 	@echo "    make bronze-init       Create Iceberg Bronze tables"
 	@echo "    make bronze-bootstrap  Full load (COB_DT=YYYY-MM-DD)"
 	@echo "    make bronze-ingest     Incremental (CONFIG=path COB_DT=YYYY-MM-DD)"
+	@echo "    make bronze-partition-migrate  One-time: partition old Bronze tables by cob_dt"
 	@echo ""
 	@echo "  Silver Layer:"
 	@echo "    make silver-init       Create Iceberg Silver tables"
@@ -82,20 +86,29 @@ help:
 # ---------------------------------------------------------------------------
 # Service management
 # ---------------------------------------------------------------------------
-up:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+# Python trên HOST cho các script chuẩn bị (Windows: make PYTHON="py -3" up).
+PYTHON ?= python3
+
+# docker/.env phải có trước; secret Trino (docker/secrets/trino/, gitignored) được
+# sinh nếu thiếu — compose tham chiếu các file đó qua env_file/volume nên thiếu
+# là `docker compose up` fail ngay trên một bản clone mới.
+env-check:
+	@test -f docker/.env || { echo "Thiếu docker/.env — chạy: cp docker/.env.example docker/.env rồi sửa giá trị CHANGE_ME"; exit 1; }
+
+secrets: env-check
+	$(PYTHON) scripts/bootstrap_trino_auth.py
+
+up: secrets
 	$(DC) up -d
 	@echo ""
 	@echo "All services starting... check status with: make status"
 
-up-lite:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+up-lite: secrets
 	$(DC) up -d --scale debezium=0 --scale kafka=0 --scale zookeeper=0
 	@echo ""
 	@echo "Core services starting (no CDC)..."
 
-up-db:
-	cd docker && cp -n .env .env.local 2>/dev/null || true
+up-db: env-check
 	$(DC) up -d postgres minio mc iceberg-rest
 	@echo ""
 	@echo "Database + Storage services starting..."
@@ -139,7 +152,7 @@ logs-cdc:
 # Database access
 # ---------------------------------------------------------------------------
 psql:
-	$(DC) exec postgres psql -U banking_admin -d banking_db
+	$(DC) exec postgres sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
 # ---------------------------------------------------------------------------
 # Seed data generation
@@ -169,8 +182,13 @@ seed-local:
 # ---------------------------------------------------------------------------
 # Trino queries
 # ---------------------------------------------------------------------------
+# Trino chỉ nhận HTTPS + mật khẩu (ADR-0016). User `trino`; mật khẩu TRINO_PASSWORD
+# có sẵn trong container qua secrets/trino/env/trino-server.env.
+TRINO_CLI := $(DC) exec trino trino --server https://localhost:8443 \
+	--truststore-path /etc/trino/secrets/trino.pem --user trino --password --catalog iceberg
+
 trino:
-	$(DC) exec trino trino --catalog iceberg
+	$(TRINO_CLI)
 
 # ---------------------------------------------------------------------------
 # Superset (BI Layer)
@@ -218,7 +236,7 @@ clean-images:
 # Spark submit (convenience)
 # ---------------------------------------------------------------------------
 spark-submit:
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		--conf spark.driver.memory=512m \
@@ -238,7 +256,7 @@ bronze-init:
 bronze-bootstrap:
 	@echo "Running Bronze bootstrap (full load from PostgreSQL)..."
 	# Credential từ môi trường CỦA spark-worker-1 ($$ → $ trong container), không từ Makefile.
-	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 sh -c '$(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/bronze/bootstrap/initial_load.py \
@@ -248,9 +266,19 @@ bronze-bootstrap:
 		--cob_dt $(COB_DT)'
 	@echo "Bronze bootstrap completed"
 
+# Một lần cho stack tạo trước khi mọi bảng Bronze partition theo cob_dt.
+# Bronze job từ chối ghi vào bảng chưa migrate (xem spark/iceberg_utils.py).
+bronze-partition-migrate:
+	@echo "Partitioning existing Bronze tables by cob_dt..."
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
+		--master spark://spark-master:7077 \
+		--deploy-mode client \
+		code_etl/bronze/bootstrap/partition_bronze_by_cob_dt.py
+	@echo "Bronze partition migration completed"
+
 bronze-ingest:
 	@echo "Running Bronze incremental ingestion..."
-	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 sh -c '$(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/bronze/base_job/ingestion_jdbc.py \
@@ -273,7 +301,7 @@ silver-init:
 
 silver-bootstrap:
 	@echo "Running Silver bootstrap (all dims + facts)..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/silver/bootstrap/initial_load.py \
@@ -282,7 +310,7 @@ silver-bootstrap:
 
 silver-scd1:
 	@echo "Running Silver SCD Type 1 job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type1 \
@@ -292,7 +320,7 @@ silver-scd1:
 
 silver-scd2:
 	@echo "Running Silver SCD Type 2 job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type2 \
@@ -302,7 +330,7 @@ silver-scd2:
 
 silver-fact:
 	@echo "Running Silver Fact job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.fact_txn \
@@ -322,7 +350,7 @@ gold-init:
 
 gold-bootstrap:
 	@echo "Running Gold bootstrap (all marts + segments)..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/gold/bootstrap/initial_load.py \
@@ -331,7 +359,7 @@ gold-bootstrap:
 
 gold-job:
 	@echo "Running Gold job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.gold.base_job.gold_job \
@@ -344,7 +372,7 @@ gold-job:
 # ---------------------------------------------------------------------------
 validate-pipeline:
 	@echo "Validating Bronze/Silver/Gold counts and grain..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/scripts/validate_pipeline.py \
@@ -352,7 +380,7 @@ validate-pipeline:
 
 serving-bootstrap:
 	@echo "Publishing current serving snapshots..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/serving/bootstrap/run_serving.py \

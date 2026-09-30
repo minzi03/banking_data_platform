@@ -84,6 +84,10 @@ def get_core_banking_config():
         # Snapshot once, then resume from the replication slot on restart.
         "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
+        # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+        # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+        # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+        "decimal.handling.mode": "string",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
         "transforms.unwrap.drop.tombstones": "false",
@@ -115,6 +119,10 @@ def get_card_crm_config():
         # Snapshot once, then resume from the replication slot on restart.
         "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
+        # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+        # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+        # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+        "decimal.handling.mode": "string",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
         "transforms.unwrap.drop.tombstones": "false",
@@ -146,6 +154,10 @@ def get_digital_banking_config():
         # Snapshot once, then resume from the replication slot on restart.
         "snapshot.mode": "initial",
         "tombstones.on.delete": "true",
+        # NUMERIC/DECIMAL dạng chuỗi "1234.56". Mặc định `precise` gửi bytes base64
+        # (vd "BxL/1Fg="), cast sang decimal ra NULL: balance/txn_amount/amount
+        # NULL 100% ở Bronze CDC (đo trên stack 2026-09-30).
+        "decimal.handling.mode": "string",
         "transforms": "unwrap",
         "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
         "transforms.unwrap.drop.tombstones": "false",

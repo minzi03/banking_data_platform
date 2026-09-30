@@ -29,7 +29,7 @@ sql: |
   WITH customers AS (
       SELECT customer_id, customer_sk
       FROM lakehouse.silver.dim_customer
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
   loans AS (
       SELECT
@@ -62,7 +62,7 @@ sql: |
           customer_id,
           COALESCE(SUM(CASE WHEN status = 'ACTIVE' THEN balance END), 0) AS total_deposit_balance
       FROM lakehouse.silver.dim_account
-      WHERE is_current = 1
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
       GROUP BY customer_id
   )
   SELECT

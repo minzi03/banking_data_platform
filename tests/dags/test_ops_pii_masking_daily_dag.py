@@ -26,17 +26,16 @@ DAG_PATH = PROJECT_ROOT / "airflow" / "dags" / "ops" / "ops_pii_masking_daily_da
 _STUB_MODULES = (
     "airflow",
     "airflow.models",
+    "airflow.operators",
+    "airflow.operators.bash",
     "airflow.providers",
-    "airflow.providers.apache",
-    "airflow.providers.apache.spark",
-    "airflow.providers.apache.spark.operators",
-    "airflow.providers.apache.spark.operators.spark_submit",
     "airflow.providers.common",
     "airflow.providers.common.sql",
     "airflow.providers.common.sql.sensors",
     "airflow.providers.common.sql.sensors.sql",
     "pendulum",
     "etl_flag",
+    "cob_dt",
 )
 
 
@@ -98,7 +97,7 @@ class TestParseTimeBehaviour:
 
 
 class TestPiiEnv:
-    """env_vars phải là template resolve lúc render task, không phải salt literal."""
+    """env phải là template resolve lúc render task, không phải salt literal."""
 
     def test_env_is_a_call_to_a_registered_macro(self, dag_module):
         template = dag_module.PII_ENV["PII_HASH_SALT"]
@@ -109,7 +108,16 @@ class TestPiiEnv:
         assert macros[match.group(1)] is dag_module.resolve_pii_hash_salt
 
     def test_both_masking_tasks_receive_the_env(self, dag_module):
-        calls = dag_module.SparkSubmitOperator.call_args_list
+        """
+        Hai task chạy spark-submit trong spark-worker qua `docker exec -e PII_HASH_SALT`
+        (không SparkSubmitOperator: container Airflow không có Iceberg jar). Salt đến
+        từ env của BashOperator, không nằm trong argv.
+        """
+        calls = dag_module.BashOperator.call_args_list
         assert len(calls) == 2
         for call in calls:
-            assert call.kwargs["env_vars"] is dag_module.PII_ENV
+            assert call.kwargs["env"] is dag_module.PII_ENV
+            assert call.kwargs["append_env"] is True
+            command = call.kwargs["bash_command"]
+            assert "docker exec -e PII_HASH_SALT banking-spark-worker-1" in command
+            assert "PII_HASH_SALT=" not in command

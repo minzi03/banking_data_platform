@@ -29,6 +29,10 @@ quality_rules:
     - city
     - manager_name
     - status
+    - branch_sk
+    - effective_from
+    - effective_to
+    - is_current
   non_null_columns:
     - branch_code
     - branch_name

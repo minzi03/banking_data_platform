@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_customer_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
@@ -47,7 +49,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_account_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
@@ -70,7 +74,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_transaction_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
@@ -92,7 +98,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.card_account_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
@@ -115,7 +123,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.card_transaction_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
 
@@ -140,6 +150,8 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.online_transaction_cdc (
     __cdc_timestamp TIMESTAMP,
     __cdc_timestamp_ms BIGINT,
     __spark_batch_id BIGINT,
-    __ingestion_time TIMESTAMP
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));

@@ -228,6 +228,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyyaml pydantic pytest pytest-cov jinja2
+          # tests/api: FastAPI TestClient với execute_query giả — không cần Trino.
+          pip install fastapi==0.115.0 trino==0.327.0 httpx==0.27.2
 
       - name: Run unit tests
         run: |
@@ -302,7 +304,9 @@ jobs:
           # không liệt kê, một PR chỉ sửa timezone sẽ bỏ qua đúng job canh nó.
           # code_etl/cdc/ + DDL Bronze CDC: test_cdc_bronze_schema.py chạy
           # validate_and_split thật và so với hai DDL (luồng CDC hỏng từ 09-08).
-          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/shared/spark/|tests/gold/|docker/spark/conf/|\.github/workflows/|code_etl/cdc/|tests/bronze/test_cdc_bronze_schema\.py|docker/init_iceberg/04_ddl_bronze_cdc\.sql)'; then
+          # code_etl/silver/ + DDL Silver: test_scd_type2.py và test_rfm_scoring_direction.py
+          # chạy logic SCD2 và SQL Gold trên bảng dựng từ 02_ddl_silver.sql.
+          if echo "$CHANGED" | grep -qE '^(code_etl/gold/|code_etl/silver/|code_etl/shared/spark/|tests/gold/|tests/silver/|tests/cdc/|docker/spark/conf/|\.github/workflows/|code_etl/cdc/|tests/bronze/test_cdc_bronze_schema\.py|docker/init_iceberg/0[24]_ddl_)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -351,6 +355,9 @@ jobs:
             tests/bronze/test_cdc_bronze_schema.py \
             tests/gold/test_loan_delinquency_mart.py \
             tests/gold/test_schema_guard.py \
+            tests/gold/test_rfm_scoring_direction.py \
+            tests/silver/test_scd_type2.py \
+            tests/cdc/test_cdc_consolidation.py \
             -v --tb=short -m integration \
             --junitxml=gold-regression-results.xml
 
@@ -987,7 +994,7 @@ jobs:
         # chạy lại là idempotent.
         run_stage "G2 — per-job CLI smoke: silver scd_type1" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/base_job/scd_type1.py \
-          --config code_etl/silver/dims/dim_branch.yml --cob_dt "${COB_DT}"
+          --config code_etl/silver/dims/dim_employee.yml --cob_dt "${COB_DT}"
         run_stage "G2 — per-job CLI smoke: silver fact_txn" "${SPARK_SUBMIT[@]}" \
           /opt/project/code_etl/silver/base_job/fact_txn.py \
           --config code_etl/silver/facts/fact_txn_account.yml --cob_dt "${COB_DT}"

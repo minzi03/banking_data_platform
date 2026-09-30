@@ -1,14 +1,14 @@
 # Bản Đồ Tài Liệu — Banking Data Platform
 
-> Cập nhật: 2026-09-22 · Cấu trúc đích và lý do: [`DOCUMENTATION_PLAN.md`](09-analysis/DOCUMENTATION_PLAN.md)
+> Cập nhật: 2026-09-30 · Cấu trúc đích và lý do: [`DOCUMENTATION_PLAN.md`](09-analysis/DOCUMENTATION_PLAN.md)
 
 Trang này trả lời một câu: **bạn là ai, và cần đọc gì.**
 
 ```text
 docs/
 ├── INDEX.md                  ← bạn đang ở đây
-├── 01-getting-started/       chạy thử lần đầu
-├── 02-architecture/          kiến trúc + adr/ (12 quyết định)
+├── 01-getting-started/       (đã hợp nhất vào DEMO_GUIDE.md)
+├── 02-architecture/          kiến trúc + adr/ (14 quyết định)
 ├── 03-data/                  tra cứu: dictionary · glossary · contracts · lineage
 ├── 04-operations/            vận hành + sự cố
 ├── 05-quality/               nợ kỹ thuật + cơ chế evidence manifest
@@ -32,7 +32,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | **Người đánh giá dự án** (tuyển dụng, review) | [`README.md`](../README.md) → [`ARCHITECTURE.md`](../ARCHITECTURE.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
 | **Dev mới vào dự án** | [`README.md`](../README.md) → [`CONTRIBUTING.md`](../CONTRIBUTING.md) → [`RUNBOOK.md`](../RUNBOOK.md) → [`data-input-documentation.md`](03-data/data-input-documentation.md) |
 | **Người vận hành / on-call** | [`RUNBOOK.md`](../RUNBOOK.md) → [`observability-design.md`](02-architecture/observability-design.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
-| **Analyst / người dùng dữ liệu** | [`BUSINESS_DOMAIN.md`](03-data/BUSINESS_DOMAIN.md) → [`data-output-documentation.md`](03-data/data-output-documentation.md) → [`DBT_DEPLOYMENT.md`](04-operations/DBT_DEPLOYMENT.md) → [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) |
+| **Analyst / người dùng dữ liệu** | [`BUSINESS_DOMAIN.md`](03-data/BUSINESS_DOMAIN.md) → [`data-output-documentation.md`](03-data/data-output-documentation.md) → [`dbt/README.md`](../dbt/README.md) → [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) |
 | **Kiểm toán / tuân thủ** | [`AI_GOVERNANCE_FRAMEWORK.md`](06-security-compliance/AI_GOVERNANCE_FRAMEWORK.md) → [`DATA_VAULT_MAPPING.md`](03-data/DATA_VAULT_MAPPING.md) → [`technical-debt.md`](05-quality/technical-debt.md) |
 | **Muốn hiểu hướng đi của dự án** | [`ROADMAP.md`](09-analysis/ROADMAP.md) → [`JD_MARKET_ANALYSIS.md`](09-analysis/JD_MARKET_ANALYSIS.md) |
 
@@ -44,8 +44,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 |---|---|
 | [`README.md`](../README.md) | Cổng vào: pitch, kiến trúc, quickstart, số liệu có kiểm chứng |
 | [`ARCHITECTURE.md`](../ARCHITECTURE.md) | Kiến trúc tổng thể 5 tầng |
-| [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) | Chạy demo end-to-end |
-| [`demo/DEMO_SCRIPT.md`](../demo/DEMO_SCRIPT.md) | Kịch bản demo từng bước |
+| [`DEMO_GUIDE.md`](../DEMO_GUIDE.md) | Demo end-to-end duy nhất: what · why · lệnh · kết quả · kiểm chứng · talking points |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Lịch sử thay đổi |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Quy ước làm việc: branch, commit, test, lint |
 | [`SECURITY.md`](../SECURITY.md) | Báo lỗ hổng · xử lý secrets và PII |
@@ -58,7 +57,6 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [`cdc-pipeline.md`](02-architecture/cdc-pipeline.md) | Postgres → Debezium → Kafka → Spark Streaming → Iceberg |
 | [`code_etl/cdc/README.md`](../code_etl/cdc/README.md) | Cài đặt CDC ở mức code |
 | [`observability-design.md`](02-architecture/observability-design.md) | Prometheus · Grafana · alerting |
-| [`architecture-image-prompt.md`](02-architecture/architecture-image-prompt.md) | Nguồn sinh sơ đồ kiến trúc |
 | [`adr/`](02-architecture/adr/README.md) | **Architecture Decision Records** — vì sao hệ thống được xây như vậy |
 
 ### Quyết định kiến trúc (ADR)
@@ -78,6 +76,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [0014](02-architecture/adr/0014-kimball-over-data-vault.md) | Kimball star schema, Data Vault chỉ ở mức ánh xạ |
 | [0015](02-architecture/adr/0015-trino-access-control-generated-from-rbac.md) | Access control của Trino sinh từ `rbac.py`, danh tính do client tự khai |
 | [0016](02-architecture/adr/0016-trino-password-authentication.md) | Trino xác thực bằng mật khẩu qua HTTPS, mỗi client một credential | Accepted |
+| [0017](02-architecture/adr/0017-single-cob-dt-definition.md) | Một định nghĩa `cob_dt` cho mọi DAG (ngày ICT, `conf` ghi đè) |
 
 > **Chưa có**: `DATA_FLOW.md`, và **ADR-0001** (Iceberg vs Delta) — lý do chọn chưa được ghi ở đâu, cần tác giả xác nhận. Xem [`adr/README.md`](02-architecture/adr/README.md).
 
@@ -94,7 +93,7 @@ chưa tạo vì chưa có nội dung — tạo thư mục rỗng là hứa hẹn
 | [`DATA_CONTRACTS.md`](03-data/DATA_CONTRACTS.md) | **Sinh tự động** — 33 contract: grain, quality class, AI risk tier, DAG |
 | [`LINEAGE.md`](03-data/LINEAGE.md) | **Sinh tự động** — đồ thị phụ thuộc, tham chiếu treo, dataset không có consumer |
 | [`DATA_VAULT_MAPPING.md`](03-data/DATA_VAULT_MAPPING.md) | Ánh xạ Kimball star schema → Data Vault 2.0 |
-| [`DBT_DEPLOYMENT.md`](04-operations/DBT_DEPLOYMENT.md) | Tầng serving qua dbt + Trino |
+| [`dbt/README.md`](../dbt/README.md) | Tầng serving qua dbt + Trino |
 | [`dbt/README.md`](../dbt/README.md) · [`dbt/SUMMARY.md`](../dbt/SUMMARY.md) | dbt project |
 | [`api/README.md`](../api/README.md) | Customer 360 REST API |
 | [`openmetadata/README.md`](../openmetadata/README.md) | Catalog và lineage |

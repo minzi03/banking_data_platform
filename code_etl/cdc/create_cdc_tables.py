@@ -39,7 +39,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)
@@ -68,7 +70,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)
@@ -94,7 +98,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)
@@ -119,7 +125,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)
@@ -145,7 +153,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)
@@ -173,7 +183,9 @@ def main():
             __cdc_timestamp TIMESTAMP,
             __cdc_timestamp_ms BIGINT,
             __spark_batch_id BIGINT,
-            __ingestion_time TIMESTAMP
+            __ingestion_time TIMESTAMP,
+            __kafka_partition INT,
+            __kafka_offset BIGINT
         ) USING iceberg
         PARTITIONED BY (DATE(__cdc_timestamp))
     """)

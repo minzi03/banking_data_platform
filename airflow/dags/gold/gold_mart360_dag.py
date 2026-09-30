@@ -1,10 +1,10 @@
 """
-Gold layer DAG — tổng hợp 5 bảng mart360 + 3 segment + 1 time_analytics.
+Gold layer DAG — 15 Gold job: 6 mart360 + 4 segmentation + 1 time_analytics + 4 risk.
 
 Luồng thực thi:
   1. dag_start ghi cờ R
   2. Kiểm tra silver_all_dag đã hoàn thành
-  3. Chạy song parallel 9 Gold jobs (Phase 1 — independent)
+  3. Chạy 14 Gold job độc lập (Phase 1; max_active_tasks=1 nên chạy tuần tự)
   4. Chạy campaign_target (Phase 2 — depends on Phase 1)
   5. dag_end ghi cờ S
 """
@@ -18,12 +18,12 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.utils.task_group import TaskGroup
 
 from etl_flag import make_start_flag_task, make_end_flag_task
+from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID           = "gold_all_dag"
-DATA_COB_DT      = "{{ ds }}"
+DATA_COB_DT      = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
-SPARK_CONN_ID    = "spark_default"
 GOLD_BASE        = "/opt/project/code_etl/gold"
 GOLD_BASE_JOB    = f"{GOLD_BASE}/base_job"
 
@@ -37,11 +37,6 @@ DEFAULT_ARGS = {
     "sla": timedelta(hours=3),
 }
 
-SPARK_CONF = {
-    "spark.driver.memory":   "512m",
-    "spark.executor.memory": "768m",
-    "spark.executor.cores":  "1",
-}
 
 # Phase 1: Independent Gold jobs (parallel-safe)
 # (table_name, config_file)
@@ -86,9 +81,12 @@ def _check_dag_flag_sql(upstream_dag_id: str) -> str:
 dag = DAG(
     DAG_ID,
     default_args=DEFAULT_ARGS,
-    description="Gold layer — 5 mart360 + 4 segments + 1 time_analytics",
+    description="Gold layer — 6 mart360 + 4 segmentation + 1 time_analytics + 4 risk",
     schedule_interval="0 6 * * *",  # Daily at 6:00 AM (Production)
     catchup=False,
+    # Một lượt mỗi lúc: hai lượt cùng cob_dt (unpause tạo lượt theo lịch + trigger tay)
+    # cùng overwritePartitions / MERGE SCD2 một bảng (đo 2026-09-30).
+    max_active_runs=1,
     max_active_tasks=1,
     tags=["gold", "all", "production"],
 )
@@ -149,7 +147,7 @@ with TaskGroup("phase2_dependent", dag=dag) as phase2_group:
 dag_end = make_end_flag_task("dag_end", DAG_ID, "gold", dag, cob_dt=DATA_COB_DT)
 
 # ── 6. Cờ GOLD_COMPLETE — contract cho downstream ────────────────────────────
-# Hiện tại chỉ có MỘT Gold producer DAG chạy cả 10 job (mart360 + segmentation
+# Hiện tại chỉ có MỘT Gold producer DAG chạy cả 15 job (mart360 + segmentation
 # + time_analytics), nên về mặt kỹ thuật downstream có thể sensor thẳng
 # `gold_mart360_dag`. Nhưng làm vậy trói downstream vào TÊN DAG:
 # nếu sau này Gold tách thành nhiều producer, mọi consumer phải sửa theo.
@@ -158,7 +156,7 @@ dag_end = make_end_flag_task("dag_end", DAG_ID, "gold", dag, cob_dt=DATA_COB_DT)
 #     "toàn bộ Gold của cob_dt=D đã hoàn tất"
 # Khi Gold tách DAG, chỉ producer cuối cùng ghi cờ này; consumer không đổi.
 #
-# Cờ nằm SAU phase2 nên chỉ được ghi khi cả 10 Gold job đã thành công.
+# Cờ nằm SAU phase2 nên chỉ được ghi khi cả 15 Gold job đã thành công.
 GOLD_COMPLETE_FLAG = "GOLD_COMPLETE"
 gold_complete = make_end_flag_task(
     "gold_complete", GOLD_COMPLETE_FLAG, "gold", dag, cob_dt=DATA_COB_DT

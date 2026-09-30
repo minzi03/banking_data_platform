@@ -159,9 +159,11 @@ def test_npl_proxy_sums_overdue_and_written_off_outstanding(spark):
         "branch_code string, product_code string, loan_id bigint, loan_amount decimal(18,2), "
         "outstanding_balance decimal(18,2), loan_status string",
     ).createOrReplaceTempView("dim_loan")
-    spark.createDataFrame([("B1", "Chi nhánh 1")], "branch_code string, branch_name string").createOrReplaceTempView(
-        "dim_branch"
-    )
+    # dim_branch là SCD2: Gold chọn version hiệu lực tại cob_dt.
+    spark.createDataFrame(
+        [("B1", "Chi nhánh 1", date(2025, 1, 1), date(9999, 12, 31))],
+        "branch_code string, branch_name string, effective_from date, effective_to date",
+    ).createOrReplaceTempView("dim_branch")
     spark.createDataFrame(
         [(10, 1, "PAID", Decimal("0"), cob)],
         "payment_id bigint, loan_id bigint, payment_status string, penalty decimal(18,2), cob_dt date",
@@ -203,10 +205,12 @@ def test_aml_runs_and_keeps_one_row_per_transaction(spark):
         "counter_account string, cob_dt date",
     ).createOrReplaceTempView("fact_txn_account")
     spark.createDataFrame(
-        [(7, "RETAIL", 1)], "customer_id bigint, customer_segment string, is_current int"
+        [(7, "RETAIL", 1, date(2025, 1, 1), date(9999, 12, 31))],
+        "customer_id bigint, customer_segment string, is_current int, effective_from date, effective_to date",
     ).createOrReplaceTempView("dim_customer")
     spark.createDataFrame(
-        [(100, "B1", 1)], "account_id bigint, branch_code string, is_current int"
+        [(100, "B1", 1, date(2025, 1, 1), date(9999, 12, 31))],
+        "account_id bigint, branch_code string, is_current int, effective_from date, effective_to date",
     ).createOrReplaceTempView("dim_account")
     spark.createDataFrame(
         [(7, ts, 1, "SUCCESS", 0, None, cob)],

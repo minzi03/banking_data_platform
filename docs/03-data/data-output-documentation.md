@@ -165,11 +165,11 @@ load:
 
 # Transformation khi load:
 # 1. JDBC fetch → Spark DataFrame
-# 2. Thêm column: cob_dt = '{{ ds }}'
+# 2. Thêm column: cob_dt = ngày ICT của data_interval_start, hoặc dag_run.conf["cob_dt"] (airflow/plugins/cob_dt.py)
 # 3. Ghi vào Iceberg: overwritePartitions by cob_dt
 ```
 
-**Partitioning:** Mọi Bronze table đều partitioned by `cob_dt` — mỗi DAG run tạo 1 partition mới.
+**Partitioning:** Mọi Bronze table đều partitioned by `cob_dt` (DDL `01_ddl_bronze.sql`, sửa 2026-09-30 — trước đó 18/22 bảng không partition và mỗi lần nạp ghi đè toàn bảng). `write_to_iceberg()` từ chối ghi snapshot vào bảng chưa partition theo `cob_dt`.
 
 ### 3.4. Bronze Naming Convention Summary
 
@@ -198,14 +198,12 @@ load:
 
 Schema `lakehouse.silver` — 18 bảng (10 dims + 6 facts + 2 CDC current). Tầng làm sạch, deduplicate, và conform dữ liệu. Dimensions dùng surrogate key (SCD2) hoặc UPSERT (SCD1). Facts được join với dimensions để lấy surrogate keys. Các model mới nhất bổ sung deposit, loan và loan payment phục vụ analytics tài khoản vay/thanh toán.
 
-### 4.1. Dimensions — SCD Type 1 (8 tables)
+### 4.1. Dimensions — SCD Type 1 (6 tables)
 
 SCD Type 1 = UPSERT: nếu record đã tồn tại → cập nhật tại chỗ, nếu chưa → chèn mới. Không lưu lịch sử.
 
 | Silver Table | Source (Bronze) | Business Key | Columns | Rows |
 |-------------|----------------|--------------|---------|------|
-| dim_branch | core_branch | branch_code | 10 | 100 |
-| dim_product | core_product | product_code | 8 | 30 |
 | dim_card | core_card | card_id | 12 | 6,000 |
 | dim_employee | core_employee | employee_id | 8 | 1,800 |
 | dim_device | core_device | device_id | 10 | 50,000 |
@@ -215,38 +213,44 @@ SCD Type 1 = UPSERT: nếu record đã tồn tại → cập nhật tại chỗ,
 
 **SCD Type 1 MERGE pattern:**
 ```sql
-MERGE INTO lakehouse.silver.dim_branch t
+MERGE INTO lakehouse.silver.dim_card t
 USING source_view s
-ON t.branch_code = s.branch_code          -- business key
+ON t.card_id = s.card_id                  -- business key
 WHEN MATCHED THEN UPDATE SET t.* = s.*    -- overwrite all non-key cols
 WHEN NOT MATCHED THEN INSERT VALUES s.*   -- insert new
 ```
 
 **Logic:** YAML-driven. Engine `scd_type1.py` tự动生成 MERGE từ business_key list.
 
-### 4.2. Dimensions — SCD Type 2 (2 tables)
+### 4.2. Dimensions — SCD Type 2 (4 tables)
 
-SCD Type 2 = Full history tracking: mỗi thay đổi tạo row mới với effective_from/to flags.
+SCD Type 2 = Full history tracking: mỗi thay đổi ở tracked column tạo version mới với effective_from/to. Cột không tracked là Type 1: ghi đè tại chỗ trên version hiện hành. Đề bài yêu cầu lịch sử customer/account/product/branch — product và branch là SCD2 từ 2026-09-30.
 
 | Silver Table | Source (Bronze) | Business Key | Tracked Columns | SK Column |
 |-------------|----------------|--------------|-----------------|-----------|
 | dim_customer | core_customer | customer_id | phone, email, address, city, district, customer_segment, kyc_status, branch_code | customer_sk |
 | dim_account | core_account | account_id | balance, status, close_date | account_sk |
+| dim_product | core_product | product_code | product_name, product_group, product_type, currency, is_active, launch_date | product_sk |
+| dim_branch | core_branch | branch_code | branch_name, region, city, district, address, manager_name, open_date, status | branch_sk |
 
 **SCD Type 2 columns (thêm so với source):**
 | Column | Type | Mô tả |
 |--------|------|-------|
-| effective_from | TIMESTAMP | Thời điểm record trở thành current |
-| effective_to | TIMESTAMP | Thời điểm record bị expire (NULL = current) |
-| is_current | SMALLINT | 1 = current, 0 = expired |
-| customer_sk / account_sk | VARCHAR(64) | SHA-256 surrogate key |
+| effective_from | DATE | cob_dt mà version bắt đầu hiệu lực |
+| effective_to | DATE | cob_dt - 1 khi version bị đóng; `9999-12-31` = đang hiệu lực |
+| is_current | INT | 1 = current, 0 = expired |
+| customer_sk / account_sk / product_sk / branch_sk | STRING | SHA-256(business key, cob_dt) |
 
-**SCD Type 2 MERGE pattern:**
+**SCD Type 2 pattern (`scd_type2.py`):**
 ```sql
--- 1. Expire existing current rows where tracked columns changed
--- 2. Insert new current rows with updated effective_from
--- Engine handles idempotent rerun (cleanup previous run first)
+-- 0. Guard: snapshot nguồn rỗng → FAIL; cob_dt < MAX(effective_from) → FAIL (không backfill ngược)
+-- 1. Cleanup idempotent của lần chạy trước cùng cob_dt
+-- 2. Insert version mới cho key mới / key đổi tracked column
+-- 3. Đóng version cũ: key đổi tracked column + key biến mất khỏi full snapshot (close_missing_keys)
+-- 4. Ghi đè tại chỗ các cột KHÔNG tracked (Type 1) trên version hiện hành
 ```
+
+Facts và Gold chọn version **hiệu lực tại cob_dt** (`cob_dt BETWEEN effective_from AND effective_to`), không phải `is_current = 1`.
 
 **dim_customer tracked columns (8 fields):**
 phone, email, address, city, district, customer_segment, kyc_status, branch_code
@@ -302,8 +306,8 @@ CDC streaming jobs tạo 2 bảng mutable current-state từ CDC events.
 silver_all_dag (04:00 AM):
   1. Check Bronze DAGs complete (3 sensors)
   2. Run 10 dim jobs parallel:
-     ├── SCD1: dim_branch, dim_product, dim_card, dim_employee, dim_device, dim_location, dim_deposit, dim_loan
-     └── SCD2: dim_customer, dim_account
+     ├── SCD1: dim_card, dim_employee, dim_device, dim_location, dim_deposit, dim_loan
+     └── SCD2: dim_customer, dim_account, dim_product, dim_branch
   3. Run 6 fact jobs parallel:
      ├── fact_txn_account, fact_card_txn, fact_crm_interaction
      ├── fact_online_transaction, fact_support_ticket
@@ -359,7 +363,7 @@ Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Cus
 | primary_channel | VARCHAR(20) | fact_txn_account | Most-used channel last 30d |
 | interaction_count_90d | INT | fact_crm_interaction | CRM interactions last 90 days |
 | last_interaction_date | TIMESTAMP | fact_crm_interaction | Most recent CRM interaction |
-| rfm_recency_score | INT | NTILE(5) | 1-5, lower = more recent (90-day window) |
+| rfm_recency_score | INT | NTILE(5) | 1-5, **5 = gần nhất** (90-day window, ngày ICT) |
 | rfm_frequency_score | INT | NTILE(5) | 1-5, higher = more frequent (90-day window) |
 | rfm_monetary_score | INT | NTILE(5) | 1-5, higher = more spending (90-day window) |
 | rfm_segment | VARCHAR(20) | Derived | Champions/Loyal/Potential/New/AtRisk/Hibernating/Lost (90-day, matches rfm_segment.yml) |
@@ -404,7 +408,7 @@ Schema `lakehouse.gold` — 11 bảng. Tầng aggregates và business logic: Cus
 
 **Columns:** customer_id, customer_sk, recency_days, frequency, monetary, r_score, f_score, m_score, rfm_score, rfm_segment, cob_dt
 
-**Scoring:** NTILE(5) over recency (ASC), frequency (DESC), monetary (DESC)
+**Scoring:** NTILE(5), 5 = tốt nhất: sắp recency DESC, frequency ASC, monetary ASC (tie-breaker `customer_id`). Bản trước sắp ngược nên "Champions" là khách tệ nhất (sửa 2026-09-30).
 
 **Lookback window:** 90 days from cob_dt. Grain rule: each fact self-aggregates to grain customer_id in separate CTE before join — eliminates Cartesian amplification.
 

@@ -1,6 +1,7 @@
 """
 Iceberg-specific utilities for data writes.
-Enforces overwritePartitions convention for partition-safe writes.
+Enforces overwritePartitions convention for partition-safe writes
+(bảng snapshot phải partition theo cob_dt — xem assert_partitioned_by_cob_dt).
 """
 
 from pyspark.sql import DataFrame
@@ -58,20 +59,59 @@ def create_iceberg_table_if_not_exists(df: DataFrame, table_name: str, logger) -
     logger.info(f"Table {table_name} created successfully")
 
 
+def partition_fields(spark, table_name: str) -> list[str]:
+    """
+    Tên các partition field của một bảng Iceberg, đọc từ metadata table `.partitions`.
+
+    Bảng không partition thì metadata table này không có cột `partition` (tài liệu
+    Iceberg), nên đây là cách phân biệt không phụ thuộc định dạng output của DESCRIBE.
+
+    REFRESH trước: catalog cache giữ metadata table cũ, nên ngay sau ALTER … ADD
+    PARTITION FIELD trong cùng session `.partitions` vẫn báo không partition
+    (đo trên Iceberg 1.6.0, 2026-09-30 — migration Bronze fail hậu kiểm vì vậy).
+    """
+    spark.sql(f"REFRESH TABLE {table_name}")
+    schema = spark.table(f"{table_name}.partitions").schema
+    if "partition" not in schema.fieldNames():
+        return []
+    return list(schema["partition"].dataType.fieldNames())
+
+
+def assert_partitioned_by_cob_dt(df: DataFrame, table_name: str) -> None:
+    """
+    Chặn overwritePartitions() lên một bảng snapshot KHÔNG partition theo cob_dt.
+
+    Trên bảng không partition, overwritePartitions() thay TOÀN BỘ bảng: mỗi lần nạp
+    xoá mọi snapshot cũ, và chạy lại một ngày cũ ghi đè luôn ngày mới. Bronze từng
+    như vậy với 18/22 bảng (DDL không có PARTITIONED BY) nên lịch sử product/branch
+    mất hẳn. Bảng tạo từ DDL mới đã partition; bảng cũ phải migrate một lần.
+    """
+    if "cob_dt" not in df.columns:
+        return
+    fields = partition_fields(df.sparkSession, table_name)
+    if "cob_dt" not in fields:
+        raise RuntimeError(
+            f"{table_name} không partition theo cob_dt (partition hiện tại: {fields or 'không có'}). "
+            "overwritePartitions() sẽ ghi đè TOÀN BỘ bảng thay vì một snapshot. "
+            "Chạy migration một lần: make bronze-partition-migrate "
+            "(code_etl/bronze/bootstrap/partition_bronze_by_cob_dt.py)."
+        )
+
+
 def write_to_iceberg(df: DataFrame, table_name: str, logger) -> None:
     """
-    Write DataFrame to Iceberg table.
+    Write DataFrame to Iceberg table bằng overwritePartitions (dynamic overwrite).
 
-    Luôn dùng overwritePartitions — an toàn cho cả partitioned và unpartitioned:
-    - Partitioned tables: ghi đè đúng partition của dữ liệu đầu vào
-    - Unpartitioned tables: ghi đè toàn bộ dữ liệu
+    Chỉ an toàn khi bảng partition theo cob_dt: ghi đè đúng snapshot cob_dt của dữ
+    liệu đầu vào, các ngày khác giữ nguyên, chạy lại cùng ngày cho cùng kết quả.
+    DataFrame có cột cob_dt mà bảng không partition theo nó → FAIL trước khi ghi
+    (assert_partitioned_by_cob_dt), không âm thầm xoá lịch sử.
 
     Không gọi df.count() trước write — sẽ gây executor OOM.
     """
-    spark = df.sparkSession  # noqa: F841
-
-    # Create table if not exists
+    # Create table if not exists (partition theo cob_dt nếu có cột này)
     create_iceberg_table_if_not_exists(df, table_name, logger)
+    assert_partitioned_by_cob_dt(df, table_name)
 
     logger.info(f"Writing to {table_name} using overwritePartitions")
     df.writeTo(table_name).overwritePartitions()

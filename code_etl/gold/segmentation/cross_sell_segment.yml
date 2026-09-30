@@ -40,5 +40,5 @@ sql: |
       DATE '{{ cob_dt }}' AS cob_dt
   FROM lakehouse.silver.dim_customer c
   LEFT JOIN lakehouse.silver.dim_card cd ON c.customer_id = cd.customer_id
-  WHERE c.is_current = 1
+  WHERE DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
   GROUP BY c.customer_id, c.customer_sk, c.customer_segment

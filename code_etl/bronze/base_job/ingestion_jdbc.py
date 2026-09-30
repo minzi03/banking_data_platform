@@ -7,6 +7,7 @@ Nguồn: PostgreSQL (single source) → Lakehouse Bronze (Iceberg)
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -29,9 +30,19 @@ def parse_arguments():
     parser.add_argument("--cob_dt", required=True, help="Ngày xử lý dữ liệu (định dạng YYYY-MM-DD)")
     parser.add_argument("--jdbc_url", required=True, help="Chuỗi kết nối JDBC đến database nguồn")
     parser.add_argument("--db_user", required=True, help="Tên đăng nhập database")
-    parser.add_argument("--db_password", required=True, help="Mật khẩu database")
+    parser.add_argument(
+        "--db_password",
+        default=None,
+        help="Mật khẩu database. Không truyền → đọc biến môi trường DB_PASSWORD "
+        "(Airflow truyền qua env để mật khẩu không nằm trong argv / ps / Spark UI).",
+    )
     parser.add_argument("--fetchsize", type=int, default=10000, help="Số dòng mỗi lần JDBC kéo về (mặc định: 10000)")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.db_password is None:
+        args.db_password = os.environ.get("DB_PASSWORD")
+    if not args.db_password:
+        parser.error("Thiếu mật khẩu: truyền --db_password hoặc đặt biến môi trường DB_PASSWORD")
+    return args
 
 
 def validate_config(config):

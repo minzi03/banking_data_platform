@@ -13,7 +13,7 @@ Endpoints:
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -90,6 +90,20 @@ def execute_query(sql: str, params: tuple = None) -> list[dict]:
     finally:
         cursor.close()
         conn.close()
+
+
+def _cob_dt_filter(column: str, customer_id: int, cob_dt: Optional[date]) -> tuple[str, tuple]:
+    """
+    Điều kiện cob_dt + tham số truy vấn.
+
+    cob_dt đi vào truy vấn dưới dạng tham số (`?`), không nối chuỗi: bản cũ nhận
+    `cob_dt: str` và chèn thẳng `date '{cob_dt}'` vào SQL — SQL injection. FastAPI
+    giờ validate kiểu `date` (sai định dạng → 422). `column` được qualify theo alias
+    vì hai endpoint join hai bảng cùng có cột cob_dt.
+    """
+    if cob_dt is None:
+        return "", (customer_id,)
+    return f"AND {column} = ?", (customer_id, cob_dt)
 
 
 # ── Response Models ─────────────────────────────────────────────────────────
@@ -184,7 +198,7 @@ async def health_check():
 @app.get("/customer/{customer_id}/overview", response_model=CustomerOverview, tags=["Customer"])
 async def get_customer_overview(
     customer_id: int,
-    cob_dt: Optional[str] = Query(None, description="Business date (YYYY-MM-DD). Defaults to latest.")
+    cob_dt: Optional[date] = Query(None, description="Business date (YYYY-MM-DD). Defaults to the served snapshot.")
 ):
     """
     Get customer overview: segment, accounts, cards, loans, AUM.
@@ -195,7 +209,7 @@ async def get_customer_overview(
     - Asset under management
     - KYC status
     """
-    cob_dt_filter = f"AND cob_dt = date '{cob_dt}'" if cob_dt else ""
+    cob_dt_filter, params = _cob_dt_filter("cob_dt", customer_id, cob_dt)
 
     sql = f"""
     SELECT
@@ -222,7 +236,7 @@ async def get_customer_overview(
     LIMIT 1
     """
 
-    results = execute_query(sql, (customer_id,))
+    results = execute_query(sql, params)
     if not results:
         raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
 
@@ -232,7 +246,7 @@ async def get_customer_overview(
 @app.get("/customer/{customer_id}/transactions", response_model=TransactionSummary, tags=["Customer"])
 async def get_customer_transactions(
     customer_id: int,
-    cob_dt: Optional[str] = Query(None, description="Business date (YYYY-MM-DD). Defaults to latest.")
+    cob_dt: Optional[date] = Query(None, description="Business date (YYYY-MM-DD). Defaults to the served snapshot.")
 ):
     """
     Get customer transaction summary for the last 30 days.
@@ -242,7 +256,7 @@ async def get_customer_transactions(
     - Last transaction date
     - Primary channel used
     """
-    cob_dt_filter = f"AND cob_dt = date '{cob_dt}'" if cob_dt else ""
+    cob_dt_filter, params = _cob_dt_filter("cob_dt", customer_id, cob_dt)
 
     sql = f"""
     SELECT
@@ -259,7 +273,7 @@ async def get_customer_transactions(
     LIMIT 1
     """
 
-    results = execute_query(sql, (customer_id,))
+    results = execute_query(sql, params)
     if not results:
         raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
 
@@ -269,7 +283,7 @@ async def get_customer_transactions(
 @app.get("/customer/{customer_id}/risk-score", response_model=RiskScore, tags=["Risk"])
 async def get_risk_score(
     customer_id: int,
-    cob_dt: Optional[str] = Query(None, description="Business date (YYYY-MM-DD). Defaults to latest.")
+    cob_dt: Optional[date] = Query(None, description="Business date (YYYY-MM-DD). Defaults to the served snapshot.")
 ):
     """
     Get customer risk assessment based on transaction patterns and RFM analysis.
@@ -279,7 +293,7 @@ async def get_risk_score(
     - RFM segment and score
     - Risk factors identified
     """
-    cob_dt_filter = f"AND cob_dt = date '{cob_dt}'" if cob_dt else ""
+    cob_dt_filter, params = _cob_dt_filter("c.cob_dt", customer_id, cob_dt)
 
     sql = f"""
     SELECT
@@ -297,7 +311,7 @@ async def get_risk_score(
     LIMIT 1
     """
 
-    results = execute_query(sql, (customer_id,))
+    results = execute_query(sql, params)
     if not results:
         raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
 
@@ -326,10 +340,13 @@ async def get_risk_score(
     )
 
 
+HIGH_AUM_BUCKETS = ("PRIORITY", "VIP")
+
+
 @app.get("/customer/{customer_id}/recommendations", response_model=Recommendation, tags=["Recommendations"])
 async def get_recommendations(
     customer_id: int,
-    cob_dt: Optional[str] = Query(None, description="Business date (YYYY-MM-DD). Defaults to latest.")
+    cob_dt: Optional[date] = Query(None, description="Business date (YYYY-MM-DD). Defaults to the served snapshot.")
 ):
     """
     Get product recommendations based on RFM analysis and product gap.
@@ -339,7 +356,7 @@ async def get_recommendations(
     - Recommended products
     - Campaign type for engagement
     """
-    cob_dt_filter = f"AND cob_dt = date '{cob_dt}'" if cob_dt else ""
+    cob_dt_filter, params = _cob_dt_filter("m.cob_dt", customer_id, cob_dt)
 
     sql = f"""
     SELECT
@@ -357,22 +374,25 @@ async def get_recommendations(
     LIMIT 1
     """
 
-    results = execute_query(sql, (customer_id,))
+    results = execute_query(sql, params)
     if not results:
         raise HTTPException(status_code=404, detail=f"Customer {customer_id} not found")
 
     row = results[0]
 
-    # Build recommended products
-    recommended_products = []
+    # Build recommended products. Miền giá trị lấy từ Gold (đo 2026-09-30):
+    # aum_bucket ∈ MASS/AFFLUENT/PRIORITY/VIP (customer_360.yml), primary_opportunity
+    # có chuỗi 'None' khi không có cơ hội (campaign_target) — không phải sản phẩm.
+    candidates = []
     if row.get("cross_sell_credit_card_flag"):
-        recommended_products.append("Credit Card")
-    if row.get("primary_opportunity"):
-        recommended_products.append(row["primary_opportunity"])
-    if row.get("aum_bucket") in ["500M-1B", "1B+"]:
-        recommended_products.append("Priority Banking Package")
+        candidates.append("Credit Card")
+    if row.get("primary_opportunity") and row["primary_opportunity"] != "None":
+        candidates.append(row["primary_opportunity"])
+    if row.get("aum_bucket") in HIGH_AUM_BUCKETS:
+        candidates.append("Priority Banking Package")
     if row.get("rfm_segment") in ["Loyal Customers", "Potential Loyalists"]:
-        recommended_products.append("Savings Account Premium")
+        candidates.append("Savings Account Premium")
+    recommended_products = list(dict.fromkeys(candidates))
 
     return Recommendation(
         customer_id=row["customer_id"],

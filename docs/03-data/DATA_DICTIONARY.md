@@ -8,16 +8,16 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**93 bảng · 1235 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**93 bảng · 1256 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 27 | 388 |
-| [silver](#silver) | 17 | 223 |
+| [bronze](#bronze) | 27 | 400 |
+| [silver](#silver) | 17 | 231 |
 | [gold](#gold) | 15 | 243 |
-| [meta](#meta) | 1 | 4 |
+| [meta](#meta) | 1 | 5 |
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
 | [digital_banking](#digital_banking) | 6 | 58 |
@@ -50,6 +50,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -77,6 +79,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -125,6 +129,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -363,6 +369,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -609,6 +617,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -661,6 +671,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -740,6 +752,7 @@ Reference dimension for bank branches. Contains branch metadata including region
 
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
+| `branch_sk` | `STRING` |  |  |
 | `branch_code` | `STRING` |  |  |
 | `branch_name` | `STRING` |  |  |
 | `region` | `STRING` |  |  |
@@ -749,6 +762,9 @@ Reference dimension for bank branches. Contains branch metadata including region
 | `manager_name` | `STRING` |  |  |
 | `open_date` | `DATE` |  |  |
 | `status` | `STRING` |  |  |
+| `effective_from` | `DATE` |  |  |
+| `effective_to` | `DATE` |  |  |
+| `is_current` | `INT` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
@@ -981,6 +997,7 @@ Reference dimension for banking products. Provides a standardized catalog of all
 
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
+| `product_sk` | `STRING` |  |  |
 | `product_code` | `STRING` |  |  |
 | `product_name` | `STRING` |  |  |
 | `product_group` | `STRING` |  |  |
@@ -988,6 +1005,9 @@ Reference dimension for banking products. Provides a standardized catalog of all
 | `currency` | `STRING` |  |  |
 | `is_active` | `INT` |  |  |
 | `launch_date` | `DATE` |  |  |
+| `effective_from` | `DATE` |  |  |
+| `effective_to` | `DATE` |  |  |
+| `is_current` | `INT` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
@@ -1629,6 +1649,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `table_name` | `VARCHAR(100)` |  |  |
+| `last_snapshot_id` | `BIGINT` |  |  |
 | `last_cdc_timestamp_ms` | `BIGINT` |  |  |
 | `last_spark_batch_id` | `BIGINT` |  |  |
 | `last_processed_at` | `TIMESTAMP` |  |  |

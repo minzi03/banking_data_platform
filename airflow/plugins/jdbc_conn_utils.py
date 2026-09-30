@@ -35,11 +35,16 @@ def _build_jdbc_url(conn) -> str:
 
 def jdbc_jinja_args(conn_id: str) -> dict[str, str]:
     """
-    Trả về dict chứa Jinja template strings cho SparkSubmitOperator.application_args.
-    Không gọi DB, Airflow resolve template lúc task execute.
+    Jinja template cho URL / user / password của một connection postgres.
+
+    Không gọi DB lúc parse DAG — Airflow resolve template lúc task chạy, và giá trị
+    lấy qua `conn` được secrets masker che trong log / Rendered Template.
+    Password nên đi qua `env` của BashOperator (docker exec -e DB_PASSWORD), không
+    qua argv: argv hiện ở `ps` và Spark UI.
     """
+    c = f"conn['{conn_id}']"
     return {
-        "jdbc_url":    f"{{{{ conn['{conn_id}'].host }}}}",
+        "jdbc_url":    f"jdbc:postgresql://{{{{ {c}.host }}}}:{{{{ {c}.port }}}}/{{{{ {c}.schema }}}}",
         "db_user":     f"{{{{ conn['{conn_id}'].login }}}}",
         "db_password": f"{{{{ conn['{conn_id}'].password }}}}",
     }

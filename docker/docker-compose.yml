@@ -86,12 +86,15 @@ x-airflow-common: &airflow-common
     AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
     AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
     AWS_REGION: us-east-1
-    SPARK_EXTRA_CLASSPATH: "/opt/spark-jars/*"
   volumes:
     - ..:/opt/project
     - airflow-logs:/opt/airflow/logs
-    - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
     - /var/run/docker.sock:/var/run/docker.sock
+  # User `airflow` (uid 50000) cần quyền trên docker.sock để `docker exec` vào
+  # spark-worker / dbt. DOCKER_GID = group sở hữu socket trên host
+  # (Linux: `stat -c %g /var/run/docker.sock`; Docker Desktop: 0).
+  group_add:
+    - "${DOCKER_GID:-0}"
   networks:
     - lakehouse_net
   depends_on:

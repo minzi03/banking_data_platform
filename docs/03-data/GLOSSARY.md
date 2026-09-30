@@ -15,7 +15,7 @@ Sắp theo nhóm, vì tra cứu theo ngữ cảnh nhanh hơn theo bảng chữ c
 
 Ngày nghiệp vụ mà một lô dữ liệu thuộc về. **Cột partition của mọi bảng Bronze/Silver/Gold.**
 
-Điểm quan trọng nhất và hay bị hiểu nhầm nhất: `cob_dt` là **ngày orchestration**, do Airflow truyền vào (`{{ ds }}`), **không** suy ra từ dữ liệu và **không** phụ thuộc múi giờ session. Nó trả lời *"lô này thuộc ngày làm việc nào"*, không phải *"giao dịch này xảy ra lúc nào"*.
+Điểm quan trọng nhất và hay bị hiểu nhầm nhất: `cob_dt` là **ngày orchestration**, do Airflow truyền vào (ngày ICT của `data_interval_start`, hoặc `dag_run.conf["cob_dt"]` — ADR-0017), **không** suy ra từ dữ liệu và **không** phụ thuộc múi giờ session. Nó trả lời *"lô này thuộc ngày làm việc nào"*, không phải *"giao dịch này xảy ra lúc nào"*.
 
 Phân biệt với **business date** — xem mục dưới.
 

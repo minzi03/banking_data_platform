@@ -24,7 +24,7 @@ thì nói là chưa đo.
 | Guard fail-loud trong Gold job | **Ngăn chặn** | trong job, trước khi ghi | 2 guard |
 | DQ check | Phát hiện | job Spark riêng, sau ETL | 88 check / 29 bảng |
 | Quarantine | Phát hiện | job Spark riêng, sau DQ | 18 rule / 4 bảng |
-| dbt test | Phát hiện | sau `dbt build` | 117 |
+| dbt test | Phát hiện | sau `dbt build` | 137 |
 
 Chỉ **một** cơ chế là ngăn chặn, và nó chỉ có ở tầng Gold.
 
@@ -46,7 +46,7 @@ Lấy từ `schedule_interval` của từng DAG (không phải từ
 06:00  Gold            ← guard fail-loud chạy Ở ĐÂY, trong job
 07:00  dbt run         → publish tầng serving
 08:00  DQ check        ← lần đầu có ai soi dữ liệu (chạy được từ 2026-09-23, §6a)
-08:00  dbt test        (117 test trên serving)
+08:00  dbt test        (137 test trên serving)
 09:00  quarantine
 09:00  contract validation
 ```
@@ -448,8 +448,8 @@ không có lỗi nào. Guard này chặn đúng chỗ đó.
 ### Mức áp dụng, đo được
 
 ```text
-14/14 Gold config có require_non_empty
-11/14 Gold config có require_snapshots
+15/15 Gold config có require_non_empty
+12/15 Gold config có require_snapshots
 ```
 
 Ba config không có `require_snapshots` là
@@ -461,22 +461,23 @@ nó**, không phải sót. Đã kiểm từng file.
 
 ### Bronze và Silver không có guard tương đương
 
-`code_etl/bronze/base_job/ingestion_jdbc.py` và
-`code_etl/silver/base_job/{scd_type1,scd_type2,fact_txn}.py` **không** có
-`assert_*` nào. Tầng ngăn chặn chỉ tồn tại ở Gold.
+Bronze và Silver không có guard ở mức nội dung như Gold. Từ 2026-09-30 có hai guard
+cấu trúc: `write_to_iceberg()` (Bronze) từ chối ghi snapshot vào bảng không partition
+theo `cob_dt`, và `scd_type2.py` dừng khi snapshot nguồn rỗng hoặc khi `cob_dt` cũ hơn
+version mới nhất (backfill ngược). `scd_type1.py` và `fact_txn.py` không có guard.
 
 ---
 
-## 8. dbt: 117 test ở tầng serving
+## 8. dbt: 137 test ở tầng serving
 
 Tầng serving do dbt sở hữu và có bộ test riêng, ngoài `dq_rules.yml`:
 
 ```text
-_serving_models.yml   98 generic  (81 not_null · 12 unique · 17 accepted_values)
+_serving_models.yml  118 generic  (82 not_null · 14 unique · 22 accepted_values)
 _gold_sources.yml     12 generic
 dbt/tests/             7 singular
                      ───
-                     117
+                     137   (dbt parse, 2026-09-30)
 ```
 
 7 singular test mang ngữ nghĩa nghiệp vụ, không chỉ kiểm cột:
@@ -501,7 +502,7 @@ quả dbt. Và vì nó nằm sau `dbt_test_singular` trong chuỗi phụ thuộc
 bao giờ chạy khi test đỏ — nên câu "DQ tests passed" không bao giờ **sai**, chỉ
 là vô nghĩa. Tên task hứa một việc mà nó không làm.
 
-Hệ quả thật: **117 dbt test không để lại dấu vết nào** trong
+Hệ quả thật: **137 dbt test không để lại dấu vết nào** trong
 `data_quality_log`. Muốn biết chúng ra sao phải đọc log Airflow.
 
 ---
@@ -622,10 +623,10 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 | Ai đọc `data_quality_log` | write-only; không dashboard, không dbt model |
 | DQ rule cho 16 bảng Bronze batch | đường nạp chính đang phủ ít hơn đường CDC |
 | DQ rule cho `aml_monitoring`, `fraud_risk_txn` | hai bảng rủi ro không có DQ check |
-| Guard fail-loud ở Bronze/Silver | tầng ngăn chặn chỉ có ở Gold |
+| Guard nội dung ở Bronze/Silver | chỉ có guard cấu trúc (partition, snapshot rỗng SCD2 — §7) |
 | `freshness_check`, `anomaly_detection` được cấu hình | có cài, không đường nào gọi tới |
 | Đồng bộ từ vựng severity | DQ 2 mức, quarantine 3 mức, không gì so chúng |
-| dbt test ghi vào `data_quality_log` | 117 test không để lại dấu vết (§8) |
+| dbt test ghi vào `data_quality_log` | 137 test không để lại dấu vết (§8) |
 | Ngưỡng SLA độ tươi | `SLA_AND_FRESHNESS.md` chưa có |
 | Kiểm `production_schedule.yml` ↔ DAG | thiếu 4 DAG, không gì bắt (§10) |
 
@@ -635,10 +636,10 @@ sẽ giết tiến trình ở thông báo tiếng Việt.
 
 ```text
 DQ check        88 check · 29 bảng, tất cả phân giải được · 6/9 loại đang dùng
-phủ sóng        silver 13/17 · gold 10/14 · bronze 6/22 (chỉ CDC)
+phủ sóng        silver 13/17 · gold 10/15 · bronze 6/22 (chỉ CDC)
 quarantine      18 rule · 4 bảng Silver · 6 FAIL + 10 WARN + 2 INFO
-dbt             117 test (110 generic + 7 singular) trên serving
-guard           2 guard, chỉ ở Gold · 14/14 non_empty · 11/14 snapshots
+dbt             137 test (130 generic + 7 singular) trên serving (dbt parse 2026-09-30)
+guard           2 guard ở Gold · 15/15 non_empty · 12/15 snapshots · Bronze/Silver chỉ có guard cấu trúc (§7)
 phạm vi check   snapshot cob_dt của lượt DQ · is_current cho SCD2 (TD-11)
 chạy thật       2026-09-23 · gold 20/20 PASS · silver 61 PASS + 1 WARN, 0 FAIL
                 · bronze 6 FAIL (CDC không chạy) · quarantine 1 FAIL, không ghi được

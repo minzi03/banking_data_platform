@@ -28,6 +28,7 @@ import yaml
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
+from ops.data_quality import SCOPE_KEY, _scoped_table  # noqa: E402
 from spark.spark_session import get_spark_session  # noqa: E402
 
 basicConfig(
@@ -55,7 +56,7 @@ def load_rules(path: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Violation Check Executor
 # ---------------------------------------------------------------------------
-def check_violation(spark, source_table: str, condition: str) -> list[dict]:
+def check_violation(spark, source_table: str, condition: str, cob_dt: str | None = None) -> list[dict]:
     """
     Execute a violation check and return violating records.
 
@@ -63,12 +64,16 @@ def check_violation(spark, source_table: str, condition: str) -> list[dict]:
         spark: SparkSession
         source_table: Source table to check
         condition: SQL condition to filter violating records
+        cob_dt: Ngày đang kiểm. Có thì đọc cùng phạm vi với DQ/contract
+            (`_scoped_table`): bảng có cob_dt → một snapshot, dim SCD2 → version
+            hiện hành. Không thì mỗi snapshot / version cũ bị quarantine lặp lại.
 
     Returns:
         List of violating records as dicts
     """
     try:
-        df = spark.table(source_table)
+        rule = {SCOPE_KEY: cob_dt} if cob_dt else {}
+        df, _scope = _scoped_table(spark, source_table, rule)
 
         # Apply condition filter
         violating_df = df.filter(condition)
@@ -85,6 +90,37 @@ def check_violation(spark, source_table: str, condition: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Write to Quarantine Table
 # ---------------------------------------------------------------------------
+QUARANTINE_METADATA = (
+    ("violation_type", "STRING"),
+    ("source_table", "STRING"),
+    ("violation_detail", "STRING"),
+    ("detected_at", "TIMESTAMP"),
+)
+
+
+def ensure_quarantine_table(spark, target_table: str, source_table: str) -> bool:
+    """
+    Tạo bảng quarantine nếu chưa có: cột của bảng nguồn (đúng kiểu) + cột metadata.
+
+    Không DDL nào tạo `lakehouse.quarantine.*` (create_schemas.sql chỉ tạo namespace),
+    nên mọi lần ghi đều TABLE_OR_VIEW_NOT_FOUND và bị nuốt — chạy trên stack
+    2026-09-30: 9.266 vi phạm, 0 dòng được lưu.
+    """
+    try:
+        spark.sql(f"DESCRIBE TABLE {target_table}")
+        return False
+    except Exception:
+        pass
+    source_columns = set(spark.table(source_table).columns)
+    extra = ", ".join(
+        f"CAST(NULL AS {typ}) AS {name}" for name, typ in QUARANTINE_METADATA if name not in source_columns
+    )
+    select = f"*, {extra}" if extra else "*"
+    spark.sql(f"CREATE TABLE {target_table} USING iceberg AS SELECT {select} FROM {source_table} WHERE 1 = 0")
+    log.info(f"Created quarantine table {target_table} from {source_table}")
+    return True
+
+
 def write_to_quarantine(spark, records: list[dict], target_table: str, violation_type: str, source_table: str) -> int:
     """
     Write violating records to quarantine table.
@@ -107,9 +143,13 @@ def write_to_quarantine(spark, records: list[dict], target_table: str, violation
 
         from pyspark.sql import Row
 
+        ensure_quarantine_table(spark, target_table, source_table)
+
         # Get target table schema
         target_df = spark.table(target_table)
-        target_columns = set(target_df.columns)
+        # Danh sách theo thứ tự bảng đích, không phải set: createDataFrame(schema=...)
+        # ghép Row theo VỊ TRÍ (stack 2026-09-30: `LongType() can not accept 2026-09-22`).
+        target_columns = list(target_df.columns)
 
         # Filter records to only include columns that exist in target
         filtered_records = []
@@ -130,8 +170,9 @@ def write_to_quarantine(spark, records: list[dict], target_table: str, violation
                     filtered_row[col] = None
             filtered_records.append(filtered_row)
 
-        # Create DataFrame
-        df = spark.createDataFrame([Row(**r) for r in filtered_records])
+        # Create DataFrame với schema của bảng đích: suy kiểu từ Row hỏng khi một cột
+        # toàn NULL (vd missing_manager — manager_name luôn NULL).
+        df = spark.createDataFrame([Row(**r) for r in filtered_records], schema=target_df.schema)
 
         # Write to quarantine table (append mode)
         df.write.format("iceberg").mode("append").saveAsTable(target_table)
@@ -175,7 +216,7 @@ def run_quarantine_checks(spark, rule_name: str, rule_config: dict, cob_dt: str)
         log.info(f"  Checking: {violation_name} (severity: {severity})")
 
         # Execute check
-        violating_records = check_violation(spark, source_table, condition)
+        violating_records = check_violation(spark, source_table, condition, cob_dt)
 
         if violating_records:
             # Write to quarantine table

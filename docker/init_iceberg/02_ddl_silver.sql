@@ -65,6 +65,7 @@ TBLPROPERTIES ('format-version' = '2');
 
 -- 3. DIM_PRODUCT
 CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_product (
+    product_sk      STRING,
     product_code    STRING,
     product_name    STRING,
     product_group   STRING,
@@ -72,6 +73,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_product (
     currency        STRING,
     is_active       INT,
     launch_date     DATE,
+    effective_from  DATE,
+    effective_to    DATE,
+    is_current      INT,
     last_updated    TIMESTAMP
 )
 USING iceberg
@@ -79,6 +83,7 @@ TBLPROPERTIES ('format-version' = '2');
 
 -- 4. DIM_BRANCH
 CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_branch (
+    branch_sk       STRING,
     branch_code     STRING,
     branch_name     STRING,
     region          STRING,
@@ -88,6 +93,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_branch (
     manager_name    STRING,
     open_date       DATE,
     status          STRING,
+    effective_from  DATE,
+    effective_to    DATE,
+    is_current      INT,
     last_updated    TIMESTAMP
 )
 USING iceberg

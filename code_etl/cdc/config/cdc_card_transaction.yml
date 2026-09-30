@@ -13,6 +13,8 @@ target:
   catalog: lakehouse
   schema: bronze
   table: card_transaction_cdc
+  # Event thiếu khoá chính → DLQ (MERGE không thể khớp một khoá NULL).
+  primary_key: txn_id
   columns:
     - name: txn_id
       type: long

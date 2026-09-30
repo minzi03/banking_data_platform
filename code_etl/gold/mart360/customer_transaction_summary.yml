@@ -89,4 +89,4 @@ sql: |
   FROM lakehouse.silver.dim_customer c
   LEFT JOIN acct_txn at ON c.customer_id = at.customer_id
   LEFT JOIN card_txn ct ON c.customer_id = ct.customer_id
-  WHERE c.is_current = 1
+  WHERE DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to

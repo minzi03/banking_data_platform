@@ -14,7 +14,6 @@ import argparse
 
 import yaml
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType
 
 
 def create_spark_session() -> SparkSession:
@@ -35,15 +34,6 @@ def create_spark_session() -> SparkSession:
         .config("spark.default.parallelism", "4")
         .getOrCreate()
     )
-
-
-def get_cdc_schema(table_name: str) -> StructType:
-    """
-    Get the schema for CDC events based on table name.
-    Debezium with ExtractNewRecordState produces flattened JSON with __op, __ts_ms fields.
-    """
-    # Use MapType for flexible JSON parsing - schema will be inferred
-    return None  # Let Spark infer schema from JSON
 
 
 def process_cdc_batch(batch_df, batch_id: int, target_table: str, config: dict, spark: SparkSession):
@@ -122,6 +112,13 @@ def main():
     print(f"  Checkpoint: {checkpoint_location}")
     print(f"  Trigger: {trigger_interval}")
     print(f"  Starting Offsets: {starting_offsets}")
+
+    # Bảng Bronze CDC tạo trước 2026-09-30 chưa có cột toạ độ Kafka (ADR-0010).
+    from cdc_dlq import ensure_kafka_coordinate_columns
+
+    added = ensure_kafka_coordinate_columns(spark, target_table)
+    if added:
+        print(f"  Added Kafka coordinate columns to {target_table}: {added}")
 
     # Read from Kafka
     stream_df = (
