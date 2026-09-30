@@ -309,11 +309,15 @@ sql: |
       rfm_frequency_score,
       rfm_monetary_score,
       CASE
+          -- Ngưỡng = KPI dictionary của đề bài (customer_360_kpi_dictionary.md, nhóm 6):
+          -- New >= 5, At Risk >= 3 (template cũ: >= 6 / >= 4). Tổng ba NTILE(5) nằm trong
+          -- 3..15 nên Hibernating (>= 2) và Lost (< 2) của dictionary không bao giờ xảy ra;
+          -- giữ hai nhánh để CASE khớp nguyên văn đặc tả (TD-20, 2026-09-30).
           WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 13 THEN 'Champions'
           WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 10 THEN 'Loyal Customers'
           WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 7 THEN 'Potential Loyalists'
-          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 6 THEN 'New Customers'
-          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 4 THEN 'At Risk'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 5 THEN 'New Customers'
+          WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 3 THEN 'At Risk'
           WHEN rfm_recency_score + rfm_frequency_score + rfm_monetary_score >= 2 THEN 'Hibernating'
           ELSE 'Lost'
       END AS rfm_segment,

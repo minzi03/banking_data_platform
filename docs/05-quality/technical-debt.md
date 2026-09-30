@@ -1840,16 +1840,18 @@ Not run: OpenMetadata / `ops_lineage_dag` (service not started), Superset / Stre
 CLOSED accounts takes effect on the next seed. The local data still makes
 `closed_with_balance` fail.
 
-### Open spec question: RFM segment cut-offs
+### Resolved: RFM segment cut-offs follow the KPI dictionary
 
-The course KPI dictionary (`customer_360_kpi_dictionary.md`, group 6) sets
-`New Customers ≥ 5` and `At Risk ≥ 3`; the template code and this repo use `≥ 6` and `≥ 4`
-(`rfm_segment.yml`, `customer_360.yml`). The dictionary cannot be applied literally
-either: the sum of three `NTILE(5)` scores is 3–15, so its `Hibernating ≥ 2` and
-`Lost < 2` can never occur. Under the code's cut-offs, `Hibernating` is sum 3 and `Lost`
-is unreachable. The 2026-09-30 audit fixed the score **direction** (5 = best, as the
-dictionary says) and left the cut-offs unchanged, because either choice changes
-campaign targeting and needs the owner's decision.
+Decided 2026-09-30: the assignment's KPI dictionary (`customer_360_kpi_dictionary.md`,
+group 6) is the source of truth.
+- `New Customers ≥ 5` and `At Risk ≥ 3` replace the template's `≥ 6` / `≥ 4` in both
+  `rfm_segment.yml` and `customer_360.yml`.
+- The dictionary itself is inconsistent. The sum of three `NTILE(5)` scores is 3–15, so
+  `Hibernating ≥ 2` and `Lost < 2` can never occur. Both branches stay in the CASE so the
+  code matches the specification word for word.
+- Consequence for campaigns: `campaign_target` Retention (`At Risk`, `Hibernating`) now
+  covers scores 3–4.
+- `tests/gold/test_rfm_segment_cutoffs.py` fails on the old cut-offs.
 
 ### Proposed for deletion (reference-checked, not deleted)
 
