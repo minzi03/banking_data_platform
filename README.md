@@ -153,7 +153,9 @@ dead-letter queue instead of failing the micro-batch.
 ### 3. Lakehouse transformation
 
 Persistent state begins here. Bronze holds a full snapshot per close-of-business
-date; Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
+date for reference and dimension data, and loads the three transaction tables
+incrementally by business date ([ADR-0018](docs/02-architecture/adr/0018-incremental-transaction-facts.md));
+Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
 Gold holds the business marts. Every layer is partitioned by an explicit
 `cob_dt`, and business dates are derived explicitly from UTC storage rather than
 inherited from a session timezone.
@@ -470,7 +472,9 @@ Batch ingestion is driven by reusable YAML configuration and Spark ETL jobs.
 ## Bronze Batch
 
 The Bronze Batch layer stores source-aligned data ingested through PostgreSQL JDBC:
-one full snapshot per `cob_dt`, and **every** Bronze table is partitioned by `cob_dt`.
+one full snapshot per `cob_dt` for 19 reference/dimension tables, and one **business day** per
+`cob_dt` for the three transaction tables (ADR-0018: a daily run reads only that day's
+transactions; a new stack backfills history once). **Every** Bronze table is partitioned by `cob_dt`.
 `overwritePartitions()` on an unpartitioned table replaces the whole table — 18 of the
 22 tables used to be unpartitioned, so each load erased the previous snapshots.
 `write_to_iceberg()` now refuses to write a snapshot into a table not partitioned by

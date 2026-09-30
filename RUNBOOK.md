@@ -762,6 +762,24 @@ SELECT snapshot_id, made_current_at FROM bronze."core_customer_cdc$history" ORDE
 
 ---
 
+## Incremental transaction facts (ADR-0018)
+
+`core_txn_account`, `core_card_txn`, `core_online_transaction` and their Silver facts hold
+one **business day** (ICT) per `cob_dt`. The daily run reads only that day.
+
+- **New stack / first load**: backfill history once. Airflow: trigger Bronze, Silver, Gold, dbt
+  with `--conf '{"cob_dt": "YYYY-MM-DD", "backfill_from": "1900-01-01"}'` (upstream first). CLI:
+  `ingestion_jdbc.py … --backfill_from 1900-01-01`, `fact_txn.py … --backfill_from 1900-01-01`.
+  The bootstraps (`code_etl/*/bootstrap/initial_load.py`) backfill on their own. Without it,
+  Gold 30/90/365-day KPIs see a single day.
+- **Re-run one day**: trigger that `cob_dt` without `backfill_from`; `overwritePartitions`
+  replaces only that day's partition.
+- **Late-arriving transactions** (event date D, reaching the source after D was loaded) are
+  missed until D is re-run. The synthetic source has none; a real one would re-run D-1 daily.
+- **Data for a second day** on the synthetic source:
+  `python data_generator/append_day.py --day YYYY-MM-DD --host localhost` copies day D-7's
+  transactions into D (credentials from `POSTGRES_*`).
+
 ## Backfill Playbook
 
 ### Prerequisites

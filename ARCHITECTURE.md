@@ -19,7 +19,8 @@
 │  │                    BRONZE LAYER (Raw)                                │   │
 │  │  22 tables: core_banking(13) + card_crm(3) + digital_banking(6)    │   │
 │  │  Format: Parquet + Iceberg metadata                                 │   │
-│  │  Strategy: full snapshot per cob_dt, every table PARTITIONED BY cob_dt│  │
+│  │  Strategy: full snapshot per cob_dt (19); 3 txn tables incremental │  │
+│  │  by business date (ADR-0018); every table PARTITIONED BY cob_dt    │  │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                        │
 │                                    ▼                                        │
@@ -174,10 +175,10 @@ Pipeline Run ──▶ LineageTracker ──▶ PostgreSQL (lineage_log)
 | core_location | dim_location | SCD1 |
 | core_deposit | dim_deposit | SCD1 |
 | core_loan | dim_loan | SCD1 |
-| core_txn_account | fact_txn_account | overwritePartitions(cob_dt), full snapshot |
-| core_card_txn | fact_card_txn | overwritePartitions(cob_dt) |
+| core_txn_account | fact_txn_account | incremental: partition = business date (ADR-0018) |
+| core_card_txn | fact_card_txn | incremental: partition = business date (ADR-0018) |
 | core_crm_interaction | fact_crm_interaction | overwritePartitions(cob_dt) |
-| core_online_transaction | fact_online_transaction | overwritePartitions(cob_dt) |
+| core_online_transaction | fact_online_transaction | incremental: partition = business date (ADR-0018) |
 | core_support_ticket | fact_support_ticket | overwritePartitions(cob_dt) |
 | core_loan_payment | fact_loan_payment | overwritePartitions(cob_dt) |
 
@@ -276,8 +277,9 @@ experiences.
 | Current serving | 16 (dbt/Trino) + 1 time spine | ~90K |
 
 Transaction counts are distinct `(domain, transaction_id)` within one verified
-snapshot. Silver facts are full snapshots per `cob_dt`, so `COUNT(*)` across
-partitions counts the same transaction more than once.
+snapshot. Since ADR-0018 the three transaction facts hold one business day per
+`cob_dt`, so the count is taken over every partition `<= cob_dt`; before, facts were
+full snapshots and `COUNT(*)` across partitions counted a transaction once per day.
 
 ## 🔗 Related
 
