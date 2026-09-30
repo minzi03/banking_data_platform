@@ -31,7 +31,7 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
-from etl_flag import make_end_flag_task, make_start_flag_task
+from etl_flag import make_end_flag_task, make_start_flag_task, upstream_success_sql
 from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -65,13 +65,7 @@ DEFAULT_ARGS = {
 
 
 def _gold_complete_sql() -> str:
-    return (
-        "SELECT 1 FROM opslakehouse.flag_job_etl "
-        f"WHERE job_name = '{GOLD_COMPLETE_FLAG}' "
-        "  AND status = 'S' "
-        f"  AND cob_dt = DATE '{DATA_COB_DT}' "
-        "LIMIT 1"
-    )
+    return upstream_success_sql(GOLD_COMPLETE_FLAG, DATA_COB_DT)
 
 
 with DAG(
@@ -145,8 +139,14 @@ with DAG(
 
     end = EmptyOperator(task_id="end", dag=dag)
 
+    # Chạy lại một cob_dt: R đầu lượt che SERVING_COMPLETE cũ (xem upstream_success_sql).
+    serving_complete_reset = make_start_flag_task(
+        "serving_complete_reset", SERVING_COMPLETE_FLAG, "serving", dag, cob_dt=DATA_COB_DT
+    )
+
     (
         start
+        >> serving_complete_reset
         >> wait_for_gold_complete
         >> dbt_deps
         >> validate_gold_sources

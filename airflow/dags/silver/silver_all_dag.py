@@ -17,7 +17,7 @@ from airflow.operators.bash import BashOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.utils.task_group import TaskGroup
 
-from etl_flag import make_start_flag_task, make_end_flag_task
+from etl_flag import make_start_flag_task, make_end_flag_task, upstream_success_sql
 from cob_dt import COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -71,13 +71,7 @@ BRONZE_DAG_IDS = [
 
 
 def _check_dag_flag_sql(upstream_dag_id: str) -> str:
-    return (
-        "SELECT 1 FROM opslakehouse.flag_job_etl "
-        f"WHERE job_name = '{upstream_dag_id}' "
-        "  AND status = 'S' "
-        f"  AND cob_dt = DATE '{DATA_COB_DT}' "
-        "LIMIT 1"
-    )
+    return upstream_success_sql(upstream_dag_id, DATA_COB_DT)
 
 
 # ─── DAG ──────────────────────────────────────────────────────────────────────

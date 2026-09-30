@@ -156,3 +156,62 @@ class TestMakeEndFlagTask:
         """Should use the success flag SQL."""
         kwargs = self._get_call_kwargs()
         assert kwargs.get("sql") == _FLAG_SQL_SUCCESS
+
+
+# ---------------------------------------------------------------------------
+# upstream_success_sql — dòng cờ MỚI NHẤT phải là S
+# ---------------------------------------------------------------------------
+
+import sqlite3  # noqa: E402
+
+upstream_success_sql = _efmod.upstream_success_sql
+
+
+def _run_sensor_sql(rows: list[tuple[str, str, str]]) -> bool:
+    """Chạy SQL của sensor trên SQLite (bỏ tiền tố DATE — cú pháp riêng của Postgres)."""
+    db = sqlite3.connect(":memory:")
+    db.execute("ATTACH ':memory:' AS opslakehouse")
+    db.execute(
+        "CREATE TABLE opslakehouse.flag_job_etl (id INTEGER PRIMARY KEY AUTOINCREMENT, job_name TEXT, status TEXT, cob_dt TEXT)"
+    )
+    db.executemany("INSERT INTO opslakehouse.flag_job_etl (job_name, status, cob_dt) VALUES (?, ?, ?)", rows)
+    sql = upstream_success_sql("bronze_core_banking_dag", "2026-09-29").replace("DATE '", "'")
+    return db.execute(sql).fetchone() is not None
+
+
+class TestUpstreamSuccessSql:
+    JOB, COB = "bronze_core_banking_dag", "2026-09-29"
+
+    def test_first_run_done(self):
+        assert _run_sensor_sql([(self.JOB, "R", self.COB), (self.JOB, "S", self.COB)])
+
+    def test_first_run_in_progress(self):
+        assert not _run_sensor_sql([(self.JOB, "R", self.COB)])
+
+    def test_rerun_hides_the_old_success(self):
+        """Stack 2026-09-30: nạp lại cob_dt 2026-09-29 — S của lượt trước vẫn còn; bản cũ
+        (có S nào không) cho downstream chạy ngay trong lúc upstream đang ghi lại."""
+        assert not _run_sensor_sql([(self.JOB, "R", self.COB), (self.JOB, "S", self.COB), (self.JOB, "R", self.COB)])
+
+    def test_rerun_done(self):
+        rows = [
+            (self.JOB, "R", self.COB),
+            (self.JOB, "S", self.COB),
+            (self.JOB, "R", self.COB),
+            (self.JOB, "S", self.COB),
+        ]
+        assert _run_sensor_sql(rows)
+
+    def test_other_dates_and_jobs_do_not_count(self):
+        assert not _run_sensor_sql([(self.JOB, "S", "2026-09-28"), ("silver_all_dag", "S", self.COB)])
+
+    def test_old_query_would_have_passed_the_rerun(self):
+        """Đối chứng: câu hỏi cũ 'có S nào' trả True cho kịch bản chạy lại đang dở."""
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE f (id INTEGER PRIMARY KEY AUTOINCREMENT, job_name TEXT, status TEXT, cob_dt TEXT)")
+        db.executemany(
+            "INSERT INTO f (job_name, status, cob_dt) VALUES (?, ?, ?)",
+            [(self.JOB, "R", self.COB), (self.JOB, "S", self.COB), (self.JOB, "R", self.COB)],
+        )
+        old = "SELECT 1 FROM f WHERE job_name = ? AND status = 'S' AND cob_dt = ? LIMIT 1"
+        assert db.execute(old, (self.JOB, self.COB)).fetchone() is not None

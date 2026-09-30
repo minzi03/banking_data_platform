@@ -11,7 +11,7 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
-from etl_flag import make_start_flag_task, make_end_flag_task
+from etl_flag import make_start_flag_task, make_end_flag_task, upstream_success_sql
 from cob_dt import COB_DT
 
 DAG_ID              = "ops_lineage_dag"
@@ -34,6 +34,7 @@ dag = DAG(
     # trigger — lineage_log chỉ có dữ liệu khi có người bấm tay (TD-13).
     schedule_interval="0 8 * * *",  # Daily at 8:00 AM (Production - after Gold 06:00)
     catchup=False,
+    max_active_runs=1,  # ghi bảng: hai lượt cùng cob_dt tranh nhau (PII 2026-09-30)
     max_active_tasks=4,
     tags=["ops", "lineage", "governance"],
 )
@@ -44,13 +45,7 @@ dag = DAG(
 wait_silver = SqlSensor(
     task_id="wait_silver_all_dag",
     conn_id=POSTGRES_ETL_CONN_ID,
-    sql=(
-        "SELECT 1 FROM opslakehouse.flag_job_etl "
-        "WHERE job_name = 'silver_all_dag' "
-        "  AND status = 'S' "
-        f"  AND cob_dt = '{COB_DT}' "
-        "LIMIT 1"
-    ),
+    sql=upstream_success_sql("silver_all_dag", COB_DT),
     poke_interval=120,
     timeout=7200,
     mode="reschedule",
@@ -60,13 +55,7 @@ wait_silver = SqlSensor(
 wait_gold = SqlSensor(
     task_id="wait_gold_all_dag",
     conn_id=POSTGRES_ETL_CONN_ID,
-    sql=(
-        "SELECT 1 FROM opslakehouse.flag_job_etl "
-        "WHERE job_name = 'gold_all_dag' "
-        "  AND status = 'S' "
-        f"  AND cob_dt = '{COB_DT}' "
-        "LIMIT 1"
-    ),
+    sql=upstream_success_sql("gold_all_dag", COB_DT),
     poke_interval=120,
     timeout=7200,
     mode="reschedule",

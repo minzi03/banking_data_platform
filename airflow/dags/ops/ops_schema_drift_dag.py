@@ -15,6 +15,7 @@ from airflow.providers.common.sql.sensors.sql import SqlSensor
 import pendulum
 
 from cob_dt import COB_DT
+from etl_flag import upstream_success_sql
 
 DAG_ID = "ops_schema_drift_dag"
 APP = "/opt/project/governance/schema_drift.py"
@@ -30,13 +31,13 @@ DEFAULT_ARGS = {
 
 dag = DAG(DAG_ID, default_args=DEFAULT_ARGS,
     description="Schema drift detection - post-Silver/Gold",
-    schedule_interval="0 9 * * *", catchup=False,
+    schedule_interval="0 9 * * *", catchup=False, max_active_runs=1,
     tags=["ops","schema-drift","production"])
 
 wait_dq = SqlSensor(
     task_id="wait_dq",
     conn_id=PG,
-    sql=f"SELECT 1 FROM opslakehouse.flag_job_etl WHERE job_name = 'ops_data_quality_dag' AND status = 'S' AND cob_dt = DATE '{COB_DT}' LIMIT 1",
+    sql=upstream_success_sql("ops_data_quality_dag", COB_DT),
     poke_interval=60, timeout=3600, mode="reschedule", dag=dag)
 
 check_schema_drift = BashOperator(

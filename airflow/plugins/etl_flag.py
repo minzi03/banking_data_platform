@@ -14,6 +14,7 @@ Quy tắc:
     - INSERT only, không bao giờ UPDATE
     - 1 DAG = 1 cặp cờ: INSERT R khi DAG bắt đầu, INSERT S khi DAG hoàn thành
     - Downstream DAGs check theo job_name (dag_id), không theo table_name
+    - Upstream "xong" = DÒNG MỚI NHẤT của (job_name, cob_dt) là S — xem upstream_success_sql
 """
 
 from cob_dt import COB_DT
@@ -37,6 +38,27 @@ _FLAG_SQL_SUCCESS = """
         (%(dag_id)s, %(layer)s, %(dag_id)s, 'S',
          NULL, (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh'), %(cob_dt)s::date);
 """
+
+
+def upstream_success_sql(job_name: str, cob_dt: str = COB_DT) -> str:
+    """
+    SQL cho SqlSensor: upstream đã xong cho cob_dt khi DÒNG CỜ MỚI NHẤT (id lớn nhất) là S.
+
+    Bản cũ chỉ hỏi "có dòng S nào không". Chạy lại một cob_dt (backfill, replay, reseed)
+    thì S của lượt trước vẫn còn, nên downstream chạy ngay trong lúc upstream đang ghi lại
+    (thấy trên stack 2026-09-30 khi nạp lại cob_dt 2026-09-29). Lượt chạy lại chèn R ở đầu,
+    nên R đó che S cũ cho tới khi lượt mới chèn S.
+
+    Còn một khe hở: trigger upstream và downstream CÙNG LÚC cho một cob_dt đã có S — sensor
+    có thể chạy trước khi upstream kịp chèn R. Chạy lại: trigger upstream trước (RUNBOOK).
+    """
+    return (
+        "SELECT 1 FROM ("
+        "SELECT status FROM opslakehouse.flag_job_etl "
+        f"WHERE job_name = '{job_name}' AND cob_dt = DATE '{cob_dt}' "
+        "ORDER BY id DESC LIMIT 1"
+        ") latest WHERE latest.status = 'S'"
+    )
 
 
 def make_start_flag_task(

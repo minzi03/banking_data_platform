@@ -207,8 +207,20 @@ def _dag_schedules() -> dict[str, tuple[str, str | None, list[str]]]:
             continue
         sched = re.search(r"""schedule_interval\s*=\s*(?:"([^"]*)"|'([^']*)'|None)""", text)
         cron = (sched.group(1) or sched.group(2)) if sched else None
-        dags[dag_id.group(1)] = (_dag_id(path), cron, sorted(set(re.findall(r"job_name = '(\w+)'", text))))
+        # Upstream = đối số đầu của upstream_success_sql(...) — chuỗi hằng hoặc hằng *_FLAG.
+        waits = set(re.findall(r'upstream_success_sql\(\s*"(\w+)"', text))
+        for const in re.findall(r"upstream_success_sql\(\s*([A-Z_]+_FLAG)\b", text):
+            value = re.search(rf'^{const}\s*=\s*"(\w+)"', text, re.MULTILINE)
+            waits.update([value.group(1)] if value else [])
+        for var in re.findall(r"_check_dag_flag_sql\(\s*\"(\w+)\"", text):
+            waits.add(var)
+        dags[dag_id.group(1)] = (_dag_id(path), cron, sorted(waits))
     return dags
+
+
+# Chạy tay có chủ đích: churn ML cần ml/requirements.txt trên worker, không chạy hằng ngày
+# (audit 2026-09-30). Sensor của nó vẫn chờ SERVING_COMPLETE khi được trigger.
+MANUAL_DAGS = {"ops_ml_churn_dag"}
 
 
 class TestFlagWaitingDagsAreScheduled:
@@ -220,10 +232,15 @@ class TestFlagWaitingDagsAreScheduled:
     """
 
     DAGS = _dag_schedules()
-    WAITERS = sorted(d for d, (_, _, waits) in DAGS.items() if waits)
+    MANUAL_BY_DESIGN = MANUAL_DAGS
+    WAITERS = sorted(d for d, (_, _, waits) in DAGS.items() if waits and d not in MANUAL_DAGS)
 
     def test_waiters_are_found(self):
         assert {"ops_lineage_dag", "ops_data_quality_dag"} <= set(self.WAITERS)
+
+    def test_manual_exemptions_really_are_unscheduled(self):
+        for dag_id in self.MANUAL_BY_DESIGN:
+            assert self.DAGS[dag_id][1] is None, f"{dag_id} có lịch — bỏ khỏi MANUAL_BY_DESIGN"
 
     @pytest.mark.parametrize("dag_id", WAITERS)
     def test_waiter_runs_daily_after_what_it_waits_for(self, dag_id):
@@ -345,21 +362,42 @@ class TestCdcStreamingFitsTheWorker:
         )
 
 
-BATCH_DAGS = [
-    "bronze/bronze_card_crm_dag.py",
-    "bronze/bronze_core_banking_dag.py",
-    "bronze/bronze_digital_banking_dag.py",
-    "silver/silver_all_dag.py",
-    "gold/gold_mart360_dag.py",
-]
+SCHEDULED_DAGS = [p for p in DAG_FILES if re.search(r'schedule_interval\s*=\s*"[^"]+"', p.read_text(encoding="utf-8"))]
 
 
-@pytest.mark.parametrize("relative", BATCH_DAGS)
-def test_batch_dag_runs_one_at_a_time(relative):
+def test_scheduled_dags_are_found():
+    assert len(SCHEDULED_DAGS) >= 13, [_dag_id(p) for p in SCHEDULED_DAGS]
+
+
+@pytest.mark.parametrize("dag_path", SCHEDULED_DAGS, ids=_dag_id)
+def test_scheduled_dag_runs_one_at_a_time(dag_path):
     """
     Unpause một DAG có lịch tạo ngay lượt chạy cho khoảng gần nhất; DEMO_GUIDE trigger
     thêm lượt tay cho cùng cob_dt. Không giới hạn (mặc định 16), hai lượt cùng ghi đè một
-    partition và cùng MERGE SCD2 một bảng dim (đo trên stack 2026-09-30).
+    partition, cùng MERGE SCD2 một bảng dim (batch, 2026-09-30) hoặc cùng CREATE bảng
+    sandbox (`ops_pii_masking_daily_dag`: "table already exists", 2026-09-30).
     """
+    text = dag_path.read_text(encoding="utf-8")
+    assert re.search(r"max_active_runs=1\b", text), f"{_dag_id(dag_path)} thiếu max_active_runs=1"
+
+
+@pytest.mark.parametrize("dag_path", DAG_FILES, ids=_dag_id)
+def test_flag_sensors_use_the_latest_flag(dag_path):
+    """
+    Sensor cờ phải đi qua etl_flag.upstream_success_sql (dòng cờ MỚI NHẤT là S). SQL tự viết
+    "có dòng S nào" cho downstream chạy ngay khi chạy lại một cob_dt đã có S (2026-09-30).
+    """
+    lines = dag_path.read_text(encoding="utf-8").splitlines()
+    code = "\n".join(ln for ln in lines if not ln.strip().startswith("#"))
+    assert not re.search(r"status\s*=\s*'S'", code), f"{_dag_id(dag_path)} tự viết SQL kiểm cờ S"
+
+
+@pytest.mark.parametrize(
+    ("relative", "flag"),
+    [("gold/gold_mart360_dag.py", "GOLD_COMPLETE_FLAG"), ("dbt/dbt_run_dag.py", "SERVING_COMPLETE_FLAG")],
+)
+def test_derived_completion_flag_is_reset_at_start(relative, flag):
+    """GOLD_COMPLETE / SERVING_COMPLETE chỉ được ghi S lúc kết thúc; lượt chạy lại phải chèn R
+    ngay đầu, nếu không S cũ vẫn là dòng mới nhất và consumer chạy trên dữ liệu đang ghi."""
     text = (DAGS_DIR / relative).read_text(encoding="utf-8")
-    assert re.search(r"^\s*max_active_runs=1,", text, re.M), f"{relative} thiếu max_active_runs=1"
+    assert re.search(rf"make_start_flag_task\(\s*\"\w+_reset\", {flag}", text), f"{relative}: thiếu R cho {flag}"

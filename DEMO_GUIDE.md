@@ -137,7 +137,7 @@ AF variables set pii_hash_salt "$(openssl rand -hex 32)"   # một lần; PII ma
 for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag \
          silver_all_dag gold_all_dag dbt_serving_publish; do TRIG $d $COB; done
 ```
-Silver chờ đủ 3 cờ Bronze, Gold chờ Silver, dbt chờ `GOLD_COMPLETE` — trigger cùng lúc là đúng.
+Silver chờ đủ 3 cờ Bronze, Gold chờ Silver, dbt chờ `GOLD_COMPLETE` — lần đầu chạy một `cob_dt` thì trigger cùng lúc là đúng. Sensor coi upstream xong khi **dòng cờ mới nhất** của (job, `cob_dt`) là `S` (`etl_flag.upstream_success_sql`); Gold/dbt ghi `R` cho `GOLD_COMPLETE`/`SERVING_COMPLETE` ngay khi bắt đầu. **Chạy lại một `cob_dt` đã có cờ `S`:** trigger upstream trước (vài giây) rồi mới tới downstream, để `R` của lượt mới kịp che `S` cũ.
 
 > **Lưu ý khi unpause.** Unpause một DAG có lịch tạo **ngay** một lượt chạy theo lịch cho khoảng gần nhất, tức `cob_dt` = hôm qua. Nếu `$COB` cũng là hôm qua, DAG có hai lượt cho cùng ngày; `max_active_runs=1` cho Bronze/Silver/Gold nên hai lượt chạy nối tiếp, kết quả như nhau (idempotent) nhưng tốn gấp đôi thời gian. Với các DAG ops (DQ, contract, PII, drift), lượt theo lịch của một ngày chưa có dữ liệu sẽ chờ cờ tới hết timeout. Muốn tránh: `AF dags list-runs -d <dag>` sau khi unpause và đánh dấu lượt `scheduled__…` là failed trên UI.
 
