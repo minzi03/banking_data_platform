@@ -549,7 +549,7 @@ metrics:
     automated_tests:
       test_functions:
         value: 1050
-        declared: 1050
+        declared: 1068
         metric_type: static
         provenance: collector:test_functions
         definition: Số hàm Python có tên khớp `def test_*`.
@@ -875,7 +875,7 @@ readme_bindings:
   manifest_path: metrics.silver.dimensions.scd_type_2.value
 - readme_claim: '| Silver SCD Type 1 dims     |              6 |'
   manifest_path: metrics.silver.dimensions.scd_type_1.value
-- readme_claim: '| Automated tests            |          1,050 |'
+- readme_claim: '| Automated tests            |          1,068 |'
   manifest_path: metrics.platform.automated_tests.test_functions.value
 - readme_claim: '| Docker Compose services    |             29 |'
   manifest_path: metrics.platform.docker_services.compose_defined.value
