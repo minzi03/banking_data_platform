@@ -89,6 +89,20 @@ the previous code.
 - **Evidence manifest** regenerated and promoted `verified` (`cob_dt` 2026-09-23;
   README 24/24 bindings).
 
+### Owner decisions carried out (2026-09-30)
+
+- **RFM segment cut-offs.** They now follow the assignment's KPI dictionary
+  (`New ≥ 5`, `At Risk ≥ 3`, previously `≥ 6` / `≥ 4`) in both Gold models.
+  `tests/gold/test_rfm_segment_cutoffs.py` pins them.
+- **TD-20 deletion list removed.** It covered dead DAGs (`dbt_seed`,
+  `regulatory_reporting`), `terraform/`, duplicate DDL, stubs and one-off scripts.
+  References were updated in the same change. Airflow now has 18 DAG files / 19 DAGs.
+- **Local data reseeded** at `--as-of 2026-09-29`: 0 CLOSED accounts with a balance.
+  - The batch chain, quarantine and contract validation (freshness included) pass
+    for `cob_dt` 2026-09-29.
+  - CDC Silver Current equals the source: 10,000 / 30,000 rows, same `SUM(balance)`.
+- **Manifest** re-promoted at `cob_dt` 2026-09-29.
+
 ### Documentation
 
 - `DEMO_GUIDE.md` is the single authoritative demo. Older demo and dbt docs are pointer stubs.
