@@ -1550,7 +1550,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-972 automated tests
+1,055 automated tests
 ```
 
 covering areas such as:

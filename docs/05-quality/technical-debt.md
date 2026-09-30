@@ -1789,27 +1789,56 @@ are lost, and Debezium re-snapshots about 2.3 M rows. That is a separate, disrup
 
 ## TD-20 — Audit 2026-09-30: runtime re-verification and files proposed for deletion
 
-**Status:** open. The code fixes of the 2026-09-30 audit are done and covered by tests
-(see CHANGELOG, *Unreleased*). What remains needs either a running stack or an explicit
-decision to delete files — the audit session could do neither.
+**Status:** runtime part done 2026-09-30. Still open: RFM cut-offs (spec question)
+and the deletion list below (owner's decision).
 
-### Needs the running stack
+### Ran on the local stack (upgrade path, 2026-09-30)
 
-Verified without a stack: 1,876 unit tests, 133 Spark regression tests (PySpark 3.5.3),
-all 21 DAGs imported and every daily DAG's templates rendered with Airflow 2.10.0,
-`dbt parse` (17 models / 137 tests), `docker compose config` for both compose files.
-Not yet run end to end:
+Run on the existing stack, not from a fresh `down -v`. A fresh start is covered by the CI
+job *Trino Integration*: 34 passed on a stack built from compose.
 
-- Iceberg-specific paths: SCD2 `MERGE`/`UPDATE` with Type-1 overwrite and
-  `close_missing_keys`, the SCD1 → SCD2 upgrade of `dim_product` / `dim_branch`,
-  `make bronze-partition-migrate`, CDC incremental read by snapshot and the ordered MERGE.
-- Airflow image with the docker CLI and `group_add: DOCKER_GID` — the image never
-  installed the CLI before, so `docker exec` tasks could only have worked on a
-  hand-modified container.
-- API parameter binding against a real Trino.
-- Re-run `scripts/generate_metrics_manifest.py` and promote, so the README table
-  (still at `30458be`) is rebound. Known static drift: SCD2 2 → 4, SCD1 8 → 6,
-  test functions 972 → 1,034, pytest nodes 1,909 → 2,016.
+- `make bronze-partition-migrate`: 13 tables migrated. Row counts were identical before
+  and after on 23 tables. A rerun reports `ok` for all 22. The first run failed its post
+  check: `.partitions` was read from the catalog cache. Fixed with `REFRESH TABLE`.
+- Batch through Airflow, image with the docker CLI:
+  - 3 Bronze → Silver → Gold → `dbt_serving_publish` succeeded for `cob_dt` 2026-09-22
+    and 2026-09-23, with 7 flags `S`.
+  - Every Makefile Spark target called a bare `spark-submit`, which is not on the worker
+    PATH. Fixed.
+- SCD2, day two:
+  - Tracked change → new version.
+  - A Type 1 change updates the current version in place.
+  - Product and branch keep history.
+  - No duplicate current rows.
+  - Rerunning Gold for the earlier `cob_dt` keeps the old segment (join as of `cob_dt`).
+- CDC, three fixes:
+  - NUMERIC was NULL in every Bronze CDC row: Debezium `decimal.handling.mode=precise`.
+  - Four of six streaming queries were `WAITING`: no `spark.cores.max` cap.
+  - INSERT + UPDATE in one transaction was resolved at random: same ms and same batch.
+    `__kafka_offset` now breaks the tie.
+
+  Verified after the fixes:
+  - update, insert, delete, DLQ `INVALID_OPERATION`;
+  - a replay leaves the state unchanged;
+  - two restarts produce no duplicate rows;
+  - `SUM(balance)` in Silver Current equals the source.
+- API on Trino: 200 / 422 / 404. Recommendations were fixed: duplicates, `"None"`, and
+  AUM buckets that never matched.
+- Governance DAGs:
+  - contract validation: every check passes except freshness, which is expected for an
+    old `cob_dt`;
+  - DQ, PII masking (64-char hash, no raw CCCD), schema drift (32 tables, 0 BREAKING,
+    2 ADDITIVE from two local tables created with wider decimals) and maintenance
+    succeeded;
+  - quarantine never stored a row. Now fixed.
+- `dbt build` PASS=154 with `--vars cob_dt`. `mf validate-configs` has 0 errors.
+- The manifest was regenerated and promoted `verified` at `cob_dt` 2026-09-23. README has
+  24/24 bindings.
+
+Not run: OpenMetadata / `ops_lineage_dag` (service not started), Superset / Streamlit,
+`ops_ml_churn_dag`, `regulatory_reporting` (proposed for deletion). The generator fix for
+CLOSED accounts takes effect on the next seed. The local data still makes
+`closed_with_balance` fail.
 
 ### Open spec question: RFM segment cut-offs
 

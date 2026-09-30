@@ -59,6 +59,36 @@ the previous code. Nothing here has run on the full Docker stack yet (TD-20).
 - `cob_dt` is a validated `date` query parameter bound with `?`, not interpolated into SQL.
 - Joined endpoints qualify `cob_dt`, which was ambiguous.
 
+### Found on the running stack (2026-09-30)
+
+These surfaced only once the fixes above ran on Docker. Each has a test that fails on
+the previous code.
+
+- **CDC money columns were NULL.** Debezium `decimal.handling.mode=precise` sends
+  NUMERIC as base64 bytes. The connectors now use `string`; RUNBOOK covers re-emitting
+  on older stacks.
+- **Four of six CDC streaming queries never ran.** Each query is now capped at
+  `spark.cores.max=1`.
+- **Same-transaction CDC events were ordered at random.** INSERT + UPDATE share the
+  millisecond and the micro-batch. Bronze CDC now keeps `__kafka_partition` /
+  `__kafka_offset`, and dedup breaks ties on the offset (ADR-0010).
+- **Bronze partition migration failed its post-check** on the catalog cache
+  (`REFRESH TABLE`).
+- **Makefile Spark targets could not find `spark-submit`.** They now use
+  `/opt/spark/bin/spark-submit`.
+- **Batch DAGs could run concurrently for the same `cob_dt`.** They now set
+  `max_active_runs=1`.
+- **Quarantine never stored a row.** Tables are now created on demand, rows use the
+  target schema, and columns follow the target's order. The rule `overdue_account` now
+  writes to `overdue_account`.
+- **Generator:** CLOSED accounts get balance 0.
+- **API recommendations:** no duplicates, no `"None"` product, and the AUM buckets
+  match Gold.
+- **CI:** the SCD1 smoke step now uses a dimension that is still SCD1, with a static
+  guard.
+- **Evidence manifest** regenerated and promoted `verified` (`cob_dt` 2026-09-23;
+  README 24/24 bindings).
+
 ### Documentation
 
 - `DEMO_GUIDE.md` is the single authoritative demo. Older demo and dbt docs are pointer stubs.
