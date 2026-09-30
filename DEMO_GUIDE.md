@@ -258,7 +258,7 @@ TQ "SELECT campaign_type, COUNT(*) FROM gold.campaign_target WHERE cob_dt = DATE
 
 ---
 
-## 9. CDC end-to-end ⚠️
+## 9. CDC end-to-end (đã chạy trên stack 2026-09-30)
 
 **What.** PostgreSQL WAL → Debezium → Kafka → Spark Structured Streaming → Bronze CDC → consolidation → Silver Current.
 
@@ -302,10 +302,13 @@ TQ "SELECT * FROM meta.cdc_watermark"
 | Idempotent / replay | Chạy lại `TRIG cdc_consolidation_pipeline $COB` khi không có event mới | Log `No new snapshots. Skipping.`; Silver Current không đổi |
 | DLQ | `echo '{"payload":{"customer_id":"999999","__op":"x","__ts_ms":"1"}}' \| docker exec -i banking-kafka kafka-console-producer --bootstrap-server kafka:9092 --topic postgresql.banking.core_banking.customer` | `TQ "SELECT error_type, error_message FROM bronze.cdc_dead_letter ORDER BY failed_at DESC LIMIT 3"` → `INVALID_OPERATION`. Streaming không dừng |
 | Restart / checkpoint | `TRIG cdc_streaming_stop_all $COB`, rồi `TRIG cdc_streaming_pipeline $COB` | Query tiếp tục từ checkpoint `s3a://lakehouse/checkpoints/cdc/*`, không nhân đôi Bronze |
+| Thứ tự trong một transaction | `PQ "BEGIN; INSERT … (990004, … 'v1@example.com' …); UPDATE core_banking.customer SET email = 'v2@example.com' WHERE customer_id = 990004; COMMIT;"` | Bronze CDC: hai dòng **cùng** `__cdc_timestamp_ms` và `__spark_batch_id`, khác `__kafka_offset`. Silver Current: `v2` |
+| Cột tiền | `PQ "UPDATE core_banking.account SET balance = balance + 1000.55 WHERE account_id = 1"` | `silver.dim_account_current.balance` = giá trị nguồn (không NULL) |
 
 **Talking points.**
-- ⚠️ Tiến độ consolidation = **snapshot Iceberg** của Bronze CDC. Mỗi lượt đọc đúng khoảng (watermark, end], nên event về muộn không bị bỏ sót. Thứ tự event = (`__cdc_timestamp_ms`, `__spark_batch_id`). MERGE không ghi đè trạng thái mới hơn bằng event cũ hơn.
-- ⚠️ Bản cũ biến `date_of_birth`, `register_date`, `open_date`, `close_date`, `balance` thành NULL: so sánh cột số với `""`.
+- Tiến độ consolidation = **snapshot Iceberg** của Bronze CDC. Mỗi lượt đọc đúng khoảng (watermark, end], nên event về muộn không bị bỏ sót. Thứ tự event = (`__cdc_timestamp_ms`, `__spark_batch_id`, `__kafka_offset`): INSERT + UPDATE trong một transaction trùng cả ms lẫn micro-batch, chỉ offset phân định (ADR-0010). MERGE không ghi đè trạng thái mới hơn bằng event cũ hơn.
+- Bản cũ biến `date_of_birth`, `register_date`, `open_date`, `close_date` thành NULL (so sánh cột số với `""`), còn `balance`/`txn_amount`/`amount` NULL vì Debezium gửi NUMERIC dạng bytes base64 (`decimal.handling.mode=precise`); connector giờ dùng `string`.
+- Mỗi query streaming giới hạn `spark.cores.max=1`: không có giới hạn, query đầu chiếm 6/8 core và 4 query còn lại + consolidation `WAITING` mãi trong khi Airflow báo success.
 - Không claim exactly-once: replay-safe + MERGE idempotent. Kafka offset chỉ lưu ở DLQ (ADR-0010).
 
 ---

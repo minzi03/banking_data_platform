@@ -8,13 +8,13 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**93 bảng · 1244 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**93 bảng · 1256 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 27 | 388 |
+| [bronze](#bronze) | 27 | 400 |
 | [silver](#silver) | 17 | 231 |
 | [gold](#gold) | 15 | 243 |
 | [meta](#meta) | 1 | 5 |
@@ -50,6 +50,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -77,6 +79,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -125,6 +129,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -363,6 +369,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -609,6 +617,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 
@@ -661,6 +671,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_partition` | `INT` |  |  |
+| `__kafka_offset` | `BIGINT` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_bronze_cdc.sql`</sub>
 

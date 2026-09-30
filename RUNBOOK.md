@@ -746,6 +746,18 @@ SELECT snapshot_id, made_current_at FROM bronze."core_customer_cdc$history" ORDE
 - **Stop streaming**: trigger `cdc_streaming_stop_all` (SIGTERM to the `cdc_*` drivers only;
   it no longer touches the Spark worker). Restart with `cdc_streaming_pipeline`; queries
   resume from their checkpoints under `s3a://lakehouse/checkpoints/cdc/`.
+- **Money columns NULL in Bronze CDC** (stacks whose connectors were registered before
+  2026-09-30): Debezium used `decimal.handling.mode=precise`, which sends NUMERIC as base64
+  bytes, and the cast to `decimal(18,2)` gave NULL. Re-run `cdc_register_connectors` (it
+  PUTs the config, now `string`). Events already in Kafka keep the old encoding, so
+  re-emit the rows that feed Silver Current. The UPDATE below changes no value and
+  Debezium still emits every row:
+  `PQ "UPDATE core_banking.account SET balance = balance"`, then run consolidation.
+  Measured 2026-09-30: 30,000 events; `SUM(balance)` in `silver.dim_account_current`
+  equals the source to the cent.
+- **Resource sizing**: each streaming query runs with `spark.cores.max=1` (six cores in
+  total). Without the cap, standalone Spark gave the first query 6 of 8 cores. Four
+  queries and consolidation then stayed `WAITING` while Airflow reported success.
 
 ---
 

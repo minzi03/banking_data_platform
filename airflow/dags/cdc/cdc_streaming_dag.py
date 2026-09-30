@@ -90,6 +90,10 @@ with DAG(
             # spark.executor.instances in spark-defaults.conf). Without this,
             # six CDC queries compete for the worker's six cores and leave
             # some applications permanently WAITING.
+            # Standalone cấp core theo spark.cores.max (spark-defaults: 6), không theo
+            # executor.instances: thiếu dòng này một query lấy 6 core, query thứ hai 2,
+            # 4 query còn lại + consolidation WAITING mãi (đo trên stack 2026-09-30).
+            f"--conf spark.cores.max=1 "
             f"--num-executors 1 "
             f"--conf spark.executor.instances=1 "
             f"--conf spark.dynamicAllocation.enabled=false "

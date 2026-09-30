@@ -317,3 +317,29 @@ class TestNoSparkSubmitOperator:
         assert not any("SparkSubmitOperator(" in ln or "import SparkSubmitOperator" in ln for ln in code), _dag_id(
             dag_path
         )
+
+
+class TestCdcStreamingFitsTheWorker:
+    """
+    Standalone cấp core cho app theo `spark.cores.max` (spark-defaults: 6), không theo
+    `spark.executor.instances`. Thiếu giới hạn, query CDC đầu lấy 6/8 core, query thứ
+    hai 2, bốn query còn lại và consolidation WAITING vô hạn — Airflow vẫn báo success
+    (đo trên stack 2026-09-30).
+    """
+
+    STREAMING_DAG = DAGS_DIR / "cdc" / "cdc_streaming_dag.py"
+    CDC_CONFIGS = sorted((REPO_ROOT / "code_etl" / "cdc" / "config").glob("cdc_*.yml"))
+    ENV_EXAMPLE = REPO_ROOT / "docker" / ".env.example"
+
+    def test_each_query_caps_its_cores(self):
+        caps = re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))
+        assert caps, "cdc_streaming_dag không đặt --conf spark.cores.max cho query streaming"
+
+    def test_all_queries_leave_room_for_consolidation(self):
+        cap = int(re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))[0])
+        worker_cores = int(re.search(r"^SPARK_WORKER_CORES=(\d+)", self.ENV_EXAMPLE.read_text(), re.M).group(1))
+        used = cap * len(self.CDC_CONFIGS)
+        assert len(self.CDC_CONFIGS) == 6
+        assert used < worker_cores, (
+            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker"
+        )

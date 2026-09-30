@@ -451,15 +451,15 @@ metrics:
       bronze_cdc_partitioning: DATE(__cdc_timestamp) — UTC day, kỹ thuật
     consolidation_watermark:
       implementation: iceberg_snapshot_id
-      event_ordering: cdc_timestamp_ms_then_spark_batch_id
+      event_ordering: cdc_timestamp_ms_then_spark_batch_id_then_kafka_offset
       partition_aware: false
-      kafka_offsets_persisted_in_valid_bronze: false
+      kafka_offsets_persisted_in_valid_bronze: true
       note: 'Tiến độ = snapshot Iceberg cuối cùng của Bronze CDC đã MERGE (meta.cdc_watermark.last_snapshot_id);
-        mỗi lượt đọc đúng các append trong (watermark, end]. Thứ tự event = (__cdc_timestamp_ms,
-        __spark_batch_id), dùng cho dedup và guard không-ghi-đè-bằng-event-cũ trong MERGE.
-        partition_aware / kafka_offsets_persisted_in_valid_bronze chỉ đặt true SAU KHI
-        persist Kafka (topic, partition, offset) vào valid Bronze CDC. README không được
-        claim per-partition offset cho tới khi cả hai = true.
+        mỗi lượt đọc đúng các append trong (watermark, end]. Dedup trong một lượt xếp
+        (__cdc_timestamp_ms, __spark_batch_id, __kafka_offset); guard MERGE giữa các lượt
+        so __cdc_timestamp_ms. Bronze CDC lưu __kafka_partition / __kafka_offset từ
+        2026-09-30 (ADR-0010); dòng cũ hơn mang NULL. partition_aware = false: watermark
+        theo snapshot của bảng, không theo partition Kafka.
 
         '
   cdc_freshness:

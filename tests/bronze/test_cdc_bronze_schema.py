@@ -11,7 +11,7 @@ như ADR-0010 ghi (chỉ DLQ giữ toạ độ Kafka). Lệch từ commit d84b0e
 mọi batch có dữ liệu đều hỏng từ đó, và CI không chạy luồng CDC nên không thấy.
 
 Hai tầng:
-  - tĩnh (unit CI): mỗi config CDC + 5 cột metadata == cột của bảng trong CẢ HAI DDL
+  - tĩnh (unit CI): mỗi config CDC + 7 cột metadata == cột của bảng trong CẢ HAI DDL
   - Spark (integration): validate_and_split thật trên một batch Kafka giả cho ra
     đúng tập cột đó, và event hỏng đi DLQ
 """
@@ -35,7 +35,16 @@ DDL_FILES = {
     "04_ddl_bronze_cdc.sql": REPO_ROOT / "docker" / "init_iceberg" / "04_ddl_bronze_cdc.sql",
     "create_cdc_tables.py": REPO_ROOT / "code_etl" / "cdc" / "create_cdc_tables.py",
 }
-META_COLUMNS = ["__cdc_operation", "__cdc_timestamp", "__cdc_timestamp_ms", "__spark_batch_id", "__ingestion_time"]
+META_COLUMNS = [
+    "__cdc_operation",
+    "__cdc_timestamp",
+    "__cdc_timestamp_ms",
+    "__spark_batch_id",
+    "__ingestion_time",
+    # Toạ độ Kafka: khoá thứ tự cuối trong dedup consolidation (ADR-0010, 2026-09-30)
+    "__kafka_partition",
+    "__kafka_offset",
+]
 _TABLE_RE = re.compile(r"CREATE TABLE IF NOT EXISTS lakehouse\.bronze\.(\w+) \((.*?)\)\s*USING iceberg", re.DOTALL)
 
 

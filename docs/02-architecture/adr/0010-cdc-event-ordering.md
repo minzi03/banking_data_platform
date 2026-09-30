@@ -1,6 +1,6 @@
 # ADR-0010 — Thứ tự sự kiện CDC dùng `(timestamp_ms, batch_id)`, không dùng Kafka offset
 
-**Status**: Accepted
+**Status**: Superseded một phần (2026-09-30) — Bronze CDC giờ lưu `__kafka_partition` / `__kafka_offset`; xem mục cuối
 **Ngày**: 2026-09 · chuyển thể thành ADR 2026-09-22
 **Liên quan**: [`0007`](0007-overwrite-partitions-by-cob-dt.md)
 
@@ -125,3 +125,31 @@ snapshot cuối và đọc đúng các append trong `(watermark, end]` bằng in
 Iceberg. MERGE thêm guard `s.ts >= t.ts`, nên event muộn hoặc replay không kéo trạng
 thái lùi. Snapshot watermark bị expire → đọc lại toàn bộ tại `end` (an toàn nhờ guard).
 Test: `tests/cdc/test_cdc_consolidation.py`. Chưa chạy trên stack.
+
+## Cập nhật 2026-09-30 (runtime) — offset vào Bronze CDC
+
+Chạy trên stack thật, nhược điểm thứ hai ở trên xảy ra ngay: `INSERT` rồi `UPDATE` cùng
+khoá trong **một transaction** có cùng `__ts_ms` (Debezium gán theo ms xử lý) và rơi vào
+cùng micro-batch, nên `row_number()` chọn ngẫu nhiên giữa hai bản.
+
+```text
+customer 990004  INSERT  ts_ms 1790742688429  batch 4  offset 30012
+customer 990004  UPDATE  ts_ms 1790742688429  batch 4  offset 30013
+```
+
+Đã làm theo đúng "nếu xem lại" của ADR này:
+
+- `cdc_dlq.validate_and_split` giữ `__kafka_partition` / `__kafka_offset` trong luồng hợp lệ
+  (chỉ hai cột; topic / timestamp / raw_payload vẫn chỉ ở DLQ).
+- Hai DDL (`04_ddl_bronze_cdc.sql`, `create_cdc_tables.py`) có hai cột đó. Bảng tạo trước được
+  `ensure_kafka_coordinate_columns` thêm cột khi stream khởi động (dòng cũ mang NULL).
+- `deduplicate_latest` xếp `ts_ms DESC, batch DESC, offset DESC NULLS LAST`. Debezium key =
+  khoá chính → mọi event của một khoá cùng partition, nên offset phân định dứt khoát.
+- Guard MERGE giữa các lượt vẫn so `ts` (`s.ts >= t.ts`).
+
+Kiểm chứng: sau thay đổi, 990003 / 990004 / 990005 (INSERT + UPDATE cùng transaction) đều ra
+bản `UPDATE` cuối trong Silver Current; test `TestDeduplicateLatest` (hai thứ tự đầu vào,
+repartition 4) và `TestKafkaCoordinateColumns`.
+
+Còn lại: dòng Bronze CDC ghi trước thay đổi không có offset; đồng hồ nguồn vẫn là khoá thứ tự
+chính giữa các lượt.

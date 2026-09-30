@@ -113,6 +113,13 @@ def main():
     print(f"  Trigger: {trigger_interval}")
     print(f"  Starting Offsets: {starting_offsets}")
 
+    # Bảng Bronze CDC tạo trước 2026-09-30 chưa có cột toạ độ Kafka (ADR-0010).
+    from cdc_dlq import ensure_kafka_coordinate_columns
+
+    added = ensure_kafka_coordinate_columns(spark, target_table)
+    if added:
+        print(f"  Added Kafka coordinate columns to {target_table}: {added}")
+
     # Read from Kafka
     stream_df = (
         spark.readStream.format("kafka")

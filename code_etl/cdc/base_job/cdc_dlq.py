@@ -189,20 +189,19 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
         )
         .withColumn("__cdc_timestamp_ms", F.col("_raw_ts_ms").cast("long"))
         .withColumn("__cdc_timestamp", F.to_timestamp(F.col("__cdc_timestamp_ms") / 1000))
-        # Bronze CDC KHÔNG lưu toạ độ Kafka (ADR-0010): chỉ DLQ giữ chúng. Bản
-        # trước thêm source_topic / kafka_partition / kafka_offset / kafka_timestamp /
-        # raw_payload / payload_hash vào luồng hợp lệ trong khi cả hai DDL không có
-        # các cột đó — mọi batch có dữ liệu chết ở writeTo().append() với
-        # INSERT_COLUMN_ARITY_MISMATCH (đo trên stack 2026-09-27). Lưu offset vào
-        # Bronze là quyết định "nếu xem lại" của ADR-0010, cần schema evolution.
+        # Toạ độ Kafka (ADR-0010, sửa 2026-09-30): partition + offset là thứ tự tuyệt đối
+        # của các event cùng key (Debezium key = PK → cùng partition). __ts_ms thì không:
+        # INSERT và UPDATE trong một transaction ra cùng ms, cùng micro-batch, nên dedup
+        # chọn ngẫu nhiên (đo trên stack 2026-09-30). Chỉ hai cột này — mọi cột khác phải
+        # khớp DDL, lệch là INSERT_COLUMN_ARITY_MISMATCH (đo trên stack 2026-09-27).
+        .withColumnRenamed("_kafka_partition", "__kafka_partition")
+        .withColumnRenamed("_kafka_offset", "__kafka_offset")
         .drop(
             "_cdc_key",
             "_raw_op",
             "_raw_ts_ms",
             "_raw_deleted",
             "_kafka_topic",
-            "_kafka_partition",
-            "_kafka_offset",
             "_kafka_timestamp",
             "_raw_payload",
             "_is_valid",
@@ -230,6 +229,22 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
     )
 
     return valid_df, dlq_df
+
+
+KAFKA_COORDINATE_COLUMNS = {"__kafka_partition": "INT", "__kafka_offset": "BIGINT"}
+
+
+def ensure_kafka_coordinate_columns(spark, target_table: str) -> list[str]:
+    """
+    Thêm cột toạ độ Kafka vào bảng Bronze CDC tạo trước 2026-09-30 (schema evolution,
+    không ghi lại dữ liệu; dòng cũ mang NULL). Gọi một lần khi khởi động stream.
+    """
+    existing = set(spark.table(target_table).columns)
+    missing = [c for c in KAFKA_COORDINATE_COLUMNS if c not in existing]
+    if missing:
+        cols = ", ".join(f"{c} {KAFKA_COORDINATE_COLUMNS[c]}" for c in missing)
+        spark.sql(f"ALTER TABLE {target_table} ADD COLUMNS ({cols})")
+    return missing
 
 
 def write_valid_to_bronze(valid_df: DataFrame, target_table: str, batch_id: int):

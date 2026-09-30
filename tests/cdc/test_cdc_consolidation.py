@@ -150,6 +150,30 @@ class TestDeduplicateLatest:
         assert rows[2]["__cdc_operation"] == "DELETE"
         assert len(rows) == 2
 
+    def test_kafka_offset_breaks_a_tie_in_ms_and_batch(self, spark):
+        """INSERT + UPDATE trong một transaction: cùng __ts_ms, cùng micro-batch (đo trên
+        stack 2026-09-30, customer 990003). Không có offset, row_number chọn ngẫu nhiên."""
+        schema = (
+            "customer_id long, email string, __cdc_timestamp_ms long, __spark_batch_id long, "
+            "__cdc_operation string, __kafka_offset long"
+        )
+        for rows_in in (
+            [(1, "v1", 853, 3, "INSERT", 10), (1, "v2", 853, 3, "UPDATE", 11)],
+            [(1, "v2", 853, 3, "UPDATE", 11), (1, "v1", 853, 3, "INSERT", 10)],
+        ):
+            df = spark.createDataFrame(rows_in, schema).repartition(4)
+            (row,) = consolidation.deduplicate_latest(df, CUSTOMER_CFG).collect()
+            assert row["email"] == "v2"
+
+    def test_rows_from_before_offsets_sort_after(self, spark):
+        schema = (
+            "customer_id long, email string, __cdc_timestamp_ms long, __spark_batch_id long, "
+            "__cdc_operation string, __kafka_offset long"
+        )
+        df = spark.createDataFrame([(1, "old", 5, 1, "UPDATE", None), (1, "new", 5, 1, "UPDATE", 7)], schema)
+        (row,) = consolidation.deduplicate_latest(df, CUSTOMER_CFG).collect()
+        assert row["email"] == "new"
+
 
 # ---------------------------------------------------------------------------
 # plan_read — tiến độ theo snapshot
@@ -273,7 +297,40 @@ class TestDlqSplit:
         _, invalid = split
         assert sorted(r["kafka_offset"] for r in invalid) == [4, 5]
 
-    def test_valid_path_carries_no_kafka_columns(self, split):
-        """ADR-0010: Bronze CDC hợp lệ không có cột Kafka (DDL không có)."""
+    def test_valid_path_carries_only_partition_and_offset(self, split):
+        """ADR-0010 (2026-09-30): Bronze CDC giữ __kafka_partition/__kafka_offset làm khoá
+        thứ tự; mọi cột Kafka khác vẫn chỉ ở DLQ (DDL không có, lệch là ARITY_MISMATCH)."""
         valid, _ = split
-        assert not [c for c in valid[0].asDict() if c.startswith("_kafka") or c == "kafka_offset"]
+        kafka_cols = sorted(c for c in valid[0].asDict() if "kafka" in c)
+        assert kafka_cols == ["__kafka_offset", "__kafka_partition"]
+        assert sorted(r["__kafka_offset"] for r in valid) == [1, 2]
+
+
+class TestKafkaCoordinateColumns:
+    """Bảng Bronze CDC tạo trước 2026-09-30 được bổ sung cột khi stream khởi động."""
+
+    class FakeSpark:
+        def __init__(self, columns):
+            self.columns = columns
+            self.statements = []
+
+        def table(self, name):
+            return type("T", (), {"columns": self.columns})()
+
+        def sql(self, statement):
+            self.statements.append(statement)
+
+    def test_old_table_gets_both_columns(self):
+        spark = self.FakeSpark(["customer_id", "__ingestion_time"])
+        assert dlq.ensure_kafka_coordinate_columns(spark, "lakehouse.bronze.core_customer_cdc") == [
+            "__kafka_partition",
+            "__kafka_offset",
+        ]
+        assert spark.statements == [
+            "ALTER TABLE lakehouse.bronze.core_customer_cdc ADD COLUMNS (__kafka_partition INT, __kafka_offset BIGINT)"
+        ]
+
+    def test_current_table_is_left_alone(self):
+        spark = self.FakeSpark(["customer_id", "__kafka_partition", "__kafka_offset"])
+        assert dlq.ensure_kafka_coordinate_columns(spark, "t") == []
+        assert spark.statements == []

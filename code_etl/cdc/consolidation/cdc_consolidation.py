@@ -25,13 +25,14 @@ Hai khái niệm tách bạch:
         ts nhỏ hơn watermark bị bỏ qua vĩnh viễn; event append giữa MERGE và lúc
         tính max bị đẩy qua watermark mà chưa hề được MERGE.
 
-    THỨ TỰ (event nào mới hơn) = (__cdc_timestamp_ms, __spark_batch_id) — ADR-0010.
-        Dùng để dedup trong một lượt và để MERGE không ghi đè trạng thái mới hơn
-        bằng event cũ hơn (event đến muộn, replay).
+    THỨ TỰ (event nào mới hơn) = (__cdc_timestamp_ms, __spark_batch_id, __kafka_offset)
+        — ADR-0010. Dedup trong một lượt dùng cả ba (offset phân định event cùng ms,
+        cùng micro-batch, vd INSERT + UPDATE trong một transaction); guard MERGE giữa
+        các lượt dùng ts (s.ts >= t.ts).
 
 Limitations:
-    - Kafka offset không được lưu ở Bronze CDC hợp lệ (ADR-0010), nên thứ tự dựa
-      trên ts_ms của Debezium, không theo offset.
+    - Dòng Bronze CDC ghi trước 2026-09-30 không có offset (NULL): dedup giữa hai dòng
+      cũ cùng ms, cùng batch vẫn không tất định.
     - Key đã bị DELETE rồi nhận một event cũ hơn đến muộn sẽ được INSERT lại
       (bảng current không giữ tombstone).
 """
@@ -248,8 +249,14 @@ def deduplicate_latest(df: DataFrame, config: dict) -> DataFrame:
     ts_col = config["metadata"]["event_timestamp_ms_column"]
     batch_col = config["metadata"]["batch_id_column"]
 
-    # Window: order by timestamp DESC, batch_id DESC (deterministic)
-    window = Window.partitionBy(business_key).orderBy(F.col(ts_col).desc(), F.col(batch_col).desc())
+    # Window: timestamp DESC, batch_id DESC, rồi Kafka offset DESC (ADR-0010).
+    # Hai event cùng key có thể trùng cả ms lẫn micro-batch — INSERT + UPDATE trong
+    # một transaction (đo trên stack 2026-09-30). Cùng key → cùng partition Kafka, nên
+    # offset phân định dứt khoát. Dòng Bronze trước khi có cột mang NULL, xếp sau.
+    order = [F.col(ts_col).desc(), F.col(batch_col).desc()]
+    if "__kafka_offset" in df.columns:
+        order.append(F.col("__kafka_offset").desc_nulls_last())
+    window = Window.partitionBy(business_key).orderBy(*order)
 
     # Keep first row (= latest event)
     df_deduped = df.withColumn("__rn", F.row_number().over(window)).filter(F.col("__rn") == 1).drop("__rn")
