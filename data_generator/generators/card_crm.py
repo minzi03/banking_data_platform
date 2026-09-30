@@ -192,7 +192,7 @@ def generate_cards(count: int, config: dict, customer_ids: list[int],
 
 
 def generate_card_txn(count: int, config: dict, card_data: list[tuple],
-                      mcc_codes: list[str] | None = None) -> list[tuple]:
+                      mcc_codes: list[str] | None = None, start_id: int = 1) -> list[tuple]:
     """
     Generate card transaction data with merchant details.
 
@@ -224,7 +224,9 @@ def generate_card_txn(count: int, config: dict, card_data: list[tuple],
     statuses = list(status_dist.keys())
     s_weights = list(status_dist.values())
 
-    for i in range(1, count + 1):
+    # start_id: sinh theo khối (generate_all ở --scale lớn) mà txn_id / reference_number
+    # vẫn liên tục và duy nhất.
+    for i in range(start_id, start_id + count):
         card_id, cust_id = random.choice(active_cards) if active_cards else (1, 1)
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
         channel = random.choices(channels, weights=ch_weights)[0]

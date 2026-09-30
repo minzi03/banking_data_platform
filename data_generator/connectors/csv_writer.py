@@ -36,7 +36,8 @@ class CsvWriter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         logger.info("CSV output directory: %s", self.output_dir)
 
-    def write_rows(self, schema: str, table: str, columns: list[str], rows: list[tuple]):
+    def write_rows(self, schema: str, table: str, columns: list[str], rows: list[tuple],
+                   append: bool = False):
         """
         Write rows to CSV file.
 
@@ -45,6 +46,7 @@ class CsvWriter:
             table: Target table name
             columns: List of column names
             rows: List of tuples, one per row
+            append: add to an existing file without a header (chunked generation)
         """
         if not rows:
             logger.warning("No rows to write for %s.%s", schema, table)
@@ -58,11 +60,12 @@ class CsvWriter:
         total = len(rows)
 
         try:
-            with open(csv_file, "w", newline="", encoding="utf-8") as f:
+            with open(csv_file, "a" if append else "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
 
                 # Write header
-                writer.writerow(columns)
+                if not append:
+                    writer.writerow(columns)
 
                 # Write data rows
                 for row in rows:

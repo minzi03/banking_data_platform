@@ -136,7 +136,8 @@ def generate_locations(count: int, config: dict) -> list[tuple]:
 
 def generate_online_transactions(count: int, config: dict, customer_ids: list[int],
                                   device_ids: list[int], location_ids: list[int],
-                                  high_risk_location_ids: list[int] | None = None) -> list[tuple]:
+                                  high_risk_location_ids: list[int] | None = None,
+                                  start_id: int = 1) -> list[tuple]:
     """
     Generate online transaction data with seasonal patterns and enriched fraud.
 
@@ -180,7 +181,7 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
     # làm 25,5% dòng UNUSUAL_LOCATION mang amount đã bị đẩy lên. Cả hai làm
     # `GROUP BY fraud_reason` không còn kiểm chứng được gì.
 
-    for i in range(1, count + 1):
+    for i in range(start_id, start_id + count):  # start_id: sinh theo khối
         cust_id = random.choice(customer_ids)
         device_id = random.choice(device_ids) if device_ids else None
         location_id = random.choice(location_ids) if location_ids else None

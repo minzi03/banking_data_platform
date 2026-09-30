@@ -58,7 +58,8 @@ def rows() -> list[tuple]:
 
 def _columns_written_by_generate_all() -> list[str]:
     text = GENERATE_ALL.read_text(encoding="utf-8")
-    match = re.search(r'writer\.write_rows\("card_crm", "card_txn", \[(.*?)\]', text, re.S)
+    # write_rows(...) hoặc write_chunked(writer, csv_writer, ...) — cả hai nêu cột ngay sau tên bảng.
+    match = re.search(r'"card_crm", "card_txn", \[(.*?)\]', text, re.S)
     assert match, "không tìm thấy danh sách cột card_txn trong generate_all.py"
     return re.findall(r'"(\w+)"', match.group(1))
 

@@ -351,7 +351,8 @@ def generate_loans(count: int, config: dict, customer_ids: list[int],
 
 
 def generate_txn_account(count: int, config: dict, account_ids: list[int],
-                         customer_map: dict, account_balances: dict | None = None) -> list[tuple]:
+                         customer_map: dict, account_balances: dict | None = None,
+                         start_id: int = 1, running_balances: dict | None = None) -> list[tuple]:
     """
     Generate account transaction data with seasonal patterns and balance simulation.
 
@@ -361,6 +362,10 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
         account_ids: List of valid account IDs
         customer_map: {account_id: customer_id}
         account_balances: {account_id: initial_balance} for balance simulation
+        start_id: txn_id of the first row (chunked generation at large --scale)
+        running_balances: dict to use AND update as the balance state. Pass the same
+            dict to consecutive chunks so balance_after continues across chunks;
+            None keeps the old behaviour (a private copy of account_balances).
     """
     rows = []
     type_dist = config.get("type_distribution", {})
@@ -383,11 +388,10 @@ def generate_txn_account(count: int, config: dict, account_ids: list[int],
     dc_weights = list(dc_dist.values())
 
     # Balance simulation: track running balance per account
-    running_balances = {}
-    if account_balances:
-        running_balances = dict(account_balances)
+    if running_balances is None:
+        running_balances = dict(account_balances) if account_balances else {}
 
-    for i in range(1, count + 1):
+    for i in range(start_id, start_id + count):
         acct_id = random.choice(account_ids)
         cust_id = customer_map.get(acct_id, 1)
         txn_type = random.choices(txn_types, weights=txn_weights)[0]
@@ -521,7 +525,7 @@ def days_late_for(bucket: int, months_in_90_plus: int) -> int:
     return min(90 + 30 * (months_in_90_plus - 1) + random.randint(0, 29), 32_767)  # SMALLINT
 
 
-def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
+def generate_loan_payments(loan_data: list[tuple], config: dict, start_payment_id: int = 1) -> list[tuple]:
     """
     Generate loan payment (amortization) schedule for active/closed loans.
 
@@ -535,10 +539,11 @@ def generate_loan_payments(loan_data: list[tuple], config: dict) -> list[tuple]:
     Args:
         loan_data: list of loan tuples from generate_loans()
         config: loan_payment config dict
+        start_payment_id: payment_id of the first row (chunked by loans at large --scale)
     """
     rates = config.get("roll_rates", DEFAULT_ROLL_RATES)
     rows = []
-    payment_id = 1
+    payment_id = start_payment_id
 
     payment_methods = ["BANK_TRANSFER", "CASH", "CHEQUE", "DEBIT_CARD", "MOBILE_APP"]
     method_weights = [0.40, 0.10, 0.05, 0.15, 0.30]

@@ -59,6 +59,21 @@ def load_config(config_path: str) -> dict:
         return yaml.safe_load(f)
 
 
+# Bảng lớn được sinh và ghi theo khối: RAM tỉ lệ với kích thước khối, không với --scale.
+# Đo 2026-09-30: ~384 byte/dòng giao dịch; ở --scale 10 giữ cả bốn bảng lớn trong RAM
+# là ~14 GB (máy dev còn ~7 GB trống, container airflow-scheduler giới hạn 1,3 GB).
+CHUNK_ROWS = 500_000
+
+
+def write_chunked(writer, csv_writer, schema: str, table: str, columns: list[str], total: int, make_chunk):
+    """Ghi `total` dòng theo khối; make_chunk(start_id, count) trả về list tuple."""
+    for start in range(1, total + 1, CHUNK_ROWS):
+        rows = make_chunk(start, min(CHUNK_ROWS, total - start + 1))
+        writer.write_rows(schema, table, columns, rows)
+        if csv_writer:
+            csv_writer.write_rows(schema, table, columns, rows, append=start > 1)
+
+
 def apply_scale(config: dict, scale: float) -> dict:
     """Apply a scale factor to all table row_counts.
 
@@ -268,20 +283,27 @@ def main():
 
         # 7. Loan Payment (amortization schedule)
         logger.info("[7/10] Generating loan payments...")
-        loan_payments = generate_loan_payments(loans, cb_cfg.get("loan_payment", {}))
-        writer.write_rows("core_banking", "loan_payment", [
-            "payment_id", "loan_id", "payment_date", "scheduled_amount",
-            "amount_paid", "principal_component", "interest_component",
-            "penalty", "outstanding_after", "days_late",
-            "payment_method", "payment_status", "late_payment_flag", "last_updated"
-        ], loan_payments)
-        if csv_writer:
-            csv_writer.write_rows("core_banking", "loan_payment", [
+        # Theo khối khoản vay (~30 kỳ mỗi khoản): lịch trả của một khoản không bị cắt đôi.
+        loans_per_chunk = max(1, CHUNK_ROWS // 30)
+        next_payment_id = 1
+        for k in range(0, len(loans), loans_per_chunk):
+            loan_payments = generate_loan_payments(
+                loans[k:k + loans_per_chunk], cb_cfg.get("loan_payment", {}), start_payment_id=next_payment_id
+            )
+            next_payment_id += len(loan_payments)
+            writer.write_rows("core_banking", "loan_payment", [
                 "payment_id", "loan_id", "payment_date", "scheduled_amount",
                 "amount_paid", "principal_component", "interest_component",
                 "penalty", "outstanding_after", "days_late",
                 "payment_method", "payment_status", "late_payment_flag", "last_updated"
             ], loan_payments)
+            if csv_writer:
+                csv_writer.write_rows("core_banking", "loan_payment", [
+                    "payment_id", "loan_id", "payment_date", "scheduled_amount",
+                    "amount_paid", "principal_component", "interest_component",
+                    "penalty", "outstanding_after", "days_late",
+                    "payment_method", "payment_status", "late_payment_flag", "last_updated"
+                ], loan_payments, append=k > 0)
 
         # 8. Standing Order
         logger.info("[8/10] Generating standing orders...")
@@ -305,21 +327,20 @@ def main():
 
         # 9. TXN Account (largest table — uses balance simulation)
         logger.info("[9/10] Generating account transactions (this may take a while)...")
-        txns = generate_txn_account(
-            cb_cfg["txn_account"]["row_count"], cb_cfg["txn_account"],
-            account_ids, account_customer_map, account_balances
-        )
-        writer.write_rows("core_banking", "txn_account", [
-            "txn_id", "account_id", "customer_id", "txn_date", "txn_amount",
-            "txn_type", "debit_credit", "balance_after", "channel",
-            "description", "counter_account", "created_ts", "last_updated"
-        ], txns)
-        if csv_writer:
-            csv_writer.write_rows("core_banking", "txn_account", [
+        # Một dict số dư dùng chung cho mọi khối: balance_after nối tiếp qua các khối.
+        balances = dict(account_balances)
+        write_chunked(
+            writer, csv_writer, "core_banking", "txn_account", [
                 "txn_id", "account_id", "customer_id", "txn_date", "txn_amount",
                 "txn_type", "debit_credit", "balance_after", "channel",
                 "description", "counter_account", "created_ts", "last_updated"
-            ], txns)
+            ],
+            cb_cfg["txn_account"]["row_count"],
+            lambda start, n: generate_txn_account(
+                n, cb_cfg["txn_account"], account_ids, account_customer_map, account_balances,
+                start_id=start, running_balances=balances,
+            ),
+        )
 
         # 10. Employee
         logger.info("[10/10] Generating employees...")
@@ -373,23 +394,16 @@ def main():
 
         # Card TXN
         logger.info("  Generating card transactions...")
-        card_txns = generate_card_txn(
-            cc_cfg["card_txn"]["row_count"], cc_cfg["card_txn"],
-            card_data, mcc_code_list
-        )
-        writer.write_rows("card_crm", "card_txn", [
-            "txn_id", "card_id", "customer_id", "txn_date", "txn_amount",
-            "txn_type", "currency", "merchant_name", "merchant_category",
-            "mcc_code", "channel", "status", "entry_mode", "decline_reason", "processing_time_ms",
-            "reference_number", "created_ts", "last_updated"
-        ], card_txns)
-        if csv_writer:
-            csv_writer.write_rows("card_crm", "card_txn", [
+        write_chunked(
+            writer, csv_writer, "card_crm", "card_txn", [
                 "txn_id", "card_id", "customer_id", "txn_date", "txn_amount",
                 "txn_type", "currency", "merchant_name", "merchant_category",
                 "mcc_code", "channel", "status", "entry_mode", "decline_reason", "processing_time_ms",
                 "reference_number", "created_ts", "last_updated"
-            ], card_txns)
+            ],
+            cc_cfg["card_txn"]["row_count"],
+            lambda start, n: generate_card_txn(n, cc_cfg["card_txn"], card_data, mcc_code_list, start_id=start),
+        )
 
         # CRM Interaction
         logger.info("  Generating CRM interactions...")
@@ -444,23 +458,19 @@ def main():
 
         # Online Transaction
         logger.info("  Generating online transactions (this may take a while)...")
-        online_txns = generate_online_transactions(
-            db_cfg["online_transaction"]["row_count"], db_cfg["online_transaction"],
-            customer_ids, device_ids, location_ids, high_risk_location_ids
-        )
-        writer.write_rows("digital_banking", "online_transaction", [
-            "transaction_id", "account_id", "device_id", "location_id",
-            "customer_id", "transaction_type", "channel", "amount", "currency",
-            "is_fraud", "fraud_reason", "status", "transaction_date",
-            "created_ts", "last_updated"
-        ], online_txns)
-        if csv_writer:
-            csv_writer.write_rows("digital_banking", "online_transaction", [
+        write_chunked(
+            writer, csv_writer, "digital_banking", "online_transaction", [
                 "transaction_id", "account_id", "device_id", "location_id",
                 "customer_id", "transaction_type", "channel", "amount", "currency",
                 "is_fraud", "fraud_reason", "status", "transaction_date",
                 "created_ts", "last_updated"
-            ], online_txns)
+            ],
+            db_cfg["online_transaction"]["row_count"],
+            lambda start, n: generate_online_transactions(
+                n, db_cfg["online_transaction"], customer_ids, device_ids, location_ids,
+                high_risk_location_ids, start_id=start,
+            ),
+        )
 
         # Support Ticket
         logger.info("  Generating support tickets...")
