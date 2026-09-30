@@ -3,13 +3,15 @@
 Tài liệu này là **nguồn demo duy nhất** của repo. `demo/DEMO_SCRIPT.md` và
 `docs/01-getting-started/demo.md` chỉ còn trỏ về đây.
 
-> **Trạng thái kiểm chứng (2026-09-30).** Các lệnh và kết quả mong đợi dưới đây
-> được viết từ code/config hiện tại. Đã kiểm chứng **không cần stack**: 1.876 unit
-> test, 133 Spark regression test (PySpark 3.5.3 thật), import 21 DAG bằng
-> Airflow 2.10.0 thật, render `cob_dt` của mọi DAG, `dbt parse` (17 model /
-> 137 test), `docker compose config` (29 service). **Chưa chạy trên stack Docker
-> đầy đủ** trong đợt sửa này. Các bước có đánh dấu ⚠️ phụ thuộc thay đổi mới
-> chưa được chạy runtime; lần demo đầu tiên chính là lần kiểm chứng đó.
+> **Trạng thái kiểm chứng (2026-09-30).** Đã chạy trên stack Docker local theo
+> **đường nâng cấp** (stack có sẵn dữ liệu, `cob_dt` 2026-09-22 và 2026-09-23):
+> image Airflow mới, `bronze-partition-migrate`, chuỗi Bronze → Silver → Gold → dbt
+> qua Airflow, SCD2 ngày thứ hai, CDC (insert / update / delete / cùng transaction /
+> DLQ / replay / restart), API trên Trino, contract / DQ / drift / PII / quarantine /
+> maintenance, `dbt build` PASS=154, `mf`. Kết quả đo được ghi ngay ở từng bước.
+> Không cần stack: unit test, Spark regression trong image worker (PySpark 3.5.3).
+> **Dựng từ đầu (clean start)** do job CI *Trino Integration* kiểm trên stack mới;
+> `down -v` trên máy local không chạy vì xoá dữ liệu. Chỗ còn ⚠️ là chưa chạy.
 
 Mỗi bước gồm: **What** (thành phần / hành vi được cho xem) · **Why** (ý nghĩa
 kiến trúc) · **Command** (lệnh cần chạy) · **Expected** (kết quả mong đợi) ·
@@ -151,7 +153,7 @@ PQ "SELECT job_name, status, cob_dt FROM opslakehouse.flag_job_etl
 Có dòng `S` cho 3 Bronze, `silver_all_dag`, `gold_all_dag`, `GOLD_COMPLETE`, `SERVING_COMPLETE`.
 
 **Talking points.**
-- ⚠️ `cob_dt` = ngày ICT của `data_interval_start`, hoặc `dag_run.conf["cob_dt"]`. Bản cũ dùng `{{ ds }}` (ngày UTC): DAG chạy trước 07:00 nhận D-2, DAG chạy sau nhận D-1, nên dbt chờ cờ Gold của một ngày chưa chạy. Đã render bằng Airflow 2.10.0 thật: 13/13 DAG có lịch hằng ngày cùng ra một ngày.
+- `cob_dt` = ngày ICT của `data_interval_start`, hoặc `dag_run.conf["cob_dt"]` (đường `conf` đã chạy trên stack; lượt theo lịch mới quan sát khi unpause, xem lưu ý trên). Bản cũ dùng `{{ ds }}` (ngày UTC): DAG chạy trước 07:00 nhận D-2, DAG chạy sau nhận D-1, nên dbt chờ cờ Gold của một ngày chưa chạy. Đã render bằng Airflow 2.10.0 thật: 13/13 DAG có lịch hằng ngày cùng ra một ngày.
 - Chạy không cần Airflow (một cob_dt): `make bronze-bootstrap COB_DT=$COB`, rồi hai lệnh `--in-process` trong RUNBOOK §3.
 
 ---
@@ -174,7 +176,7 @@ TQ "SELECT COUNT(*) rows_, COUNT(DISTINCT customer_id) keys_ FROM bronze.core_cu
 **Verify.** `core_branch$partitions` có cột `partition` chứa `cob_dt`.
 
 **Talking points.**
-- ⚠️ 18/22 bảng Bronze từng không partition: mỗi lần nạp xoá snapshot cũ, nên lịch sử product/branch mất hẳn. DDL đã sửa; stack cũ chạy `make bronze-partition-migrate` một lần (partition evolution + rewrite, không mất dữ liệu).
+- 18/22 bảng Bronze từng không partition: mỗi lần nạp xoá snapshot cũ, nên lịch sử product/branch mất hẳn. DDL đã sửa; stack cũ chạy `make bronze-partition-migrate` một lần (partition evolution + rewrite). Đo 2026-09-30: 13 bảng được migrate, số dòng trước/sau giống hệt trên 23 bảng, chạy lại báo `ok` cả 22.
 - `write_to_iceberg()` từ chối ghi snapshot vào bảng chưa partition theo `cob_dt` (fail-loud, không âm thầm xoá lịch sử).
 
 ---
@@ -216,10 +218,11 @@ PQ "UPDATE core_banking.customer SET customer_segment = 'VIP', last_updated = NO
 for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag silver_all_dag; do TRIG $d $COB2; done
 ```
 
-**Expected.** ⚠️
-- customer 1 (đổi `customer_segment` — tracked): 2 version. Version cũ `effective_to = $COB`, `is_current = 0`; version mới `effective_from = $COB2`.
+**Expected.** (đo 2026-09-30, `$COB`=2026-09-22, `$COB2`=2026-09-23)
+- customer 1 (đổi `customer_segment` — tracked): thêm 1 version. Version cũ `effective_to = $COB`, `is_current = 0`; version mới `effective_from = $COB2`.
 - branch nhỏ nhất (đổi `manager_name`): 2 version, như trên.
-- customer 2 (đổi `full_name` — cột Type 1): vẫn 1 version, `full_name` đã cập nhật tại chỗ.
+- customer 2 (đổi `full_name` — cột Type 1): không thêm version; `full_name` cập nhật tại chỗ trên version **hiện hành** (version lịch sử giữ giá trị cũ).
+- Không key nào có hai dòng `is_current = 1`. Gold chạy `$COB` thấy segment cũ, chạy `$COB2` thấy segment mới (join dim **as-of** `cob_dt`).
 
 **Verify.**
 ```bash
@@ -252,10 +255,10 @@ TQ "SELECT rfm_segment, COUNT(*) n, ROUND(AVG(recency_days),1) avg_recency, ROUN
 TQ "SELECT campaign_type, COUNT(*) FROM gold.campaign_target WHERE cob_dt = DATE '$COB' GROUP BY 1"
 ```
 
-**Expected.** `rows_ = customers` = 10.000. ⚠️ Champions có recency **thấp nhất**, frequency và monetary **cao nhất**; Hibernating ngược lại.
+**Expected.** `rows_ = customers` = 10.000. Champions có recency **thấp nhất**, frequency và monetary **cao nhất**; Hibernating ngược lại. Đo 2026-09-22: Champions 1.703 khách, recency 0,4 ngày, 67,9 giao dịch, 683 triệu; Hibernating 831 khách, 5,6 giao dịch.
 
 **Talking points.**
-- ⚠️ Chiều điểm RFM từng bị đảo (kế thừa từ template khoá học): `NTILE` gán 1 cho khách tốt nhất, nên "Champions" là khách tệ nhất và campaign Upsell nhắm sai người. Test `tests/gold/test_rfm_scoring_direction.py` fail trên SQL cũ và pass trên SQL mới.
+- Chiều điểm RFM từng bị đảo (kế thừa từ template khoá học): `NTILE` gán 1 cho khách tốt nhất, nên "Champions" là khách tệ nhất và campaign Upsell nhắm sai người. Test `tests/gold/test_rfm_scoring_direction.py` fail trên SQL cũ và pass trên SQL mới.
 - Guard fail-loud trước khi ghi: thiếu snapshot nguồn thì dừng thay vì ghi số 0.
 
 ---
@@ -372,7 +375,7 @@ curl -s "localhost:8000/customer/1/risk-score?cob_dt=$COB" | python -m json.tool
 curl -s -o /dev/null -w "%{http_code}\n" "localhost:8000/customer/1/overview?cob_dt=2026-09-29'%20OR%20'1'='1"
 ```
 
-**Expected.** Overview/risk trả JSON; request injection trả **422**. ⚠️ Chưa chạy trên stack.
+**Expected.** Overview/risk/recommendations trả JSON; request injection và ngày sai trả **422**; khách không tồn tại trả **404** (đã chạy trên Trino 2026-09-30). `recommended_products` không lặp và không có "None".
 
 **Talking points.**
 - `cob_dt` là tham số truy vấn có kiểu `date`, không nối vào SQL; hai endpoint join có cột `cob_dt` được qualify.
