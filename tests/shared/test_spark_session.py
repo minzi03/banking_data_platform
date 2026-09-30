@@ -208,6 +208,16 @@ class TestPartitionGuard:
         assert _iceberg_mod.partition_fields(df.sparkSession, "lakehouse.bronze.core_branch") == ["cob_dt"]
         df.sparkSession.table.assert_called_with("lakehouse.bronze.core_branch.partitions")
 
+    def test_table_is_refreshed_before_reading_partitions(self):
+        """Không REFRESH, `.partitions` trả về metadata cache cũ: ngay sau ALTER … ADD
+        PARTITION FIELD vẫn báo không partition (migration Bronze fail hậu kiểm, 2026-09-30)."""
+        df = _df_on_table(["cob_dt"])
+        session = df.sparkSession
+        _iceberg_mod.partition_fields(session, "lakehouse.bronze.core_branch")
+        calls = [c[0] for c in session.mock_calls if c[0] in ("sql", "table")]
+        assert calls[:2] == ["sql", "table"]
+        session.sql.assert_called_once_with("REFRESH TABLE lakehouse.bronze.core_branch")
+
     def test_unpartitioned_table_has_no_partition_fields(self):
         df = _df_on_table(None)
         assert _iceberg_mod.partition_fields(df.sparkSession, "t") == []

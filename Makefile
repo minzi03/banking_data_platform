@@ -6,6 +6,9 @@
 .PHONY: help env-check secrets up down restart logs status clean seed superset superset-init
 
 COMPOSE_FILE := docker/docker-compose.yml
+# Image Spark không đưa /opt/spark/bin vào PATH: `docker exec … spark-submit` trần
+# báo "executable file not found" (đo 2026-09-30). DAG cũng dùng đường dẫn đầy đủ.
+SPARK_SUBMIT := /opt/spark/bin/spark-submit
 DC := docker compose -f $(COMPOSE_FILE)
 
 # Default target
@@ -233,7 +236,7 @@ clean-images:
 # Spark submit (convenience)
 # ---------------------------------------------------------------------------
 spark-submit:
-	$(DC) exec spark-worker-1 spark-submit \
+	$(DC) exec spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		--conf spark.driver.memory=512m \
@@ -253,7 +256,7 @@ bronze-init:
 bronze-bootstrap:
 	@echo "Running Bronze bootstrap (full load from PostgreSQL)..."
 	# Credential từ môi trường CỦA spark-worker-1 ($$ → $ trong container), không từ Makefile.
-	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 sh -c '$(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/bronze/bootstrap/initial_load.py \
@@ -267,7 +270,7 @@ bronze-bootstrap:
 # Bronze job từ chối ghi vào bảng chưa migrate (xem spark/iceberg_utils.py).
 bronze-partition-migrate:
 	@echo "Partitioning existing Bronze tables by cob_dt..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/bronze/bootstrap/partition_bronze_by_cob_dt.py
@@ -275,7 +278,7 @@ bronze-partition-migrate:
 
 bronze-ingest:
 	@echo "Running Bronze incremental ingestion..."
-	$(DC) exec -w /opt/project spark-worker-1 sh -c 'spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 sh -c '$(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/bronze/base_job/ingestion_jdbc.py \
@@ -298,7 +301,7 @@ silver-init:
 
 silver-bootstrap:
 	@echo "Running Silver bootstrap (all dims + facts)..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/silver/bootstrap/initial_load.py \
@@ -307,7 +310,7 @@ silver-bootstrap:
 
 silver-scd1:
 	@echo "Running Silver SCD Type 1 job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type1 \
@@ -317,7 +320,7 @@ silver-scd1:
 
 silver-scd2:
 	@echo "Running Silver SCD Type 2 job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.scd_type2 \
@@ -327,7 +330,7 @@ silver-scd2:
 
 silver-fact:
 	@echo "Running Silver Fact job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.silver.base_job.fact_txn \
@@ -347,7 +350,7 @@ gold-init:
 
 gold-bootstrap:
 	@echo "Running Gold bootstrap (all marts + segments)..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		code_etl/gold/bootstrap/initial_load.py \
@@ -356,7 +359,7 @@ gold-bootstrap:
 
 gold-job:
 	@echo "Running Gold job..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		-m code_etl.gold.base_job.gold_job \
@@ -369,7 +372,7 @@ gold-job:
 # ---------------------------------------------------------------------------
 validate-pipeline:
 	@echo "Validating Bronze/Silver/Gold counts and grain..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/scripts/validate_pipeline.py \
@@ -377,7 +380,7 @@ validate-pipeline:
 
 serving-bootstrap:
 	@echo "Publishing current serving snapshots..."
-	$(DC) exec -w /opt/project spark-worker-1 spark-submit \
+	$(DC) exec -w /opt/project spark-worker-1 $(SPARK_SUBMIT) \
 		--master spark://spark-master:7077 \
 		--deploy-mode client \
 		/opt/project/code_etl/serving/bootstrap/run_serving.py \

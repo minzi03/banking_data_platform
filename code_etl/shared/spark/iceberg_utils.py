@@ -65,7 +65,12 @@ def partition_fields(spark, table_name: str) -> list[str]:
 
     Bảng không partition thì metadata table này không có cột `partition` (tài liệu
     Iceberg), nên đây là cách phân biệt không phụ thuộc định dạng output của DESCRIBE.
+
+    REFRESH trước: catalog cache giữ metadata table cũ, nên ngay sau ALTER … ADD
+    PARTITION FIELD trong cùng session `.partitions` vẫn báo không partition
+    (đo trên Iceberg 1.6.0, 2026-09-30 — migration Bronze fail hậu kiểm vì vậy).
     """
+    spark.sql(f"REFRESH TABLE {table_name}")
     schema = spark.table(f"{table_name}.partitions").schema
     if "partition" not in schema.fieldNames():
         return []
