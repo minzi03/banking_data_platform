@@ -138,6 +138,8 @@ for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag 
 ```
 Silver chờ đủ 3 cờ Bronze, Gold chờ Silver, dbt chờ `GOLD_COMPLETE` — trigger cùng lúc là đúng.
 
+> **Lưu ý khi unpause.** Unpause một DAG có lịch tạo **ngay** một lượt chạy theo lịch cho khoảng gần nhất, tức `cob_dt` = hôm qua. Nếu `$COB` cũng là hôm qua, DAG có hai lượt cho cùng ngày; `max_active_runs=1` cho Bronze/Silver/Gold nên hai lượt chạy nối tiếp, kết quả như nhau (idempotent) nhưng tốn gấp đôi thời gian. Với các DAG ops (DQ, contract, PII, drift), lượt theo lịch của một ngày chưa có dữ liệu sẽ chờ cờ tới hết timeout. Muốn tránh: `AF dags list-runs -d <dag>` sau khi unpause và đánh dấu lượt `scheduled__…` là failed trên UI.
+
 **Expected.** Cả 6 DAG `success`. Ước lượng trên máy 16 GB: Bronze ~10 phút, Silver ~5 phút, Gold ~6 phút, dbt ~2 phút.
 
 **Verify.**

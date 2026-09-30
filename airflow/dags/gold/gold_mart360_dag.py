@@ -84,6 +84,9 @@ dag = DAG(
     description="Gold layer — 6 mart360 + 4 segmentation + 1 time_analytics + 4 risk",
     schedule_interval="0 6 * * *",  # Daily at 6:00 AM (Production)
     catchup=False,
+    # Một lượt mỗi lúc: hai lượt cùng cob_dt (unpause tạo lượt theo lịch + trigger tay)
+    # cùng overwritePartitions / MERGE SCD2 một bảng (đo 2026-09-30).
+    max_active_runs=1,
     max_active_tasks=1,
     tags=["gold", "all", "production"],
 )

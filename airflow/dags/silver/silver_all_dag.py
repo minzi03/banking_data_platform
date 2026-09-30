@@ -87,6 +87,9 @@ dag = DAG(
     description="Silver layer — 10 dims + 6 facts",
     schedule_interval="0 4 * * *",  # Daily at 4:00 AM (Production)
     catchup=False,
+    # Một lượt mỗi lúc: hai lượt cùng cob_dt (unpause tạo lượt theo lịch + trigger tay)
+    # cùng overwritePartitions / MERGE SCD2 một bảng (đo 2026-09-30).
+    max_active_runs=1,
     max_active_tasks=1,
     tags=["silver", "all", "production"],
 )

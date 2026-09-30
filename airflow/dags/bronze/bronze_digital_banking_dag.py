@@ -38,6 +38,9 @@ dag = DAG(
     description="Bronze ingestion — digital_banking (PostgreSQL)",
     schedule_interval="0 2 * * *",  # Daily at 2:00 AM (Production)
     catchup=False,
+    # Một lượt mỗi lúc: hai lượt cùng cob_dt (unpause tạo lượt theo lịch + trigger tay)
+    # cùng overwritePartitions / MERGE SCD2 một bảng (đo 2026-09-30).
+    max_active_runs=1,
     max_active_tasks=1,
     tags=["bronze", "digital_banking", "postgresql", "production"],
 )

@@ -343,3 +343,23 @@ class TestCdcStreamingFitsTheWorker:
         assert used < worker_cores, (
             f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker"
         )
+
+
+BATCH_DAGS = [
+    "bronze/bronze_card_crm_dag.py",
+    "bronze/bronze_core_banking_dag.py",
+    "bronze/bronze_digital_banking_dag.py",
+    "silver/silver_all_dag.py",
+    "gold/gold_mart360_dag.py",
+]
+
+
+@pytest.mark.parametrize("relative", BATCH_DAGS)
+def test_batch_dag_runs_one_at_a_time(relative):
+    """
+    Unpause một DAG có lịch tạo ngay lượt chạy cho khoảng gần nhất; DEMO_GUIDE trigger
+    thêm lượt tay cho cùng cob_dt. Không giới hạn (mặc định 16), hai lượt cùng ghi đè một
+    partition và cùng MERGE SCD2 một bảng dim (đo trên stack 2026-09-30).
+    """
+    text = (DAGS_DIR / relative).read_text(encoding="utf-8")
+    assert re.search(r"^\s*max_active_runs=1,", text, re.M), f"{relative} thiếu max_active_runs=1"
