@@ -1,0 +1,97 @@
+{
+ "bronze_core_banking_dag": {
+  "run_id": "manual__2026-09-30T12:42:30+00:00",
+  "work_wall_s": 319.3,
+  "tasks": {
+   "ingest_all.ingest_core_account": 15.4,
+   "ingest_all.ingest_core_aml_alert": 14.4,
+   "ingest_all.ingest_core_aml_customer_risk": 15.8,
+   "ingest_all.ingest_core_aml_rule": 13.8,
+   "ingest_all.ingest_core_branch": 13.2,
+   "ingest_all.ingest_core_customer": 15.5,
+   "ingest_all.ingest_core_deposit": 16.5,
+   "ingest_all.ingest_core_employee": 19.7,
+   "ingest_all.ingest_core_loan": 23.1,
+   "ingest_all.ingest_core_loan_payment": 27.8,
+   "ingest_all.ingest_core_product": 20.7,
+   "ingest_all.ingest_core_standing_order": 25.0,
+   "ingest_all.ingest_core_txn_account": 86.6
+  }
+ },
+ "bronze_card_crm_dag": {
+  "run_id": "manual__2026-09-30T12:42:36+00:00",
+  "work_wall_s": 153.2,
+  "tasks": {
+   "ingest_all.ingest_core_card": 24.4,
+   "ingest_all.ingest_core_card_txn": 80.8,
+   "ingest_all.ingest_core_crm_interaction": 46.5
+  }
+ },
+ "bronze_digital_banking_dag": {
+  "run_id": "manual__2026-09-30T12:42:44+00:00",
+  "work_wall_s": 204.9,
+  "tasks": {
+   "ingest_all.ingest_core_device": 29.4,
+   "ingest_all.ingest_core_location": 15.8,
+   "ingest_all.ingest_core_mcc_code": 23.0,
+   "ingest_all.ingest_core_merchant": 20.1,
+   "ingest_all.ingest_core_online_transaction": 49.9,
+   "ingest_all.ingest_core_support_ticket": 61.4
+  }
+ },
+ "silver_all_dag": {
+  "run_id": "manual__2026-09-30T12:42:52+00:00",
+  "work_wall_s": 421.2,
+  "tasks": {
+   "dims.run_dim_account": 29.3,
+   "dims.run_dim_branch": 24.3,
+   "dims.run_dim_card": 22.7,
+   "dims.run_dim_customer": 26.8,
+   "dims.run_dim_deposit": 22.0,
+   "dims.run_dim_device": 22.9,
+   "dims.run_dim_employee": 17.0,
+   "dims.run_dim_loan": 21.9,
+   "dims.run_dim_location": 20.0,
+   "dims.run_dim_product": 24.9,
+   "facts.run_fact_card_txn": 39.5,
+   "facts.run_fact_crm_interaction": 17.6,
+   "facts.run_fact_loan_payment": 19.9,
+   "facts.run_fact_online_transaction": 33.5,
+   "facts.run_fact_support_ticket": 19.0,
+   "facts.run_fact_txn_account": 49.1
+  }
+ },
+ "gold_all_dag": {
+  "run_id": "manual__2026-09-30T12:43:05+00:00",
+  "work_wall_s": 833.9,
+  "tasks": {
+   "gold_complete": 0.2,
+   "phase1_independent.run_aml_monitoring": 173.0,
+   "phase1_independent.run_branch_monthly_summary": 66.9,
+   "phase1_independent.run_churn_prediction": 52.3,
+   "phase1_independent.run_cross_sell_segment": 33.3,
+   "phase1_independent.run_customer_balance_summary": 26.6,
+   "phase1_independent.run_customer_card_summary": 31.5,
+   "phase1_independent.run_customer_loan_summary": 40.4,
+   "phase1_independent.run_customer_product_summary": 34.9,
+   "phase1_independent.run_customer_transaction_summary": 33.8,
+   "phase1_independent.run_fraud_risk_txn": 118.4,
+   "phase1_independent.run_loan_delinquency": 29.5,
+   "phase1_independent.run_loan_portfolio_risk": 33.1,
+   "phase1_independent.run_mart_customer_360": 74.8,
+   "phase1_independent.run_rfm_segment": 42.0,
+   "phase2_dependent.run_campaign_target": 30.9
+  }
+ },
+ "dbt_serving_publish": {
+  "run_id": "manual__2026-09-30T12:43:15+00:00",
+  "work_wall_s": 106.5,
+  "tasks": {
+   "dbt_build_serving": 49.8,
+   "dbt_deps": 23.5,
+   "dbt_docs_generate": 11.3,
+   "serving_complete": 0.2,
+   "validate_gold_sources": 18.3
+  }
+ }
+}
