@@ -10,15 +10,17 @@ Luồng thực thi:
 """
 
 from datetime import timedelta
+from pathlib import Path
 
 import pendulum
+import yaml
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 from airflow.utils.task_group import TaskGroup
 
 from etl_flag import make_start_flag_task, make_end_flag_task, upstream_success_sql
-from cob_dt import COB_DT
+from cob_dt import BACKFILL_FROM_ARG, COB_DT
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 DAG_ID           = "silver_all_dag"
@@ -26,6 +28,8 @@ DATA_COB_DT      = COB_DT  # xem airflow/plugins/cob_dt.py
 POSTGRES_CONN_ID = "postgres-etl"
 SILVER_BASE      = "/opt/project/code_etl/silver"
 SILVER_BASE_JOB  = f"{SILVER_BASE}/base_job"
+# Đọc config lúc parse theo đường dẫn repo (trong container cũng là /opt/project).
+LOCAL_SILVER     = Path(__file__).resolve().parents[3] / "code_etl" / "silver"
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -136,6 +140,10 @@ with TaskGroup("facts", dag=dag) as facts_group:
             f"--conf spark.executor.cores=1 "
             f"{app} --config {cfg} --cob_dt {DATA_COB_DT}"
         )
+        # ADR-0018: fact incremental nhận conf backfill_from ở lần nạp đầu.
+        local = yaml.safe_load((LOCAL_SILVER / config_file).read_text(encoding="utf-8"))
+        if (local.get("job") or {}).get("incremental"):
+            cmd += f" {BACKFILL_FROM_ARG}"
         BashOperator(
             task_id=f"run_{table_name}",
             bash_command=cmd,

@@ -25,6 +25,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
+import yaml  # noqa: E402
+from utils.business_window import BOOTSTRAP_FROM  # noqa: E402
 from utils.logger import get_logger
 
 # Thứ tự chạy Silver jobs (dependency-ordered)
@@ -153,13 +155,27 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def is_incremental(job_def: dict) -> bool:
+    """Fact có job.incremental (ADR-0018): bootstrap ghi mọi partition ngày nghiệp vụ."""
+    config = yaml.safe_load(Path(job_def["config"]).read_text(encoding="utf-8"))
+    return bool((config.get("job") or {}).get("incremental"))
+
+
 def run_silver_job_in_process(job_def: dict, cob_dt: str, spark, logger) -> bool:
     """Chạy một job Silver trên session con của app hiện tại (--in-process)."""
     from spark.in_process import load_job_module, run_job_in_process
 
     logger.info(f"Running: {job_def['name']} ({job_def['type']}, in-process)")
     module = load_job_module(BASE_JOB_DIR / f"{job_def['type']}.py")
-    ok = run_job_in_process(spark, module, IN_PROCESS_RUNNER[job_def["type"]], job_def["config"], cob_dt, logger)
+    ok = run_job_in_process(
+        spark,
+        module,
+        IN_PROCESS_RUNNER[job_def["type"]],
+        job_def["config"],
+        cob_dt,
+        logger,
+        runner_kwargs={"backfill_from": BOOTSTRAP_FROM} if is_incremental(job_def) else None,
+    )
     if ok:
         logger.info(f"  ✓ {job_def['name']} completed successfully")
     return ok
@@ -188,6 +204,8 @@ def run_silver_job(job_def: dict, cob_dt: str, spark_submit: str, logger) -> boo
         "--cob_dt",
         cob_dt,
     ]
+    if is_incremental(job_def):
+        cmd += ["--backfill_from", BOOTSTRAP_FROM]
 
     logger.info(f"Running: {name} ({job_type})")
     logger.info(f"  Config: {config_path}")

@@ -34,7 +34,7 @@ def validate_config(config: dict):
         raise ValueError(f"Sai loại job, mong đợi job.type=fact_txn, nhận được: {config['job']['type']}")
 
 
-def run_fact_txn(spark, config: dict, cob_dt: str, logger):
+def run_fact_txn(spark, config: dict, cob_dt: str, logger, backfill_from: str | None = None):
     """
     Thực thi job Fact Table: chạy SQL transform rồi ghi đè partition ngày cob_dt.
 
@@ -45,7 +45,7 @@ def run_fact_txn(spark, config: dict, cob_dt: str, logger):
     """
     target = get_target_table(config)
 
-    fact_df = load_source_df(spark, config, cob_dt)
+    fact_df = load_source_df(spark, config, cob_dt, backfill_from)
 
     # Create the target explicitly before writing. Iceberg's V2 writer cannot
     # resolve a missing table for overwritePartitions() by itself.
@@ -67,7 +67,7 @@ def main():
     spark = None
     try:
         spark = get_spark_session(app_name=f"silver-fact-{config['target']['table']}")
-        run_fact_txn(spark, config, args.cob_dt, logger)
+        run_fact_txn(spark, config, args.cob_dt, logger, backfill_from=args.backfill_from or None)
     except Exception:
         logger.exception("Job Fact table thất bại")
         raise

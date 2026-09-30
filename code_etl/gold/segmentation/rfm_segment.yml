@@ -73,7 +73,7 @@ sql: |
           COALESCE(SUM(ABS(txn_amount)), 0) AS acct_txn_amount,
           MAX(txn_date) AS acct_last_txn_date
       FROM lakehouse.silver.fact_txn_account
-      WHERE cob_dt = DATE '{{ cob_dt }}'
+      WHERE cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -90) AND DATE '{{ cob_dt }}'
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
       GROUP BY customer_id
@@ -86,7 +86,7 @@ sql: |
           COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS card_txn_amount,
           MAX(txn_date) AS card_last_txn_date
       FROM lakehouse.silver.fact_card_txn
-      WHERE cob_dt = DATE '{{ cob_dt }}'
+      WHERE cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -90) AND DATE '{{ cob_dt }}'
         AND status = 'SUCCESS'
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'

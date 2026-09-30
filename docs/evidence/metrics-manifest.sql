@@ -18,8 +18,10 @@
 --               chạy trên Trino nên generator thay bằng environment.trino_catalog.
 --               KHÔNG hard-code `lakehouse.` ở đây — sẽ fail
 --               "Catalog 'lakehouse' not found".
---   Mọi query đọc fact PHẢI pin cob_dt (Rule A). Không có ngoại lệ ở đây vì
---   mọi metric trong manifest đều là metric của MỘT snapshot.
+--   Mọi query đọc fact PHẢI pin cob_dt (Rule A). Bảng full-snapshot: đúng partition
+--   cob_dt. Ba bảng giao dịch nạp tăng dần (ADR-0018: partition = ngày nghiệp vụ):
+--   mọi partition <= cob_dt, tức toàn bộ giao dịch tính tới cob_dt — cùng nghĩa với
+--   một snapshot đầy đủ trước đây. partition_exists vẫn đòi đúng ngày cob_dt.
 -- =============================================================================
 
 
@@ -67,21 +69,21 @@ SELECT
     COUNT(*)                  AS rows,
     COUNT(DISTINCT txn_id)    AS distinct_txn_id
 FROM :catalog.bronze.core_txn_account
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id bronze.snapshot_rows.core_card_txn
 SELECT
     COUNT(*)                  AS rows,
     COUNT(DISTINCT txn_id)    AS distinct_txn_id
 FROM :catalog.bronze.core_card_txn
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id bronze.snapshot_rows.core_online_transaction
 SELECT
     COUNT(*)                          AS rows,
     COUNT(DISTINCT transaction_id)    AS distinct_transaction_id
 FROM :catalog.bronze.core_online_transaction
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id bronze.snapshot_rows.core_customer
 SELECT
@@ -151,17 +153,17 @@ FROM :catalog.bronze.core_txn_account;
 --@id silver.snapshot_rows.fact_txn_account
 SELECT COUNT(*) AS rows, COUNT(DISTINCT txn_id) AS distinct_txn_id
 FROM :catalog.silver.fact_txn_account
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id silver.snapshot_rows.fact_card_txn
 SELECT COUNT(*) AS rows, COUNT(DISTINCT txn_id) AS distinct_txn_id
 FROM :catalog.silver.fact_card_txn
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id silver.snapshot_rows.fact_online_transaction
 SELECT COUNT(*) AS rows, COUNT(DISTINCT transaction_id) AS distinct_transaction_id
 FROM :catalog.silver.fact_online_transaction
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 --@id silver.snapshot_rows.fact_crm_interaction
 SELECT COUNT(*) AS rows, COUNT(DISTINCT interaction_id) AS distinct_interaction_id
@@ -237,15 +239,15 @@ SELECT
 FROM (
     SELECT DISTINCT 'account' AS domain, CAST(txn_id AS VARCHAR) AS txn_key
     FROM :catalog.silver.fact_txn_account
-    WHERE cob_dt = DATE ':cob_dt'
+    WHERE cob_dt <= DATE ':cob_dt'
     UNION ALL
     SELECT DISTINCT 'card', CAST(txn_id AS VARCHAR)
     FROM :catalog.silver.fact_card_txn
-    WHERE cob_dt = DATE ':cob_dt'
+    WHERE cob_dt <= DATE ':cob_dt'
     UNION ALL
     SELECT DISTINCT 'online', CAST(transaction_id AS VARCHAR)
     FROM :catalog.silver.fact_online_transaction
-    WHERE cob_dt = DATE ':cob_dt'
+    WHERE cob_dt <= DATE ':cob_dt'
 ) t;
 
 
@@ -354,7 +356,7 @@ WHERE c.cob_dt = DATE ':cob_dt';
 WITH acct AS (
     SELECT customer_id, COALESCE(SUM(ABS(txn_amount)), 0) AS amt
     FROM :catalog.silver.fact_txn_account
-    WHERE cob_dt = DATE ':cob_dt'
+    WHERE cob_dt <= DATE ':cob_dt'
       AND CAST(txn_date AT TIME ZONE ':business_tz' AS DATE) >= DATE ':cob_dt' - INTERVAL '90' DAY
       AND CAST(txn_date AT TIME ZONE ':business_tz' AS DATE) <= DATE ':cob_dt'
     GROUP BY customer_id
@@ -363,7 +365,7 @@ card AS (
     SELECT customer_id,
            COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS amt
     FROM :catalog.silver.fact_card_txn
-    WHERE cob_dt = DATE ':cob_dt'
+    WHERE cob_dt <= DATE ':cob_dt'
       AND status = 'SUCCESS'
       AND CAST(txn_date AT TIME ZONE ':business_tz' AS DATE) >= DATE ':cob_dt' - INTERVAL '90' DAY
       AND CAST(txn_date AT TIME ZONE ':business_tz' AS DATE) <= DATE ':cob_dt'
@@ -428,7 +430,7 @@ SELECT
     COUNT_IF(CAST(txn_date AS DATE)
              <> CAST(txn_date AT TIME ZONE ':business_tz' AS DATE)) AS divergent_date_rows
 FROM :catalog.silver.fact_txn_account
-WHERE cob_dt = DATE ':cob_dt';
+WHERE cob_dt <= DATE ':cob_dt';
 
 
 --@id gold.reconciliation.branch_monthly_recompute
@@ -449,7 +451,7 @@ WITH expected AS (
     FROM :catalog.silver.fact_txn_account t
     JOIN :catalog.silver.dim_account da
       ON t.account_id = da.account_id AND da.is_current = 1
-    WHERE t.cob_dt = DATE ':cob_dt'
+    WHERE t.cob_dt <= DATE ':cob_dt'
     GROUP BY da.branch_code,
              YEAR(CAST(t.txn_date AT TIME ZONE ':business_tz' AS DATE)),
              MONTH(CAST(t.txn_date AT TIME ZONE ':business_tz' AS DATE))

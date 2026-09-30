@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "base_job"))
 
 from spark.iceberg_utils import get_iceberg_table_name, write_to_iceberg
 from spark.spark_session import get_spark_session
+from utils.business_window import BOOTSTRAP_FROM, load_window  # noqa: E402
 from utils.logger import get_logger
 from utils.sql_renderer import render_sql
 from utils.yaml_loader import load_config
@@ -85,8 +86,11 @@ def run_initial_load(spark, cob_dt, jdbc_url, db_user, db_password, logger):
 
             config = load_config(config_path)
 
-            # Render SQL
-            sql = render_sql(config["sql"], {"cob_dt": cob_dt})
+            # Render SQL. Bảng incremental (ADR-0018): nạp toàn bộ lịch sử, mỗi giao dịch
+            # vào partition ngày nghiệp vụ của nó (cob_dt tính trong SQL).
+            incremental = config["load"]["strategy"] == "incremental"
+            window = load_window(cob_dt, BOOTSTRAP_FROM if incremental else None)
+            sql = render_sql(config["sql"], {"cob_dt": cob_dt, **window})
 
             # JDBC reader
             reader = (

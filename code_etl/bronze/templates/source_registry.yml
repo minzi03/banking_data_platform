@@ -54,7 +54,7 @@ tables:
     source_table: txn_account
     target_schema: bronze
     target_table: core_txn_account
-    load_strategy: full_snapshot
+    load_strategy: incremental  # ADR-0018: partition = ngày nghiệp vụ
     partitioned: true
 
   - source_schema: core_banking
@@ -111,7 +111,7 @@ tables:
     source_table: card_txn
     target_schema: bronze
     target_table: core_card_txn
-    load_strategy: full_snapshot
+    load_strategy: incremental  # ADR-0018: partition = ngày nghiệp vụ
     partitioned: true
 
   - source_schema: card_crm
@@ -140,7 +140,7 @@ tables:
     source_table: online_transaction
     target_schema: bronze
     target_table: core_online_transaction
-    load_strategy: full_snapshot
+    load_strategy: incremental  # ADR-0018: partition = ngày nghiệp vụ
     partitioned: true
 
   - source_schema: digital_banking

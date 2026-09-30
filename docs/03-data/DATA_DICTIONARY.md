@@ -1018,7 +1018,7 @@ Cleansed fact table capturing all card-based transactions (credit and debit). In
 
 **Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `silver_all_dag`
 
-**Tối thiểu**: 10,000 dòng · **Freshness**: 24h
+**Tối thiểu**: 500 dòng · **Freshness**: 24h
 
 **AI risk tier**: `limited_risk` · **Cấm dùng cho**: `automated_decision_making`
 
@@ -1081,7 +1081,7 @@ Cleansed fact table capturing all transactions performed through online and digi
 
 **Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `silver_all_dag`
 
-**Tối thiểu**: 5,000 dòng · **Freshness**: 24h
+**Tối thiểu**: 500 dòng · **Freshness**: 24h
 
 **AI risk tier**: `limited_risk` · **Cấm dùng cho**: `automated_decision_making`
 
@@ -1142,7 +1142,7 @@ Cleansed fact table capturing all account-level financial transactions including
 
 **Owner**: Data Engineering Team · **SLA**: daily · **Quality class**: critical · **DAG**: `silver_all_dag`
 
-**Tối thiểu**: 10,000 dòng · **Freshness**: 24h
+**Tối thiểu**: 1,000 dòng · **Freshness**: 24h
 
 **AI risk tier**: `limited_risk` · **Cấm dùng cho**: `automated_decision_making`
 

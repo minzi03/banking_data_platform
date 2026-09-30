@@ -6,9 +6,14 @@ Hai lỗi P0 đã xảy ra và không được phép quay lại:
   ① Fan-out: join >1 raw fact trong cùng một aggregation grain → Cartesian
      amplification, SUM() bị nhân theo số dòng của fact còn lại.
 
-  ② Multi-cob_dt double count: Silver fact là FULL SNAPSHOT mỗi cob_dt.
+  ② Multi-cob_dt double count: Silver fact FULL SNAPSHOT mỗi cob_dt.
      Query Gold chỉ filter txn_date (business time) mà không chốt cob_dt
      (physical snapshot) sẽ cộng chồng mọi partition đang tồn tại.
+
+  Từ ADR-0018 (2026-09-30) ba fact giao dịch nạp TĂNG DẦN: partition cob_dt là
+  ngày nghiệp vụ của giao dịch, mỗi giao dịch nằm đúng một partition. Với chúng
+  lỗi ngược lại mới nguy hiểm: pin `cob_dt = cob` chỉ đọc MỘT ngày giao dịch. Rule A
+  vì vậy tách hai loại nguồn (INCREMENTAL_FACTS lấy từ job.incremental của Silver).
 
 Test này parse SQL thật trong YAML thật và enforce theo từng scope
 (mỗi CTE là một scope, phần còn lại là scope `__main__`).
@@ -21,6 +26,9 @@ Rule A — UNIVERSAL, áp dụng cho MỌI model:
     Mọi snapshot-backed source tham gia một Gold build theo cob_dt đều phải
     được pin về đúng snapshot đang xử lý, trừ khi query CỐ Ý muốn đọc
     cross-snapshot history. Áp dụng cho cả Silver→Gold lẫn Gold→Gold.
+    Fact incremental: KHÔNG pin một ngày; phải có cận trên `<= cob_dt` (khoảng
+    BETWEEN DATE_ADD(cob, -N) AND cob, hoặc `<= cob` khi đọc toàn lịch sử), và cận
+    dưới phải phủ hết cửa sổ nghiệp vụ trong cùng scope.
 
 Rule B — MODEL-SPECIFIC, KHÔNG áp dụng cho mọi model:
     Business-time filtering (rolling window 30/90 ngày trên txn_date) là
@@ -49,8 +57,33 @@ COB_DT_PIN = re.compile(
     re.IGNORECASE,
 )
 SILVER_FACT_REF = re.compile(r"lakehouse\.silver\.(fact_\w+)", re.IGNORECASE)
+# Fact incremental (ADR-0018): khoảng partition có cận trên = cob_dt.
+INCREMENTAL_RANGE = re.compile(
+    r"\b(?:\w+\.)?cob_dt\s*(?:<=\s*DATE\s*'\{\{\s*cob_dt\s*\}\}'"
+    r"|BETWEEN\s+DATE_ADD\(DATE\s*'\{\{\s*cob_dt\s*\}\}',\s*-(\d+)\)\s+AND\s+DATE\s*'\{\{\s*cob_dt\s*\}\}')",
+    re.IGNORECASE,
+)
+BUSINESS_WINDOW = re.compile(r"DATE_ADD\(DATE\s*'\{\{\s*cob_dt\s*\}\}',\s*-(\d+)\)", re.IGNORECASE)
+SILVER_FACTS_DIR = Path(__file__).resolve().parents[2] / "code_etl" / "silver" / "facts"
 GOLD_REF = re.compile(r"lakehouse\.gold\.(\w+)", re.IGNORECASE)
 CTE_HEAD = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\($", re.IGNORECASE)
+
+
+def incremental_facts() -> set[str]:
+    """Tên bảng Silver fact có job.incremental: true (ADR-0018)."""
+    out = set()
+    for path in SILVER_FACTS_DIR.glob("*.yml"):
+        config = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if (config.get("job") or {}).get("incremental"):
+            out.add(config["target"]["table"])
+    return out
+
+
+INCREMENTAL_FACTS = incremental_facts()
+
+
+def pinned_or_bounded(sql: str) -> bool:
+    return bool(COB_DT_PIN.search(sql) or INCREMENTAL_RANGE.search(sql))
 
 
 def gold_config_paths() -> list[Path]:
@@ -138,16 +171,51 @@ class TestRuleA_SnapshotPinningIsUniversal:
     Áp dụng cho MỌI Gold model, cả Silver→Gold lẫn Gold→Gold.
     """
 
-    def test_silver_fact_scopes_pin_cob_dt(self):
+    def test_incremental_facts_are_discovered(self):
+        assert {"fact_txn_account", "fact_card_txn", "fact_online_transaction"} <= INCREMENTAL_FACTS
+
+    def test_snapshot_fact_scopes_pin_cob_dt(self):
         violations = [
             f"{path.name} :: scope `{scope}` reads {sorted(facts)} without cob_dt pin"
             for path, scope, sql, facts in iter_scopes_with(SILVER_FACT_REF)
-            if not COB_DT_PIN.search(sql)
+            if not facts & INCREMENTAL_FACTS and not COB_DT_PIN.search(sql)
         ]
         assert not violations, (
             "Thiếu `cob_dt = DATE '{{ cob_dt }}'` — Silver fact là full snapshot "
             "mỗi cob_dt nên aggregate sẽ cộng chồng qua các ngày:\n  " + "\n  ".join(violations)
         )
+
+    def test_incremental_fact_scopes_read_a_range_up_to_cob_dt(self):
+        """Pin một ngày trên fact incremental = chỉ đọc giao dịch của đúng ngày đó."""
+        violations = [
+            f"{path.name} :: scope `{scope}` reads {sorted(facts)}"
+            for path, scope, sql, facts in iter_scopes_with(SILVER_FACT_REF)
+            if facts & INCREMENTAL_FACTS and (COB_DT_PIN.search(sql) or not INCREMENTAL_RANGE.search(sql))
+        ]
+        assert not violations, (
+            "Fact incremental phải đọc khoảng partition có cận trên cob_dt "
+            "(BETWEEN DATE_ADD(cob, -N) AND cob, hoặc <= cob), không pin một ngày:\n  " + "\n  ".join(violations)
+        )
+
+    def test_partition_range_covers_the_business_window(self):
+        """Cận dưới khoảng partition hẹp hơn cửa sổ nghiệp vụ → lặng lẽ mất giao dịch đầu cửa sổ."""
+        violations = []
+        for path, scope, sql, facts in iter_scopes_with(SILVER_FACT_REF):
+            if not facts & INCREMENTAL_FACTS:
+                continue
+            ranges = [int(n) for n in INCREMENTAL_RANGE.findall(sql) if n]
+            windows = [int(n) for n in BUSINESS_WINDOW.findall(sql)]
+            if ranges and windows and min(ranges) < max(windows):
+                violations.append(f"{path.name} :: `{scope}` partition -{min(ranges)} < window -{max(windows)}")
+        assert not violations, "\n  ".join(violations)
+
+    def test_range_check_sees_a_too_narrow_range(self):
+        sql = (
+            "FROM lakehouse.silver.fact_txn_account WHERE cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -30) "
+            "AND DATE '{{ cob_dt }}' AND d >= DATE_ADD(DATE '{{ cob_dt }}', -90)"
+        )
+        ranges = [int(n) for n in INCREMENTAL_RANGE.findall(sql) if n]
+        assert min(ranges) == 30 and max(int(n) for n in BUSINESS_WINDOW.findall(sql)) == 90
 
     def test_gold_to_gold_scopes_pin_cob_dt(self):
         violations = [
@@ -210,7 +278,7 @@ class TestRuleB_BusinessWindowIsModelSpecific:
         """
         path = next(p for p in gold_config_paths() if p.name == config_name)
         sql = load_sql(path)
-        assert COB_DT_PIN.search(sql), f"{config_name}: thiếu snapshot pin (Rule A)"
+        assert pinned_or_bounded(sql), f"{config_name}: thiếu snapshot pin / khoảng partition (Rule A)"
         assert re.search(r"DATE_ADD\(DATE '\{\{ cob_dt \}\}'", sql), (
             f"{config_name}: mất rolling window trên business date (Rule B)"
         )
@@ -223,7 +291,7 @@ class TestRuleB_BusinessWindowIsModelSpecific:
         """
         path = next(p for p in gold_config_paths() if p.name == config_name)
         sql = load_sql(path)
-        assert COB_DT_PIN.search(sql), f"{config_name}: thiếu snapshot pin (Rule A)"
+        assert pinned_or_bounded(sql), f"{config_name}: thiếu snapshot pin / khoảng partition (Rule A)"
         assert re.search(r"YEAR\(|MONTH\(", sql), (
             f"{config_name}: không còn calendar aggregation — nếu model này đã "
             "chuyển sang rolling window thì hãy chuyển nó sang ROLLING_MODELS"
@@ -361,3 +429,57 @@ class TestBusinessDateDerivationIsExplicit:
         assert not wrong, (
             f"instant aggregate bị bọc timezone conversion — đó là business-date semantics áp nhầm lên instant: {wrong}"
         )
+
+
+RANKING_HEAD = re.compile(r"\b(?:ROW_NUMBER|RANK|DENSE_RANK|NTILE)\s*\([^)]*\)\s*OVER\s*\(", re.IGNORECASE)
+
+
+def ranking_windows(sql: str) -> list[str]:
+    """Nội dung OVER ( ... ) của mọi hàm xếp hạng — quét cân bằng ngoặc, vì PARTITION BY
+    có thể chứa `CAST(... AS DATE)` làm regex không tham lam dừng sớm."""
+    out = []
+    for m in RANKING_HEAD.finditer(sql):
+        depth, i = 1, m.end()
+        while i < len(sql) and depth:
+            depth += sql[i] == "("
+            depth -= sql[i] == ")"
+            i += 1
+        out.append(sql[m.end() : i - 1])
+    return out
+
+
+def _order_keys(window: str) -> int:
+    order = re.search(r"ORDER\s+BY\s+(.*)$", window, re.IGNORECASE | re.DOTALL)
+    if not order:
+        return 0
+    depth, keys = 0, 1
+    for ch in order.group(1):
+        depth += ch == "("
+        depth -= ch == ")"
+        keys += ch == "," and depth == 0
+    return keys
+
+
+class TestDeterministicRanking:
+    """
+    Xếp hạng chỉ theo một số đo (COUNT, amount…) cho kết quả không tất định khi hoà:
+    customer_360.primary_channel đổi ở 621/10.000 khách chỉ vì thứ tự vật lý của dữ liệu
+    đổi (2026-09-30). Mọi ROW_NUMBER/RANK/NTILE phải có ít nhất một khoá phá hoà.
+    """
+
+    def test_every_ranking_has_a_tie_breaker(self):
+        violations = []
+        for path in gold_config_paths():
+            sql = re.sub(r"--[^\n]*", "", load_sql(path))
+            for window in ranking_windows(sql):
+                if _order_keys(window) < 2:
+                    violations.append(f"{path.name}: OVER ({' '.join(window.split())[:120]})")
+        assert not violations, "\n  ".join(violations)
+
+    def test_scanner_sees_a_single_key_ranking(self):
+        sql = "ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY COUNT(txn_id) DESC) AS rn"
+        assert [_order_keys(w) for w in ranking_windows(sql)] == [1]
+
+    def test_scanner_reads_past_cast_in_partition_by(self):
+        sql = "ROW_NUMBER() OVER (PARTITION BY CAST(d AS DATE) ORDER BY n DESC, channel) AS rn"
+        assert [_order_keys(w) for w in ranking_windows(sql)] == [2]

@@ -1,4 +1,4 @@
-# Bronze Ingestion: online_transaction (fact — full load for bootstrap)
+# Bronze Ingestion: online_transaction (fact — incremental theo ngày nghiệp vụ, ADR-0018)
 source:
   type: postgresql
   schema: digital_banking
@@ -10,7 +10,10 @@ target:
   table: core_online_transaction
 
 load:
-  strategy: full_snapshot
+  # Mỗi cob_dt chỉ nạp giao dịch có NGÀY NGHIỆP VỤ (ICT) = cob_dt; partition cob_dt của
+  # bảng là ngày nghiệp vụ của giao dịch. Nạp lịch sử lần đầu: --backfill_from (ADR-0018).
+  strategy: incremental
+  cob_dt_from_column: cob_dt
 
 sql: |
   SELECT
@@ -28,5 +31,10 @@ sql: |
     status,
     transaction_date,
     created_ts,
-    last_updated
+    last_updated,
+    -- transaction_date lưu UTC (ADR-0004); ngày nghiệp vụ = ngày theo giờ Asia/Ho_Chi_Minh.
+    (timezone('Asia/Ho_Chi_Minh', timezone('UTC', transaction_date)))::date AS cob_dt
   FROM digital_banking.online_transaction
+  -- Cửa sổ [window_start, window_end) theo nửa đêm giờ ICT, đổi sang UTC để so với cột.
+  WHERE transaction_date >= timezone('UTC', timezone('Asia/Ho_Chi_Minh', TIMESTAMP '{{ window_start }}'))
+    AND transaction_date <  timezone('UTC', timezone('Asia/Ho_Chi_Minh', TIMESTAMP '{{ window_end }}'))

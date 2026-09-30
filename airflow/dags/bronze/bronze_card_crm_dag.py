@@ -16,7 +16,7 @@ import pendulum
 
 from jdbc_conn_utils import jdbc_jinja_args
 from etl_flag import make_start_flag_task, make_end_flag_task
-from cob_dt import COB_DT
+from cob_dt import BACKFILL_FROM_ARG, COB_DT
 
 DAG_ID            = "bronze_card_crm_dag"
 ETL_PATH          = Variable.get("ETL_PATH", default_var="/opt/project/code_etl")
@@ -69,6 +69,9 @@ with TaskGroup("ingest_all", dag=dag) as ingest_all:
             f"--jdbc_url '{jdbc['jdbc_url']}' "
             f"--db_user '{jdbc['db_user']}'"
         )
+        # ADR-0018: lần nạp đầu truyền conf backfill_from; chỉ job incremental nhận tham số này.
+        if config["load"]["strategy"] == "incremental":
+            cmd += f" {BACKFILL_FROM_ARG}"
 
         BashOperator(
             task_id=f"ingest_{table_name}",

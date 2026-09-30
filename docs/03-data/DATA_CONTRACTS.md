@@ -109,11 +109,11 @@ số dòng tối thiểu, SLA freshness, và phân loại rủi ro AI. Chúng đ
 | `banking.dim_employee_silver` | 6 | 4 | 100 | 24h |
 | `banking.dim_location_silver` | 4 | 4 | 200 | 24h |
 | `banking.dim_product_silver` | 8 | 3 | 10 | 24h |
-| `banking.fact_card_txn_silver` | 8 | 5 | 10,000 | 24h |
+| `banking.fact_card_txn_silver` | 8 | 5 | 500 | 24h |
 | `banking.fact_crm_interaction_silver` | 6 | 5 | 5,000 | 24h |
-| `banking.fact_online_transaction_silver` | 7 | 6 | 5,000 | 24h |
+| `banking.fact_online_transaction_silver` | 7 | 6 | 500 | 24h |
 | `banking.fact_support_ticket_silver` | 7 | 6 | 2,000 | 24h |
-| `banking.fact_txn_account_silver` | 9 | 6 | 10,000 | 24h |
+| `banking.fact_txn_account_silver` | 9 | 6 | 1,000 | 24h |
 
 > `required_columns` là **tập con có chủ đích**, không phải bản kiểm kê cột.
 > Danh sách cột đầy đủ nằm ở [`DATA_DICTIONARY.md`](DATA_DICTIONARY.md),

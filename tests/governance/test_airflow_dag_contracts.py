@@ -401,3 +401,25 @@ def test_derived_completion_flag_is_reset_at_start(relative, flag):
     ngay đầu, nếu không S cũ vẫn là dòng mới nhất và consumer chạy trên dữ liệu đang ghi."""
     text = (DAGS_DIR / relative).read_text(encoding="utf-8")
     assert re.search(rf"make_start_flag_task\(\s*\"\w+_reset\", {flag}", text), f"{relative}: thiếu R cho {flag}"
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "bronze/bronze_core_banking_dag.py",
+        "bronze/bronze_card_crm_dag.py",
+        "bronze/bronze_digital_banking_dag.py",
+        "silver/silver_all_dag.py",
+    ],
+)
+def test_backfill_arg_is_only_added_to_incremental_jobs(relative):
+    """
+    ADR-0018: lần nạp đầu truyền conf backfill_from. Job full_snapshot từ chối --backfill_from,
+    nên DAG phải gắn tham số CÓ ĐIỀU KIỆN theo config, không gắn cho mọi task.
+    """
+    text = (DAGS_DIR / relative).read_text(encoding="utf-8")
+    assert "BACKFILL_FROM_ARG" in text, f"{relative}: không truyền backfill_from"
+    guarded = re.search(r'if\s+\(?config\["load"\]\["strategy"\]\s*==\s*"incremental"', text) or re.search(
+        r'\.get\("incremental"\)', text
+    )
+    assert guarded, f"{relative}: BACKFILL_FROM_ARG gắn vô điều kiện"
