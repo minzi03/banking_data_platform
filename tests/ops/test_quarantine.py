@@ -233,6 +233,49 @@ class TestWriteToQuarantine:
         row = spark.createDataFrame.call_args[0][0][0]
         assert "secret" not in row.asDict()
 
+    def test_missing_target_table_is_created_from_the_source(self):
+        """Không DDL nào tạo lakehouse.quarantine.* — chạy trên stack 2026-09-30,
+        mọi lần ghi TABLE_OR_VIEW_NOT_FOUND, 9.266 vi phạm mà 0 dòng được lưu."""
+        spark = self._spark_with_columns(["txn_id", "violation_type"])
+        statements = []
+
+        def sql(statement):
+            statements.append(statement)
+            if statement.startswith("DESCRIBE"):
+                raise RuntimeError("TABLE_OR_VIEW_NOT_FOUND")
+
+        spark.sql.side_effect = sql
+        spark.table.return_value.columns = ["txn_id", "amount"]
+        quarantine.write_to_quarantine(spark, [{"txn_id": 1}], "lakehouse.quarantine.q", "v", "lakehouse.silver.f")
+
+        create = [s for s in statements if s.startswith("CREATE TABLE")]
+        assert create == [
+            "CREATE TABLE lakehouse.quarantine.q USING iceberg AS SELECT *, "
+            "CAST(NULL AS STRING) AS violation_type, CAST(NULL AS STRING) AS source_table, "
+            "CAST(NULL AS STRING) AS violation_detail, CAST(NULL AS TIMESTAMP) AS detected_at "
+            "FROM lakehouse.silver.f WHERE 1 = 0"
+        ]
+
+    def test_existing_target_table_is_not_recreated(self):
+        spark = self._spark_with_columns(["txn_id", "violation_type"])
+        quarantine.write_to_quarantine(spark, [{"txn_id": 1}], "t", "v", "s")
+        assert not [c for c in spark.sql.call_args_list if str(c.args[0]).startswith("CREATE")]
+
+    def test_rows_are_built_with_the_target_schema(self):
+        """Suy kiểu từ Row hỏng khi một cột toàn NULL (missing_manager)."""
+        spark = self._spark_with_columns(["manager_name", "violation_type"])
+        quarantine.write_to_quarantine(spark, [{"manager_name": None}], "t", "v", "s")
+        assert spark.createDataFrame.call_args.kwargs["schema"] is spark.table.return_value.schema
+
+    def test_row_fields_follow_target_column_order(self):
+        """createDataFrame(schema=...) ghép theo vị trí; thứ tự của set làm lệch cột
+        (stack 2026-09-30: `LongType() can not accept object 2026-09-22`)."""
+        columns = ["account_id", "cob_dt", "branch_code", "violation_type", "detected_at"]
+        spark = self._spark_with_columns(columns)
+        quarantine.write_to_quarantine(spark, [{"cob_dt": "d", "account_id": 1, "branch_code": "B"}], "t", "v", "s")
+        row = spark.createDataFrame.call_args[0][0][0]
+        assert list(row.keys()) == columns
+
     def test_write_failure_returns_zero(self):
         """
         The failure path returns 0 rather than raising. That makes a broken

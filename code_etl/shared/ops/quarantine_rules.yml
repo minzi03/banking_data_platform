@@ -102,7 +102,7 @@ quarantine_rules:
   # =========================================================================
   overdue_account:
     source_table: lakehouse.silver.dim_account
-    target_table: lakehouse.quarantine.overdue_loan
+    target_table: lakehouse.quarantine.overdue_account
     violations:
       - name: inactive_account
         description: "Account with inactive status"

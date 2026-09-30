@@ -242,6 +242,10 @@ def generate_accounts(count: int, config: dict, customer_ids: list[int],
         close_date = None
         if status == "CLOSED":
             close_date = _random_date(open_date, shift("2025-12-31"))
+            # Tài khoản đã đóng không còn số dư. Bản cũ giữ số dư ngẫu nhiên:
+            # quarantine `closed_with_balance` (FAIL) bắt 4.622/30.000 tài khoản và
+            # AUM của Customer 360 cộng cả tiền trong tài khoản đã đóng (2026-09-30).
+            balance = 0
 
         rows.append((
             i,
