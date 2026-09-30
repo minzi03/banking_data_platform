@@ -256,7 +256,7 @@ counts are ambiguous without them.
 | Airflow DAGs loaded        |             19 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-30) |
 | dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
-| Automated tests            |          1,050 | Python `def test_*` functions                                                   |
+| Automated tests            |          1,068 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
@@ -265,7 +265,7 @@ counts are ambiguous without them.
 > manifest's `git_commit` names the exact commit). Compared with the previous promotion
 > (2026-09-29): Silver SCD2 dimensions **2 → 4** (product and branch now keep history),
 > SCD1 **8 → 6**, Airflow DAG files / DAGs **20 / 21 → 18 / 19** (two dead DAGs removed),
-> `def test_*` functions **972 → 1,050**. The dbt rows come from
+> `def test_*` functions **972 → 1,068**. The dbt rows come from
 > `dbt build --vars '{"cob_dt": …}'` and are not bound to the manifest. See
 > [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
 
@@ -1551,7 +1551,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-1,050 automated tests
+1,068 automated tests
 ```
 
 covering areas such as:
