@@ -150,7 +150,7 @@ def _role_closure(username: str) -> set[str]:
 
 _CREATE = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.]+)\s*\((.*?)\n\s*\)", re.I | re.S)
 _COLUMN = re.compile(r"\s*([a-z_][a-z0-9_]*)\s+([A-Z]+)", re.I)
-_SKIP_DDL = {"04_ddl_bronze_cdc_old.sql"}
+_SKIP_DDL: set[str] = set()
 
 
 def _lakehouse_tables() -> dict[tuple[str, str], dict[str, str]]:
@@ -201,24 +201,6 @@ class TestConfigIsLoaded:
         assert mounts.get("/etc/trino/access-control.properties") == "./init_trino/access-control.properties"
         assert mounts.get("/etc/trino/rules.json") == "./init_trino/rules.json"
         assert mounts.get("/etc/trino/catalog") == "./init_trino/catalog"
-
-    def test_terraform_mounts_match_compose(self):
-        text = (REPO_ROOT / "terraform" / "services.tf").read_text(encoding="utf-8")
-        trino = text[text.index('resource "docker_container" "trino"') :]
-        trino = trino[: trino.index("\n}\n")]
-        pairs = dict(
-            (target, source)
-            for source, target in re.findall(
-                r'host_path\s*=\s*abspath\("\$\{path\.module\}/\.\./docker/(init_trino[^"]*)"\)\s*'
-                r'container_path\s*=\s*"([^"]+)"',
-                trino,
-            )
-        )
-        assert pairs == {
-            "/etc/trino/catalog": "init_trino/catalog",
-            "/etc/trino/access-control.properties": "init_trino/access-control.properties",
-            "/etc/trino/rules.json": "init_trino/rules.json",
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +449,6 @@ class TestRbacAgreesWithRules:
 
 CLIENT_USERS = [
     ("dbt/profiles.yml", r"^\s*user:\s*(\S+)", "dbt"),
-    ("docker/dbt/docker-compose.dbt.yml", r"DBT_TRINO_USER=(\S+)", "dbt"),
     # ADR-0016: client đọc user từ TRINO_USER, mặc định là user của chính nó.
     ("docker/superset/add_trino_connection.py", r'"TRINO_USER",\s*"([^"]+)"', "superset"),
     ("api/main.py", r'"TRINO_USER",\s*"([^"]+)"', "customer_api"),

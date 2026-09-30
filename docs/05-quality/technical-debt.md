@@ -1327,7 +1327,7 @@ emit_lineage twice with run_id=verify_idempotent → 75 rows, not 150 (rows then
 [x] ops_lineage_dag writes those edges, run on the stack, rows observed
 [x] ops_lineage_dag scheduled after gold_all_dag (08:00, sensors on both flags)
 [x] data_lineage removed (duplicate of lineage_log, no reader or writer)
-[ ] data_lineage_audit given a writer, or removed — decided with REGULATORY_MAPPING.md
+[x] data_lineage_audit removed with 09_ddl_regulatory.sql (2026-09-30, TD-20) — no writer
 ```
 
 ---
@@ -1789,8 +1789,8 @@ are lost, and Debezium re-snapshots about 2.3 M rows. That is a separate, disrup
 
 ## TD-20 — Audit 2026-09-30: runtime re-verification and files proposed for deletion
 
-**Status:** runtime part done 2026-09-30. Still open: RFM cut-offs (spec question)
-and the deletion list below (owner's decision).
+**Status:** closed 2026-09-30. Runtime verification done, RFM cut-offs follow the KPI
+dictionary, the deletion list below was carried out, and the local data was reseeded.
 
 ### Ran on the local stack (upgrade path, 2026-09-30)
 
@@ -1853,10 +1853,13 @@ group 6) is the source of truth.
   covers scores 3–4.
 - `tests/gold/test_rfm_segment_cutoffs.py` fails on the old cut-offs.
 
-### Proposed for deletion (reference-checked, not deleted)
+### Deleted 2026-09-30 (owner approved)
 
-Each was checked against imports, Dockerfiles, compose, DAGs, Makefile, CI, dbt, tests
-and docs. Deleting them is a decision for the repository owner.
+Each was checked again before deletion against imports, Dockerfiles, compose, DAGs,
+Makefile, CI, dbt, tests and docs. The references in the last column were updated in the
+same change. Also removed: `tests/governance/test_terraform_secrets.py` (tested only
+`terraform/`) and the empty table `opslakehouse.data_lineage_audit` (it was defined in
+`09_ddl_regulatory.sql` and had no writer). DAG counts are now 18 files / 19 DAGs.
 
 | File | Why | References to update when deleting |
 |---|---|---|

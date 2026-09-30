@@ -74,7 +74,7 @@ Chữ **"yet"** quan trọng. Đây là **khoảng trống đã chấp nhận**,
 
 ```text
 code_etl/cdc/consolidation/cdc_consolidation.py     docstring nêu rõ limitation
-code_etl/cdc/create_cdc_tables.py                   schema Bronze CDC, không có cột Kafka
+docker/init_iceberg/04_ddl_bronze_cdc.sql           schema Bronze CDC (bản sao create_cdc_tables.py đã xoá 2026-09-30)
 code_etl/cdc/base_job/cdc_dlq.py:36-38              DLQ có kafka_partition/offset/timestamp
 code_etl/cdc/reconcile_cdc.py                       gate read-only, exit != 0 khi invariant vỡ
 lakehouse.meta.cdc_watermark                        last_snapshot_id (tiến độ) + last_cdc_timestamp_ms / last_spark_batch_id (quan sát)
@@ -141,7 +141,7 @@ customer 990004  UPDATE  ts_ms 1790742688429  batch 4  offset 30013
 
 - `cdc_dlq.validate_and_split` giữ `__kafka_partition` / `__kafka_offset` trong luồng hợp lệ
   (chỉ hai cột; topic / timestamp / raw_payload vẫn chỉ ở DLQ).
-- Hai DDL (`04_ddl_bronze_cdc.sql`, `create_cdc_tables.py`) có hai cột đó. Bảng tạo trước được
+- DDL `04_ddl_bronze_cdc.sql` có hai cột đó (bản sao `create_cdc_tables.py`, không ai chạy, đã xoá cùng ngày). Bảng tạo trước được
   `ensure_kafka_coordinate_columns` thêm cột khi stream khởi động (dòng cũ mang NULL).
 - `deduplicate_latest` xếp `ts_ms DESC, batch DESC, offset DESC NULLS LAST`. Debezium key =
   khoá chính → mọi event của một khoá cùng partition, nên offset phân định dứt khoát.

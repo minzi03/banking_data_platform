@@ -58,7 +58,6 @@ CONTRACTS = REPO_ROOT / "governance" / "datasets"
 
 # File DDL bị loại, kèm lý do. Không loại im lặng.
 SKIP_DDL = {
-    "04_ddl_bronze_cdc_old.sql": "bản cũ đã thay bằng 04_ddl_bronze_cdc.sql",
     "08_ddl_data_vault_example.sql": "DDL minh hoạ cho DATA_VAULT_MAPPING, không triển khai",
     "05_security.sql": "role và grant, không phải bảng dữ liệu",
     "06_ddl_superset.sql": "schema nội bộ của Superset",

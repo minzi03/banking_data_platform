@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**93 bảng · 1256 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**89 bảng · 1210 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -21,7 +21,7 @@
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
 | [digital_banking](#digital_banking) | 6 | 58 |
-| [opslakehouse](#opslakehouse) | 10 | 101 |
+| [opslakehouse](#opslakehouse) | 6 | 55 |
 
 ---
 
@@ -2173,26 +2173,6 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `00_extensions.sql`</sub>
 
-### `opslakehouse.data_lineage_audit`
-
-_Chưa có data contract trong `governance/datasets/`._
-
-| Cột | Kiểu | PII | Ghi chú |
-|---|---|:-:|---|
-| `audit_id` | `BIGINT` |  |  |
-| `source_table` | `VARCHAR(200)` |  |  |
-| `source_column` | `VARCHAR(200)` |  |  |
-| `target_table` | `VARCHAR(200)` |  |  |
-| `target_column` | `VARCHAR(200)` |  |  |
-| `transformation` | `TEXT` |  | SQL or description of transformation |
-| `job_name` | `VARCHAR(100)` |  |  |
-| `job_run_id` | `VARCHAR(100)` |  |  |
-| `executed_at` | `TIMESTAMP` |  |  |
-| `record_count` | `BIGINT` |  |  |
-| `checksum` | `VARCHAR(100)` |  | Data checksum for integrity verification |
-
-<sub>Nguồn DDL: `09_ddl_regulatory.sql`</sub>
-
 ### `opslakehouse.data_quality_log`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -2210,23 +2190,6 @@ _Chưa có data contract trong `governance/datasets/`._
 | `checked_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `00_extensions.sql`</sub>
-
-### `opslakehouse.dq_scorecard`
-
-_Chưa có data contract trong `governance/datasets/`._
-
-| Cột | Kiểu | PII | Ghi chú |
-|---|---|:-:|---|
-| `scorecard_id` | `BIGINT` |  |  |
-| `report_date` | `DATE` |  |  |
-| `table_name` | `VARCHAR(200)` |  |  |
-| `column_name` | `VARCHAR(200)` |  | NULL = table-level score |
-| `dimension` | `VARCHAR(50)` |  |  |
-| `score` | `NUMERIC(5,2)` |  |  |
-| `threshold` | `NUMERIC(5,2)` |  | Minimum acceptable score |
-| `is_pass` | `SMALLINT` |  |  |
-
-<sub>Nguồn DDL: `09_ddl_regulatory.sql`</sub>
 
 ### `opslakehouse.flag_job_etl`
 
@@ -2283,51 +2246,6 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `04_ddl_ops_metadata.sql`</sub>
 
-### `opslakehouse.regulatory_report`
-
-_Chưa có data contract trong `governance/datasets/`._
-
-| Cột | Kiểu | PII | Ghi chú |
-|---|---|:-:|---|
-| `report_id` | `BIGINT` |  |  |
-| `report_type` | `VARCHAR(50)` |  |  |
-| `report_name` | `VARCHAR(200)` |  |  |
-| `report_period_start` | `DATE` |  |  |
-| `report_period_end` | `DATE` |  |  |
-| `generated_date` | `TIMESTAMP` |  |  |
-| `data_json` | `JSONB` |  | Report data in JSON format |
-| `summary_json` | `JSONB` |  | Summary statistics |
-| `status` | `VARCHAR(20)` |  |  |
-| `pending` | `REVIEW` |  |  |
-| `needs` | `CORRECTION` |  |  |
-| `submitted_at` | `TIMESTAMP` |  |  |
-| `submission_reference` | `VARCHAR(100)` |  | Regulator reference number |
-| `created_by` | `VARCHAR(100)` |  |  |
-| `created_at` | `TIMESTAMP` |  |  |
-| `updated_at` | `TIMESTAMP` |  |  |
-| `notes` | `TEXT` |  |  |
-
-<sub>Nguồn DDL: `09_ddl_regulatory.sql`</sub>
-
-### `opslakehouse.regulatory_rule`
-
-_Chưa có data contract trong `governance/datasets/`._
-
-| Cột | Kiểu | PII | Ghi chú |
-|---|---|:-:|---|
-| `rule_id` | `BIGINT` |  |  |
-| `rule_code` | `VARCHAR(50)` |  |  |
-| `regulation` | `VARCHAR(50)` |  | BCBS239 |
-| `INTERNAL` | `RULE_NAME` |  |  |
-| `description` | `TEXT` |  |  |
-| `threshold_value` | `NUMERIC(18,2)` |  |  |
-| `threshold_type` | `VARCHAR(20)` |  | MIN |
-| `PERCENTAGE` | `IS_ACTIVE` |  |  |
-| `created_at` | `TIMESTAMP` |  |  |
-| `updated_at` | `TIMESTAMP` |  |  |
-
-<sub>Nguồn DDL: `09_ddl_regulatory.sql`</sub>
-
 ### `opslakehouse.source_table_registry`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -2367,7 +2285,6 @@ Vì giới hạn thứ nhất, **đừng đọc con số trên là số cột PI
 
 **File DDL bị loại khỏi tài liệu này**, kèm lý do:
 
-- `04_ddl_bronze_cdc_old.sql` — bản cũ đã thay bằng 04_ddl_bronze_cdc.sql
 - `05_security.sql` — role và grant, không phải bảng dữ liệu
 - `06_ddl_superset.sql` — schema nội bộ của Superset
 - `07_ddl_mlflow.sql` — schema nội bộ của MLflow

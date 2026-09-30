@@ -520,15 +520,15 @@ metrics:
   platform:
     airflow_dag_files:
       value: 20
-      declared: 20
+      declared: 18
       metric_type: static
       provenance: collector:airflow_dag_files
     airflow_dag_objects:
       value: 21
-      declared: 21
+      declared: 19
       metric_type: static
       provenance: collector:airflow_dag_objects
-      definition: 'cdc_streaming_dag.py định nghĩa 2 DAG. README dùng ''21 DAGs''
+      definition: 'cdc_streaming_dag.py định nghĩa 2 DAG. README dùng ''19 DAGs''
         theo nghĩa số DAG object đã load (`airflow dags list`) — hợp lệ nếu đó là
         định nghĩa user-facing. Ghi cả hai để không ai phải đoán.
 
@@ -863,7 +863,7 @@ readme_bindings:
   manifest_path: metrics.platform.data_contracts.value
 - readme_claim: '| Data-quality check types   |              9 |'
   manifest_path: metrics.platform.dq_check_types.value
-- readme_claim: '| Airflow DAG files          |             20 |'
+- readme_claim: '| Airflow DAG files          |             18 |'
   manifest_path: metrics.platform.airflow_dag_files.value
 - manifest_path: metrics.platform.integration_tests.value
   readme_claims:

@@ -223,9 +223,10 @@ DROP TABLE IF EXISTS opslakehouse.data_lineage;
 SQL
 ```
 
-`opslakehouse.data_lineage_audit` is also empty but is kept on purpose: it is
-column-level lineage with checksums, for regulatory audit. Nothing writes it
-yet (TD-13).
+`opslakehouse.data_lineage_audit` (column-level, no writer) was defined in
+`09_ddl_regulatory.sql`, removed 2026-09-30 with the non-functional regulatory DAG
+(TD-20). Existing stacks keep an empty table until it is dropped by hand:
+`DROP TABLE IF EXISTS opslakehouse.data_lineage_audit;`.
 
 ### 7. dbt semantic layer (dbt-core + dbt-trino)
 

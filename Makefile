@@ -65,12 +65,6 @@ help:
 	@echo "    make pre-commit      Install pre-commit hooks"
 	@echo "    make install-dev     Install dev dependencies (editable mode)"
 	@echo ""
-	@echo "  Infrastructure as Code:"
-	@echo "    make infra-init      terraform init"
-	@echo "    make infra-plan      terraform plan"
-	@echo "    make infra-apply     terraform apply"
-	@echo "    make infra-destroy   terraform destroy"
-	@echo ""
 	@echo "UI URLs:"
 	@echo "  Airflow:      http://localhost:8080 (login: see docker/.env)"
 	@echo "  MinIO:        http://localhost:9001 (login: MINIO_ROOT_* in docker/.env)"
@@ -201,25 +195,6 @@ superset:
 
 superset-logs:
 	$(DC) logs -f superset superset-init --tail=30
-
-# ---------------------------------------------------------------------------
-# Infrastructure as Code (Terraform)
-# ---------------------------------------------------------------------------
-infra-init:
-	cd terraform && terraform init
-	@echo "Terraform initialized"
-
-infra-plan:
-	cd terraform && terraform plan
-	@echo "Terraform plan complete"
-
-infra-apply:
-	cd terraform && terraform apply -auto-approve
-	@echo "Terraform apply complete"
-
-infra-destroy:
-	cd terraform && terraform destroy -auto-approve
-	@echo "Terraform destroy complete"
 
 # ---------------------------------------------------------------------------
 # Cleanup

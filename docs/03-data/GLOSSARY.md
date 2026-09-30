@@ -252,7 +252,7 @@ Mã bốn chữ số phân loại ngành hàng của đơn vị chấp nhận th
 
 ### `BCBS 239`
 
-Chuẩn Basel về **nguyên tắc tổng hợp dữ liệu rủi ro và báo cáo rủi ro**. Yêu cầu cốt lõi: chính xác, đầy đủ, kịp thời, có khả năng thích ứng. `regulatory_reporting_dag` sinh báo cáo theo chuẩn này.
+Chuẩn Basel về **nguyên tắc tổng hợp dữ liệu rủi ro và báo cáo rủi ro**. Yêu cầu cốt lõi: chính xác, đầy đủ, kịp thời, có khả năng thích ứng. Repo không có pipeline báo cáo BCBS 239 (DAG `regulatory_reporting` không hoạt động, đã xoá 2026-09-30).
 
 ### `SBV` / NHNN
 

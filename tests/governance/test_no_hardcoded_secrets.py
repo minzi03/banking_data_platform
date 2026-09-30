@@ -15,7 +15,7 @@ Cấu hình engine từng là nợ (nhóm B, TD-3): spark-defaults.conf và cata
 chứa key MinIO. Nay Spark và Trino đọc AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 từ env, và danh sách nợ `KNOWN_DEBT` về rỗng nên được gỡ.
 
-Ngoài phạm vi (ghi ở technical-debt): terraform/, giá trị chỉ dùng cho CI
+Ngoài phạm vi: giá trị chỉ dùng cho CI
 (compose CI, workflow), file secret gitignore (docker/.env, docker/secrets/).
 """
 

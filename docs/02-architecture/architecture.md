@@ -145,7 +145,7 @@ flowchart LR
     %% =========================================================
 
     subgraph Orchestration["Orchestration"]
-        AF["Apache Airflow<br/>21 DAGs"]
+        AF["Apache Airflow<br/>19 DAGs"]
         MAINT["Iceberg<br/>Maintenance"]
     end
 
@@ -1080,7 +1080,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-21 DAGs loaded (zero import errors)
+19 DAGs loaded (zero import errors)
 ```
 
 Representative orchestration responsibilities include:

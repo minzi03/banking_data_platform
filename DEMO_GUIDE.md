@@ -1,7 +1,6 @@
 # Demo Guide — Banking Data Platform (tài liệu demo duy nhất)
 
-Tài liệu này là **nguồn demo duy nhất** của repo. `demo/DEMO_SCRIPT.md` và
-`docs/01-getting-started/demo.md` chỉ còn trỏ về đây.
+Tài liệu này là **nguồn demo duy nhất** của repo (các bản demo cũ đã xoá 2026-09-30, TD-20).
 
 > **Trạng thái kiểm chứng (2026-09-30).** Đã chạy trên stack Docker local theo
 > **đường nâng cấp** (stack có sẵn dữ liệu, `cob_dt` 2026-09-22 và 2026-09-23):
@@ -320,7 +319,7 @@ TQ "SELECT * FROM meta.cdc_watermark"
 
 ## 10. Airflow
 
-**What.** 21 DAG (20 file), 0 lỗi import.
+**What.** 19 DAG (18 file), 0 lỗi import.
 
 **Command.**
 ```bash
@@ -334,7 +333,7 @@ AF tasks list gold_all_dag --tree | head -30
 **Talking points.**
 - Spark chạy trong `banking-spark-worker-1` qua `docker exec`; không DAG nào dùng `SparkSubmitOperator` (có test chặn).
 - Password JDBC đi qua env (`docker exec -e DB_PASSWORD`), không nằm trong argv.
-- `regulatory_reporting` và `dbt_seed` là DAG **không hoạt động**, đã tắt lịch, đề xuất xoá (TD-20).
+- `regulatory_reporting` và `dbt_seed` (không hoạt động) đã xoá 2026-09-30: còn 18 file DAG, 19 DAG.
 - `ops_ml_churn_dag` chạy tay, cần `ml/requirements.txt` trên worker.
 
 ---

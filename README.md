@@ -252,8 +252,8 @@ counts are ambiguous without them.
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
 | Data contracts             |             34 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
-| Airflow DAG files          |             20 | Files defining at least one DAG (21 DAG objects — one file defines two)         |
-| Airflow DAGs loaded        |             21 | `airflow dags list` — zero import errors                                        |
+| Airflow DAG files          |             18 | Files defining at least one DAG (19 DAG objects — one file defines two)         |
+| Airflow DAGs loaded        |             19 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-30) |
 | dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
 | Automated tests            |          1,055 | Python `def test_*` functions                                                   |
@@ -1339,7 +1339,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-21 DAGs loaded (zero import errors)
+19 DAGs loaded (zero import errors)
 ```
 
 Representative responsibilities:
@@ -1737,8 +1737,8 @@ Current boundaries include:
 - CDC current-state freshness is bounded by the consolidation cron (`*/10`), not by processing time; there is no event-driven trigger from streaming ingestion to consolidation.
 - The platform does not claim end-to-end exactly-once semantics.
 - A CDC key that was deleted and then receives an older, late event is re-inserted: Silver Current keeps no tombstones.
-- The 2026-09-30 fixes (RFM direction, CDC casts and watermark, single `cob_dt`, Bronze partitioning, SCD2 product/branch, API parameters) are covered by unit and Spark regression tests and by rendering every DAG with Airflow 2.10.0, but have **not yet been run on the full Docker stack**; the runtime rows of the metrics table predate them.
-- `regulatory_reporting` and `dbt_seed` DAGs are non-functional and unscheduled; `ops_ml_churn_dag` is manual and needs `ml/requirements.txt` on the Spark worker. See TD-20.
+- The 2026-09-30 fixes were run on the local Docker stack along the upgrade path (existing data) and, from a fresh stack, by the CI Trino Integration job. OpenMetadata, Superset/Streamlit and the ML DAG were not run (TD-20).
+- `ops_ml_churn_dag` is manual and needs `ml/requirements.txt` on the Spark worker. The non-functional `regulatory_reporting` and `dbt_seed` DAGs were removed (TD-20).
 - Enterprise mTLS, KMS, Kubernetes, multi-region DR, and production on-call/SLO systems are outside the current portfolio scope.
 
 ---
@@ -1842,7 +1842,7 @@ guess which of the ~40 files applies to you.
 | -------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | [RUNBOOK.md](RUNBOOK.md)                                       | Operations manual — start/stop services, run the ETL, query, troubleshoot |
 | [Incident Runbook](docs/04-operations/INCIDENT_RUNBOOK.md)     | Data-incident procedures: S1 source partition missing, S2 Gold produced no rows, S3 DQ failure into quarantine, S4 schema drift, S5 CDC lag, S6 serving snapshot mismatch, S7 wrong backfill date, S8 catalog name. Each ends with an RCA section and a verification step that proves the incident is actually cleared |
-| [DBT Deployment](docs/04-operations/DBT_DEPLOYMENT.md)         | Serving-layer deployment                                                 |
+| [dbt project](dbt/README.md)                                     | Serving-layer deployment, semantic layer (`mf`)                          |
 
 ## Architecture and decisions
 

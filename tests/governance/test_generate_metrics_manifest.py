@@ -164,9 +164,10 @@ class TestRepoCollectors:
         assert long_running == defined - one_shot == 25
 
     def test_airflow_files_vs_objects_differ(self, contract):
-        """cdc_streaming_dag.py định nghĩa 2 DAG — hai metric khác nhau."""
-        assert gen._airflow_dag_files(contract) == 20
-        assert gen._airflow_dag_objects(contract) == 21
+        """cdc_streaming_dag.py định nghĩa 2 DAG — hai metric khác nhau.
+        18 / 19 sau khi xoá dbt_seed và regulatory_reporting (TD-20, 2026-09-30)."""
+        assert gen._airflow_dag_files(contract) == 18
+        assert gen._airflow_dag_objects(contract) == 19
 
     def test_collect_repo_metrics_fills_every_static_node(self, contract):
         collected = gen.collect_repo_metrics(contract)
