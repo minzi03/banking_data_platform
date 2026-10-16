@@ -1,11 +1,13 @@
 # Phân Tích Thị Trường Data Engineer Việt Nam — Toàn Bộ Corpus JD
 
-> **Ngày đo**: 2026-09-29 (thay bản 2026-09-21)
-> **Nguồn**: 16 file JD + 1 file benchmark repo (`thamkhao/JD/`)
-> **Quy mô**: 3.310.578 ký tự (1.842.677 sau khi bỏ dòng lặp) · Aug–Sep 2026
+> **Ngày đo**: 2026-10-01 (thay bản 2026-09-29)
+> **Nguồn**: 21 file JD + 1 file benchmark repo + 2 sơ đồ kiến trúc đối thủ (`thamkhao/JD/`)
+> **Quy mô**: 4.010.665 ký tự (2.282.284 sau khi bỏ dòng lặp) · Aug–Sep 2026
 > **Công cụ đo**: [`scripts/measure_jd_corpus.py`](../../scripts/measure_jd_corpus.py) — mọi con số ở đây sinh lại được bằng một lệnh
 > **Mục đích**: Xác định khoảng cách giữa Banking Data Platform và nhu cầu thị trường **bằng số đo, không bằng ước lượng**
-> **Thay thế**: `JD_FINAL_MARKET_ANALYSIS.md`, `JD_MARKET_ANALYSIS_REPORT.md` (chỉ phủ jd1–jd8, phần trăm không nêu phương pháp)
+> **Thay thế**: bản 2026-09-29 (16 file), `JD_FINAL_MARKET_ANALYSIS.md`, `JD_MARKET_ANALYSIS_REPORT.md`
+> **Bổ sung 2026-10-01**: nhóm mẫu **D** (5 file scrape mới, 166 bài đăng); `jd16.md` được thay bằng bản scrape lớn hơn (113k → 260k byte) nên **nhóm C cũng tăng** từ 603k lên 735k ký tự. Xem §10 để biết điều gì đổi so với bản trước.
+> **Kiểm chứng 2026-11 (đợt #2)**: chạy lại script (22/22 MD5 khớp) + kiểm chứng từng trích dẫn bằng grep. Sửa **5 lỗi** (§1.3, §2.2, §4, §5.1, §0) và **cập nhật trạng thái dự án** — nhiều mục P1/P2 của bản 2026-10-01 đã được implement trong 72 commit sau đó. Chi tiết ở **§11 — Đính chính và trạng thái** ở cuối tài liệu.
 
 ---
 
@@ -18,12 +20,12 @@ py -3 scripts/measure_jd_corpus.py ../thamkhao/JD --json   # JSON
 
 Mọi con số là **số lần regex khớp trên văn bản đã decode UTF-8**. Regex nằm trong `TERMS` của script, kèm chú thích ở những chỗ regex trơn sẽ khớp nhầm (vd. `collection` khớp "data collection", `provisioning` khớp "provisioning services").
 
-**Đơn vị**: `lần / 100.000 ký tự`, vì ba nhóm mẫu có kích thước khác nhau.
+**Đơn vị**: `lần / 100.000 ký tự`, vì bốn nhóm mẫu có kích thước khác nhau.
 
-**Hai chế độ đếm** (mới ở bản này):
+**Hai chế độ đếm**:
 
 - `raw` là văn bản nguyên trạng, cùng cách đo của bản 2026-09-21.
-- `dedup` giữ mỗi dòng không rỗng **một lần** trong cả nhóm. Trang scrape lặp nguyên đoạn JD và "About us" của cùng công ty; ví dụ khối giới thiệu Renova Cloud lặp 4 lần trong `jd14.md`. Bỏ lặp làm corpus co từ 3,31M xuống 1,84M ký tự (−44%). **Một số đo chỉ đáng tin khi raw và dedup kể cùng một câu chuyện.**
+- `dedup` giữ mỗi dòng không rỗng **một lần** trong cả nhóm. Trang scrape lặp nguyên đoạn JD và "About us" của cùng công ty; ví dụ khối giới thiệu Renova Cloud lặp 4 lần trong `jd14.md`. Bỏ lặp làm corpus co từ 4,01M xuống 2,28M ký tự (−43%). **Một số đo chỉ đáng tin khi raw và dedup kể cùng một câu chuyện.**
 
 **Corpus được pin bằng checksum**:
 
@@ -44,22 +46,28 @@ Mọi con số là **số lần regex khớp trên văn bản đã decode UTF-8*
 | `jd13.md` | 263.336 | `ea6ccc70e6f24a2a4f271c61ea622de5` | B |
 | `jd14.md` | 266.334 | `c55d3256351419db6aa93f83abb72569` | C |
 | `jd15.md` | 285.665 | `aa34b1391aed1c8bcdf2b52bce36ab5c` | C |
-| `jd16.md` | 113.578 | `213da2b24f99f9ac6e434d395ddb84c9` | C |
-| `repo.md` | 19.635 | `332687b08a13a9305c5f7b4c3de8391c` | benchmark |
+| `jd16.md` | 259.769 | `e06e0db20cbba54978b1ca2738e7af02` | C |
+| `jd17.md` | 275.296 | `190564d9d20e2d436e93bc5073f58ce7` | D |
+| `jd18_DS.md` | 59.932 | `6253883601437258a96c17fc7e61e901` | D |
+| `jd19_DA.md` | 190.683 | `b48d3f98b42303f4ee04968e5090fd13` | D |
+| `jd20_AE.md` | 42.960 | `1b1f077b32e41f581a7b48c3e9965ada` | D |
+| `jd21.md` | 52.675 | `ee3ccf690661f6ba31127327dee0d43b` | D |
+| `repo.md` | 21.361 | `2d90698282e15b3c3020c9bafc516436` | benchmark |
 
-**Ba nhóm mẫu**:
+> **Hai file cũ đã đổi**: `jd16.md` (113.578 → 259.769 byte) và `repo.md` (19.635 → 21.361 byte). Vì `jd16` thuộc nhóm C, **mọi số của nhóm C trong tài liệu này khác bản 2026-09-29** — không phải vì thị trường đổi, mà vì mẫu C đổi kích thước. Đây chính là lý do mục 0 tồn tại.
+
+**Bốn nhóm mẫu**:
 
 | Nhóm | File | Ký tự | Sau dedup | Ghi chú |
 |---|---|---:|---:|---|
-| A | jd1–jd8 | 1.901.965 | 1.178.377 | Không đổi từ bản trước (MD5 khớp) |
-| B | jd9–jd13 | 805.257 | 590.280 | Bản trước gồm cả `jd14.md` cũ (76k) |
-| C | jd14–jd16 | 603.354 | 545.906 | **Mới**: `jd14.md` được thay bằng bản scrape 266k, cộng `jd15`, `jd16` |
-
-Kiểm tra hiệu chỉnh: đo lại nhóm A (corpus không đổi) bằng script, so với bản 2026-09-21. SQL 37,0 so với 36,9; AWS 21,3 so với 21,3; Kafka 11,9 so với 11,8; Lakehouse, CI/CD, Docker, SCD, ClickHouse, Backfill, Data Contract, MLflow và MLOps lệch ≤0,1. Những dòng lệch nhiều hơn (Data Quality 21,2 so với 15,0; Data Governance 16,2 so với 12,7) là do script **cố ý** đếm thêm cụm tiếng Việt (`chất lượng dữ liệu`, `quản trị dữ liệu`).
+| A | jd1–jd8 | 1.901.965 | 1.178.377 | Không đổi từ bản 2026-09-21 (MD5 khớp) |
+| B | jd9–jd13 | 805.257 | 590.280 | Không đổi từ bản 2026-09-29 |
+| C | jd14–jd16 | 735.436 | 635.597 | **`jd16.md` thay bản scrape lớn hơn** (+146k ký tự) |
+| D | jd17–jd21 | 568.004 | 495.707 | **Mới 2026-10-01**: 5 file bundle, 166 bài đăng |
 
 > ⚠️ **Giới hạn phương pháp**
 >
-> Ba nhóm cùng khung Aug–Sep 2026. Chúng là **ba mẫu độc lập, KHÔNG phải chuỗi thời gian**, nên "bội số" nghĩa là *mật độ cao hơn ở mẫu đó* và có thể do thành phần mẫu. Chỉ coi là tín hiệu thật khi khác biệt **≥2× ở cả B lẫn C** so với A.
+> Bốn nhóm cùng khung Aug–Sep 2026. Chúng là **bốn mẫu độc lập, KHÔNG phải chuỗi thời gian**, nên "bội số" nghĩa là *mật độ cao hơn ở mẫu đó* và có thể do thành phần mẫu. Chỉ coi là tín hiệu thật khi khác biệt **≥2× ở ít nhất HAI nhóm so với A** (nâng từ "cả B lẫn C" ở bản trước, vì giờ có bốn mẫu).
 >
 > Đếm regex đo **cường độ nhắc đến**, không đo "% số JD yêu cầu". Tài liệu này không dùng cách diễn đạt "~X% JD yêu cầu".
 
@@ -67,36 +75,39 @@ Kiểm tra hiệu chỉnh: đo lại nhóm A (corpus không đổi) bằng scrip
 
 ## 1. Tổng quan thị trường
 
-### 1.1 Thành phần vai trò — lý do nhóm C phải đọc khác
+### 1.1 Thành phần vai trò — lý do nhóm C và D phải đọc khác
 
-Phân loại theo tiêu đề bài đăng (dòng ngay sau header "`<công ty> logo`"). Chỉ đếm được ở các file có header này: jd10–16.
-
-```text
-                     Nhóm B (jd10–13)   Nhóm C (jd14–16)
-bài có header              153                106
-DE / Platform          117  (76%)          52  (49%)
-DA / BI / BA            14   (9%)          38  (36%)
-Architect               10   (7%)           4   (4%)
-Analytics Engineer       3   (2%)           4   (4%)
-DS / ML / AI             2   (1%)           3   (3%)
-Governance · DBA · khác  7   (5%)           5   (5%)
-```
-
-Nhóm C còn chứa **khoảng 50 JD lồng không có header**: khoảng 20 JD tiếng Việt trong khối ABBANK (`jd14.md` dòng 1–1025) và khoảng 30 JD LinkedIn "About the job" trong khối Binance (`jd15.md` dòng 1828–4288, trong đó có SeABank ODS/DWH).
-
-**Hệ quả**: nhóm C có tỷ trọng Data Analyst / BI cao gấp 4 lần nhóm B. Mọi thứ tăng ở C mà gắn với vai trò DA đều phải coi là **hiệu ứng thành phần mẫu**, chưa phải xu hướng thị trường DE: Power BI, Tableau, Looker/Metabase, A/B test, và phần lớn thuật ngữ nghiệp vụ tín dụng.
-
-### 1.2 Nhà tuyển dụng khối tài chính trong nhóm C
+Phân loại theo tiêu đề bài đăng (dòng ngay sau header "`<công ty> logo`"). Các file có header: jd10–16 (B, C) và **jd17–21 (D)**.
 
 ```text
-Ngân hàng      Techcombank ×5 · PVcomBank ×4 · BIDV · ABBANK · TPBank · CIMB · NCB
-               VPBank · Timo (BVBank) · SeABank · ANZ (qua HCLTech) · NAB ×2
-Tài chính TD   FE CREDIT ×2 · Mcredit · Home Credit · F88 · GoTymeX · KALAPA
-Ví / fintech   MoMo ×3 · Zalopay · Monee (ShopeePay) ×2 · Gimo · WeCopy Fintech
-Chứng khoán    VPBankS · Binance
+                     Nhóm B (jd10–13)   Nhóm C (jd14–16)   Nhóm D (jd17–21)
+bài có header              153                106                166
+DE / Platform          117  (76%)          52  (49%)          68  (41%)
+DA / BI / BA            14   (9%)          38  (36%)          60  (36%)
+Architect               10   (7%)           4   (4%)           6   (4%)
+Analytics Engineer       3   (2%)           4   (4%)           6   (4%)
+DS / ML / AI             2   (1%)           3   (3%)          18  (11%)
+Governance · DBA · khác  7   (5%)           5   (5%)           8   (5%)
 ```
 
-Khối tài chính chiếm khoảng 1/3 bài có header của nhóm C. Techcombank mở 5 vị trí cùng lúc: Data Engineer, Senior Data Engineer, Expert Data Engineer, Senior Data Architect và Senior Data Platform Engineer (Infrastructure).
+Hai nhóm mới (C và D) đều có **tỷ trọng DA / BI cao gấp ~4 lần nhóm B**. Nhóm B (jd10–13) chủ yếu là bài DE thuần; C và D trộn lẫn nhiều vai trò phân tích. Nhóm D còn có **DS / ML / AI cao bất thường (11%)** vì `jd18_DS.md` và phần lớn `jd19_DA.md` là bài Data Scientist / Data Analyst chứ không phải DE.
+
+**Hệ quả**: mọi thứ tăng ở C hoặc D mà gắn với vai trò DA/BI/DS đều phải coi là **hiệu ứng thành phần mẫu**, chưa phải xu hướng thị trường DE: Power BI, Tableau, Looker/Metabase, A/B test, DS/ML, và phần lớn thuật ngữ nghiệp vụ tín dụng. Đây là lý do §2 tách bảng "nền tảng" (ổn định qua cả bốn nhóm) khỏi bảng "tín hiệu" (phải kiểm tra thành phần mẫu trước khi kết luận).
+
+### 1.2 Nhà tuyển dụng khối tài chính — nhóm C + D
+
+```text
+Ngân hàng      Techcombank ×6 · PVcomBank ×4 · VietinBank ×2 · BIDV · ABBANK · TPBank
+               CIMB · NCB · VPBank ×2 · Timo (BVBank) · SeABank · Eximbank · ACB
+               ANZ (qua HCLTech) · NAB ×2 · Cake Digital Bank ×3
+Tài chính TD   FE CREDIT ×2 · Mcredit ×3 · Home Credit · F88 · GoTymeX · KALAPA
+               Kredivo Group ×2 · Mirae Asset Finance
+Ví / fintech   MoMo ×4 · Zalopay ×2 · Monee (ShopeePay) ×2 · Gimo ×2 · WeCopy Fintech
+Thanh toán     NAPAS · (MoMo/Zalopay)
+Chứng khoán    SSI Securities · VPBankS · Binance
+```
+
+Khối tài chính chiếm khoảng **1/3 bài có header** ở cả nhóm C và D. **VietinBank** (Data Architect, Deputy Manager BI) và **SSI Securities** (Senior DE, mô tả lakehouse stack gần như trùng dự án) là hai bài mới đáng chú ý nhất của nhóm D. **NAPAS** (Data Engineer, Hà Nội) yêu cầu đúng những gì dự án có: data dictionary, data lineage, phân quyền truy cập, data ingestion theo từng loại dữ liệu.
 
 ### 1.3 Lương (trích nguyên văn)
 
@@ -109,58 +120,77 @@ Tuyệt đại đa số bài đăng nhóm C ghi **"Thoả thuận"**. Những đ
 | Analytics Engineer (Joon Solutions) | 20–40M | `jd14.md:3452` |
 | DE/DA (SiciX) | lương cứng 20–40M | `jd16.md:795` |
 | Data Engineer (Good English), FPT Software | up to 75M | `jd15.md:4512` |
-| VPBank, Senior/Expert BI (thưởng) | "15–18 tháng thu nhập/năm" | `jd15.md:455` |
+| Analytics Engineer (Amanotes) | "gói thu nhập 15–18 tháng lương/năm" | `jd15.md:453-455` |
+| Senior DE (Banking project), Reco Manpower | "annual budget up to VND 960M" (~80M/tháng) | `jd17.md:1177` |
+| Data Engineer, Reco Manpower (247Express) | "Data Engineer – upto 100M" | `jd17.md:209` |
+| Operations Data Analyst, Tuyển Dụng 247 | "up to 15,000,000 gross/month" | `jd17.md:95` |
 
-Kết luận của bản trước vẫn đúng: **đòn bẩy lương rõ nhất là tiếng Anh + cloud**, không phải thêm công cụ.
+Kết luận của bản trước vẫn đúng và **mạnh hơn**: **đòn bẩy lương rõ nhất là tiếng Anh + cloud + ngân hàng**, không phải thêm công cụ. Nhóm D có bài DE ngân hàng thuần (Reco Manpower, "Banking project") đạt ~80M/tháng, trong khi bài DA vận hành fresher chỉ 15M — khoảng cách 5× nằm ở **domain + level**, không ở số lượng công nghệ liệt kê.
 
 ### 1.4 Chứng chỉ và khung chuẩn
 
-Toàn corpus, raw (dedup trong ngoặc): `DAMA / DCAM / CDMP` = 54 (18) · `BCBS 239 / Basel` = 20 (8) · `Decree 13 / PDPL` = 50 (23).
+Toàn corpus 4,01M ký tự, raw (dedup trong ngoặc): `DAMA / DCAM / CDMP` = 59 (20) · `BCBS 239 / Basel` = 23 (11) · `Decree 13 / PDPL` = 60 (28).
 
 Nhóm C thêm một yêu cầu cụ thể: **Nghị định 13 & 356** cho Data Governance (Golden Gate). Chuẩn **DAMA-DMBOK + DCAM + BCBS 239 + lưu trú dữ liệu theo SBV/NHNN** xuất hiện trong cùng một JD kiến trúc giải pháp ngân hàng (PVcomBank, `jd14.md:1921`).
+
+Nhóm D bổ sung một bài nêu **thẳng tên luật** ở cấp kỹ thuật — hiếm trong corpus: VPBank *Audit Data Analytics Specialist* (`jd17.md:2452`) yêu cầu tuân thủ **Luật An ninh mạng + Nghị định 13/2023/NĐ-CP (PDP)** khi trích xuất/xử lý dữ liệu kiểm toán, và áp dụng cụ thể **Data Masking · Anonymization · Encryption · RBAC**. Đây là mô tả gần nhất với chuỗi `pii_masking + Trino ACL + RBAC_MATRIX + audit` của dự án.
 
 ---
 
 ## 2. Tech stack — bảng mật độ đo được
 
-Đơn vị: lần/100k ký tự, raw. Cột "C dedup" để kiểm tra con số C có bị bài lặp thổi phồng không. Bảng đầy đủ 88 thuật ngữ: chạy script.
+Đơn vị: lần/100k ký tự, raw. Bảng đầy đủ 88 thuật ngữ: chạy script.
 
-### 2.1 Nền tảng không đổi qua cả ba nhóm
+### 2.1 Nền tảng không đổi qua cả bốn nhóm
 
-| Công nghệ | A | B | C | C dedup | Trạng thái dự án |
+Đây là nhóm công nghệ có mật độ **ổn định ở cả A, B, C, D** — không phải đặc điểm của một mẫu. Sắp theo mật độ nhóm D.
+
+| Công nghệ | A | B | C | D | Trạng thái dự án |
 |---|---:|---:|---:|---:|---|
-| SQL | 37,0 | 50,3 | 39,9 | 43,6 | ✅ |
-| Python | 26,6 | 36,1 | 29,8 | 32,6 | ✅ |
-| Data Quality | 21,2 | 29,9 | 24,7 | 26,7 | ✅ 9 DQ check type |
-| Spark / PySpark | 23,6 | 30,2 | 20,7 | 22,9 | ✅ |
-| AWS | 21,3 | 28,6 | 23,4 | 23,4 | ⚠️ MinIO (S3-compatible) |
-| Real-time / streaming | 19,1 | 23,3 | 19,2 | 21,1 | ✅ Spark Structured Streaming |
-| Data Governance | 16,2 | 16,9 | 16,6 | 18,0 | ✅ |
-| Airflow | 13,4 | 22,1 | 15,4 | 17,0 | ✅ |
-| CI/CD | 11,9 | 16,0 | 11,4 | 12,6 | ✅ |
-| Lakehouse | 11,2 | 17,6 | 11,1 | 12,3 | ✅ |
-| Kafka | 11,9 | 15,8 | 8,8 | 9,7 | ✅ Debezium CDC |
-| dbt | 7,1 | 12,5 | 11,6 | 12,6 | ✅ serving layer |
-| Iceberg | 3,2 | 7,6 | 4,3 | 4,6 | ✅ REST catalog |
-| Trino / Presto | 3,0 | 5,0 | 3,3 | 3,7 | ✅ |
+| SQL | 37,0 | 50,3 | 40,1 | 43,5 | ✅ |
+| Python | 26,6 | 36,1 | 29,8 | 29,9 | ✅ |
+| Data Quality | 21,2 | 29,9 | 25,7 | 22,2 | ✅ 9 DQ check type |
+| Spark / PySpark | 23,6 | 30,2 | 21,2 | 20,2 | ✅ |
+| AWS | 21,3 | 28,6 | 21,6 | 20,2 | ⚠️ MinIO (S3-compatible) |
+| Azure | 15,1 | 27,6 | 12,2 | 16,0 | ⚠️ không có (cloud-neutral) |
+| Power BI | 11,1 | 9,6 | 13,1 | 17,3 | ❌ Superset thay thế (BI layer) |
+| Databricks | 12,3 | 14,5 | 10,2 | 14,3 | ❌ (Iceberg tự dựng thay thế) |
+| GCP / BigQuery | 17,0 | 19,2 | 16,6 | 12,3 | ❌ |
+| Airflow | 13,4 | 22,1 | 15,1 | 11,6 | ✅ |
+| Data Governance | 16,2 | 16,9 | 16,2 | 9,2 | ✅ |
+| Lakehouse | 11,2 | 17,6 | 12,0 | 9,7 | ✅ |
+| CI/CD | 11,9 | 16,0 | 10,7 | 8,8 | ✅ |
+| Tableau | 5,7 | 4,5 | 6,7 | 8,5 | ❌ Superset thay thế |
+| dbt | 7,1 | 12,5 | 11,4 | 8,3 | ✅ serving layer |
+| Snowflake | 6,9 | 14,8 | 5,8 | 7,7 | ❌ |
+| Kafka | 11,9 | 15,8 | 8,6 | 6,0 | ✅ Debezium CDC |
+| Oracle | 9,0 | 8,3 | 6,0 | 4,0 | ❌ (PostgreSQL source) |
+| Docker | 5,5 | 7,2 | 4,6 | 2,8 | ✅ |
+| Iceberg | 3,2 | 7,6 | 4,4 | 2,3 | ✅ REST catalog |
+| Trino / Presto | 3,0 | 5,0 | 2,7 | 1,4 | ✅ |
 
-### 2.2 Tín hiệu **bền**: ≥2× so với A ở **cả** B lẫn C
+**Đọc bảng này thế nào**: AWS/Azure/GCP, Power BI/Tableau, Databricks/Snowflake, Oracle là **nền tảng thay thế** — thị trường nhắc nhiều vì mỗi công ty chọn một bộ. Dự án chọn bộ open-source tương đương (MinIO↔S3, Superset↔Power BI, Iceberg+Spark↔Databricks, PostgreSQL↔Oracle). Đây không phải gap về năng lực, mà là **khác lựa chọn công nghệ** — cần nói được ánh xạ, không cần thay stack (§6.3).
 
-Đây là nhóm đáng tin nhất của tài liệu: hai mẫu độc lập cùng lệch về một hướng.
+### 2.2 Tín hiệu **bền**: ≥2× so với A ở **ít nhất hai** nhóm
 
-| Khái niệm | A | B | C | Bội số B / C | Dự án |
-|---|---:|---:|---:|---:|---|
-| **MCP** | 0,4 | 1,6 | 1,5 | 4,0× / 3,8× | ❌ |
-| **Schema drift / evolution** | 0,3 | 1,4 | 1,2 | 4,7× / 4,0× | ⚠️ `ops_schema_drift_dag`: phát hiện, chưa phân loại, chưa chặn |
-| **Data Contract** | 0,4 | 2,5 | 1,2 | 6,3× / 3,0× | ✅ 34 contract YAML (`governance/datasets/`) |
-| **Anomaly detection** | 0,8 | 2,9 | 2,0 | 3,6× / 2,5× | ✅ DQ check `anomaly_detection` |
-| **Backfill** | 1,2 | 3,2 | 3,0 | 2,7× / 2,5× | ✅ qua `cob_dt` |
-| **Semantic / metric layer** | 1,5 | 3,5 | 3,8 | 2,3× / 2,5× | ❌ |
-| **ClickHouse** | 1,8 | 5,8 | 3,8 | 3,2× / 2,1× | ❌ (không khuyến nghị, xem §6.3) |
-| Reconciliation / đối soát *(B 1,8× — sát ngưỡng)* | 1,9 | 3,5 | 4,0 | 1,8× / 2,1× | ⚠️ có, chưa phân loại kết quả |
-| **Freshness** | 0,2 | 0,6 | 1,2 | 3,0× / 6,0× | ✅ `governance/freshness_checks.py` (n nhỏ: 16 lần toàn corpus) |
+Nhóm đáng tin nhất của tài liệu: nhiều mẫu độc lập cùng lệch về một hướng. Bản 2026-09-29 dùng quy tắc "cả B lẫn C"; nay có bốn mẫu nên nâng thành "≥2 nhóm".
 
-Hai dòng ❌ là **MCP** và **Semantic layer**. Chúng không tách rời nhau, vì các JD nhóm C nêu chúng trong cùng một câu (xem §5.6).
+| Khái niệm | A | B | C | D | Bội số B/C/D | Dự án |
+|---|---:|---:|---:|---:|---|---|
+| **Semantic / metric layer** | 1,5 | 3,5 | 3,5 | **7,6** | 2,3× / 2,3× / **5,1×** | ❌ (đã có `dbt/models/semantic/` — xem §5.6) |
+| **Schema drift / evolution** | 0,3 | 1,4 | 1,2 | 0,9 | 4,7× / 4,0× / **3,0×** | ✅ nay đã phân loại additive/breaking |
+| **Anomaly detection** | 0,8 | 2,9 | 1,9 | 1,9 | 3,6× / 2,4× / 2,4× | ✅ DQ check `anomaly_detection` |
+| **Payment / settlement / ledger** | 0,7 | 1,7 | 2,9 | 1,6 | 2,4× / 4,1× / 2,3× | ⚠️ nghiệp vụ, chưa có mart |
+| **Freshness** | 0,2 | 0,6 | 1,4 | 1,1 | 3,0× / 7,0× / 5,5× | ✅ `freshness_exporter` + `ops_schema_drift_dag` (n nhỏ) |
+| **Data Contract** | 0,4 | 2,5 | 1,1 | 0,5 | 6,2× / 2,8× / 1,2× | ✅ 34 contract YAML (`governance/datasets/`) |
+| **MCP** | 0,4 | 1,6 | 2,3 | 0,7 | 4,0× / 5,7× / 1,7× | ❌ (có mặt ở CẢ 4 nhóm — xem đính chính §11) |
+| **ClickHouse** | 1,8 | 5,8 | 4,2 | 2,5 | 3,2× / 2,3× / 1,4× | ❌ (không khuyến nghị, xem §6.3) |
+| **Backfill** | 1,2 | 3,2 | 2,7 | 1,1 | 2,7× / 2,3× / 0,9× | ✅ qua `cob_dt` |
+| Reconciliation / đối soát | 1,9 | 3,5 | 4,0 | — | 1,8× / 2,1× / thấp | ⚠️ có, chưa phân loại kết quả |
+
+**Đọc bảng này thế nào**: `Semantic / metric layer` giờ là **tín hiệu mạnh nhất và duy nhất tăng ở cả ba nhóm mới**, đặc biệt nhóm D (7,6/100k — gấp 5× nhóm A, mật độ cao nhất trong mọi khái niệm "chưa-có" của dự án). Về `MCP`: mật độ nhóm D chỉ 0,7 (thấp hơn B 1,6 và C 2,3), nhưng **kiểm chứng 2026-11 cho thấy MCP xuất hiện ở cả bốn nhóm** — `jd11.md:180` (B), `jd12.md:674` (B), `jd13.md:87` (B), `jd14.md:1360/1404/1456/1510/1859/2344` (C), `jd15.md:17/26/59` (C), `jd16.md:3829` (C), **`jd17.md:1973` và `jd17.md:4122` (D)**, **`jd20_AE.md:310` (D)**. Nên kết luận cũ "D không lặp lại" là **sai ở mức hiện diện** (chỉ đúng ở mức mật độ). Vì nhóm D ghép MCP **cùng** semantic layer trong một yêu cầu (`jd17.md:1329-1330`), hai khái niệm này vẫn nên làm liền nhau, không tách ưu tiên — xem đính chính §11.
+
+`Data Contract` và `Backfill` là tín hiệu **của mẫu B** nhiều hơn: cả hai tụt về gần mức A ở D.
 
 ### 2.3 Tăng ở B nhưng **không lặp lại** ở C — đính chính bản trước
 
@@ -248,12 +278,12 @@ AI / agent / RAG       —             3
 
 ### 4.1 Hệ quả: Medallion Lakehouse là hàng phổ thông
 
-137 trên 283 repo có `lakehouse / medallion / iceberg / delta` trong tên. Điểm khác biệt của dự án vẫn nằm ở những thứ **không repo nào nêu**:
+**Đếm lại 2026-11** trên `repo.md` hiện tại: **290** repo unique (`github.com/…`), **149** repo có `lakehouse / medallion / iceberg / delta` trong tên (≈51%), CDC **12**, banking/finance **25**, fraud **3**, AML **1**. (Con số 137/283 của bản 2026-10-01 thấp hơn một chút — lệch do cách đếm sub-path.) Điểm khác biệt của dự án vẫn nằm ở những thứ **không repo nào nêu**:
 
-| Năng lực | 283 repo đối thủ | Dự án này |
+| Năng lực | 290 repo đối thủ | Dự án này |
 |---|---|---|
-| Medallion + Iceberg + Trino | phổ biến | ✅ |
-| CDC Debezium | 11 repo | ✅ |
+| Medallion + Iceberg + Trino | phổ biến (149 repo) | ✅ |
+| CDC Debezium | 12 repo | ✅ |
 | Data contract | ≥1 repo (có trong tên) | ✅ 34 contract |
 | Evidence manifest đo từ platform | không repo nào nêu | ✅ |
 | CI gate có negative test | không repo nào nêu | ✅ `trino-integration-gate` |
@@ -279,10 +309,12 @@ Streaming     Apache Storm · Kafka · Spark Streaming
 Công cụ model Power Designer · SQL Developer Data Modeler · ERwin
 ```
 
-Trong khối JD lồng cùng file có một mô tả **reconciliation cụ thể hơn mọi JD khác**:
+Trong file `jd14.md` có một mô tả **reconciliation cụ thể hơn mọi JD khác** — nhưng lưu ý đây là **một bài của nhà tuyển dụng KHÁC**, không phải ABBANK (xem đính chính §11):
 
 > "Xây dựng quy trình ETL/ELT: Extract → Transform → Validate → Load → Reconcile." (`jd14.md:605`)
 > "Xây dựng cơ chế Data Reconciliation, phân loại Matched / Mismatch / Missing / Duplicate / Pending." (`jd14.md:609`)
+
+Khối `jd14.md:603-619` (DMS/OMS/ERP/WMS, Ecommerce, FMCG/Retail/Distribution, SQL Server, Excel/VBA/Power Query) là ad **Data Integration ngành bán lẻ/phân phối** bị **mất dòng header công ty** khi scrape — nó nằm trong vùng văn bản của ABBANK nhưng không thuộc ABBANK. Stack ABBANK thật nằm ở `jd14.md:39-41`. Giá trị dùng được: đây là biến thể yêu cầu reconciliation của **thị trường nói chung**, không phải của riêng ngân hàng.
 
 Dự án đã có reconciliation (DQ check, `reconcile_cdc.py`) nhưng kết quả là pass/fail. **Chưa có năm lớp phân loại này.**
 
@@ -383,17 +415,21 @@ Kết luận giữ nguyên: "tôi xây Customer 360 mart" yếu hơn "tôi xây 
 
 ### 6.2 Khoảng trống thật — xếp lại theo số đo mới
 
-| # | Khoảng trống | Căn cứ | Ưu tiên | Ghi chú |
+| # | Khoảng trống | Căn cứ | Ưu tiên | Trạng thái kiểm chứng 2026-11 |
 |---|---|---|---|---|
-| 1 | **Schema drift: additive vs breaking + chặn publish Gold** | tín hiệu bền 4,7× / 4,0× | **P1** | Vẫn mở từ ROADMAP 2.2. `additive`/`breaking` vẫn 0 lần trong code; DAG chỉ phủ 3 bảng |
-| 2 | **Mart nợ quá hạn**: DPD → nhóm nợ, roll rate, vintage theo MOB | §5.3; 0/283 repo đối thủ có | **P1** | Xem điều kiện ngay dưới bảng |
-| 3 | **Semantic layer**: định nghĩa metric chuẩn (NPL ratio, CASA ratio, late payment rate…), một nguồn cho dbt · Superset · API | tín hiệu bền 2,3× / 2,5×; dedup 68 | **P1** | dbt-core 1.12 đã có semantic models; không cần engine mới |
-| 4 | **Reconciliation 5 lớp**: Matched / Mismatch / Missing / Duplicate / Pending | sát ngưỡng (B 1,8×, C 2,1×) + §5.1 | **P2** | Nâng DQ reconciliation từ pass/fail thành bảng kết quả phân loại |
-| 5 | **dbt `sources.freshness` + `contract: enforced` + SQLFluff** | §5.5 (MoMo), freshness 6× ở C | **P2** | Rẻ (S). Gộp với ROADMAP 2.6 `dbt_expectations` |
-| 6 | **Feature store** | 99 raw → **42 dedup** | **P2** (hạ từ P1) | Bản trước xếp cao nhất vì đếm raw; sau dedup đứng sau semantic layer |
-| 7 | **MCP read-only trên semantic layer** | MCP 4,0× / 3,8× | **P3** | Chỉ làm **sau** #3; phải đi qua Trino ACL (ADR-0016), chỉ đọc serving |
-| 8 | Detection Model (ML) + Alert routing | §5.2 | P2 | Giữ từ bản trước |
-| 9 | CLV mart | CLV/LTV 26 raw / 14 dedup | P3 (hạ từ P2) | Mật độ thấp; phần lớn từ JD game/marketing |
+| 1 | **Schema drift: additive vs breaking + chặn publish Gold** | tín hiệu bền 4,7× / 4,0× | ~~P1~~ | ✅ **ĐÃ XONG** — `governance/schema_drift.py` có `NONE/ADDITIVE/BREAKING`, CLI `exit 1` khi BREAKING; `tests/governance/test_schema_drift_severity.py` |
+| 2 | **Mart nợ quá hạn**: DPD → nhóm nợ, roll rate, vintage theo MOB | §5.3; 0/290 repo đối thủ có | ~~P1~~ | ✅ **ĐÃ XONG** — `serving/loan_delinquency_current.sql` (dpd_bucket/debt_group/prev_dpd_bucket/vintage_month/is_npl) + `loan_roll_rate_current.sql` + `loan_vintage_current.sql` |
+| 3 | **Semantic layer**: định nghĩa metric chuẩn (NPL ratio, CASA ratio, late payment rate…), một nguồn cho dbt · Superset · API | tín hiệu bền 2,3× / 2,5×; dedup 68 | ~~P1~~ | ✅ **ĐÃ XONG** — `dbt/models/semantic/_semantic_models.yml` (MetricFlow): semantic models `loan_delinquency`, `loan_portfolio_risk`; metrics `npl_ratio`, `late_payment_rate`, `ever_30_plus_loans` |
+| 4 | **Reconciliation 5 lớp**: Matched / Mismatch / Missing / Duplicate / Pending | sát ngưỡng (B 1,8×, C 2,1×) + §5.1 | **P2** | ❌ **VẪN MỞ** — chỉ có `code_etl/cdc/reconcile_cdc.py` (pass/fail) |
+| 5a | **dbt `contract: enforced`** | §5.5 (MoMo) | ~~P2~~ | ✅ **ĐÃ XONG** — `contract:` trong `dbt/models/serving/_serving_models.yml` |
+| 5b | **dbt `sources.freshness`** | freshness 6× ở C | P2 | ❌ **VẪN MỞ (có chủ đích)** — `_gold_sources.yml` không có block `freshness:`; comment trong serving models giải thích Trino `createView` = NOT_SUPPORTED nên đây là quyết định đã ghi lại, không phải thiếu sót |
+| 5c | **SQLFluff** | §5.5 (MoMo) | P2 | ❌ **VẪN MỞ** — CI lint chỉ chạy `ruff` (Python), không có `.sqlfluff` |
+| 6 | **Feature store** | 99 raw → **42 dedup** | **P2** | ❌ **VẪN MỞ** |
+| 7 | **MCP read-only trên semantic layer** | MCP có ở cả 4 nhóm (§11) | **P3** | ❌ **VẪN MỞ** — nhưng nên làm **liền với #3** vì nhóm D ghép đôi (`jd17.md:1329-1330`) |
+| 8 | Detection Model (ML) + Alert routing | §5.2 | P2 | ⚠️ **MỘT PHẦN** — có `serving/fraud_risk_txn_current.sql` + `serving/aml_monitoring_current.sql`; ML alert routing chưa xác nhận |
+| 9 | CLV mart | CLV/LTV 26 raw / 14 dedup | P3 | ⚠️ chưa xác nhận trong serving list |
+
+> **Ghi chú về trạng thái**: mục #1/#2/#3 và 5a của bản 2026-10-01 đã được implement trong khoảng **72 commit** sau ngày đo. Bảng trên giữ nguyên *căn cứ thị trường* (không đổi) và chỉ cập nhật cột trạng thái. Ba mục còn mở rẻ và cụ thể nhất: **#4 (reconciliation 5 lớp), #5b (freshness), #5c (SQLFluff)**.
 
 **Điều kiện của #2**, vì nếu không nói rõ thì mart sẽ ra số vô nghĩa:
 
@@ -424,24 +460,28 @@ Kết luận giữ nguyên: "tôi xây Customer 360 mart" yếu hơn "tôi xây 
 | ROADMAP §2.5: "`runbook` 37 không tái lập được, đúng là 9" | Script: 36 trên đúng tập file cũ | **37 đúng, 9 sai.** Đã sửa trong ROADMAP |
 | "RTO/RPO = 0" | vẫn 0 trên 3,31M ký tự | **Giữ.** |
 | "`Data Vault` (44) nhiều hơn `Great Expectations` (19)" | 44 / 23 raw; 23 / 15 dedup; Data Vault giảm 1,7 → 0,5 | **Giữ thứ tự, nhưng Data Vault đang giảm.** Mapping doc hiện có là đủ |
+| Toàn bộ tài liệu này (bản 2026-10-01) | Kiểm chứng 2026-11: 5 lỗi + trạng thái code | **Xem §11.** Sửa §1.3 (Amanotes≠VPBank), §5.1 (khối reconciliation ≠ ABBANK), §2.2 (MCP có ở cả 4 nhóm), §4 (repo 290/149), §0 (C dedup 635.597) |
 
 ---
 
 ## 8. Hành động đề xuất
 
+> **Cập nhật 2026-11**: cả ba hạng mục P1 của bản 2026-10-01 **đã được implement** (xem §6.2 và §11). Danh sách dưới đây giữ nguyên làm hồ sơ; mục còn mở nằm ở P2/P3.
+
 ### P1 — Ba hạng mục, mỗi cái có căn cứ độc lập
 
-1. **Schema drift severity + quyền chặn** (ROADMAP 2.2). Tín hiệu bền nhất corpus. Primitive đã có trong `governance/schema_drift.py`.
-2. **Mart nợ quá hạn** (`loan_delinquency`): DPD theo khoản vay từ `fact_loan_payment.days_late`, nhóm nợ theo TT 11/2021, roll-rate matrix theo tháng, vintage theo MOB. **Làm hai bước**: (a) generator có trạng thái trễ hạn nối tiếp; (b) mart. Làm (b) trước (a) là tạo ra con số không có nghĩa.
-3. **Semantic layer**: dbt semantic models cho các metric ngân hàng đang được tính rải rác trong Gold SQL (NPL ratio, late payment rate, overdue rate…). Một định nghĩa, nhiều nơi dùng.
+1. ~~**Schema drift severity + quyền chặn** (ROADMAP 2.2)~~ — ✅ đã xong (`governance/schema_drift.py`).
+2. ~~**Mart nợ quá hạn** (`loan_delinquency`)~~ — ✅ đã xong (`loan_delinquency_current` + `loan_roll_rate_current` + `loan_vintage_current`).
+3. ~~**Semantic layer**~~ — ✅ đã xong (`dbt/models/semantic/`, MetricFlow).
 
-### P2
+### P2 — còn mở
 
-4. Reconciliation 5 lớp · 5. dbt freshness + contract enforced + SQLFluff + `dbt_expectations` · 6. Feature store · 7. Detection Model + Alert routing.
+4. **Reconciliation 5 lớp** · 5b. **dbt `sources.freshness`** · 5c. **SQLFluff** (+ `dbt_expectations`) · 6. **Feature store** · 7. Detection Model + Alert routing (⚠️ `fraud_risk_txn`/`aml_monitoring` đã có, ML alert chưa).
+   *(5a `contract: enforced` đã xong.)*
 
-### P3
+### P3 — còn mở
 
-8. MCP read-only trên semantic layer (sau #3, qua Trino ACL) · 9. CLV mart.
+8. **MCP read-only trên semantic layer** — nên làm **liền mạch với #3** (đã xong), vì nhóm D ghép đôi MCP + semantic layer trong cùng yêu cầu (`jd17.md:1329-1330`). Phải đi qua Trino ACL (ADR-0016), chỉ đọc serving · 9. CLV mart.
 
 ### Không làm
 
@@ -467,3 +507,51 @@ parallel run + reconciliation vs legacy    "đã test lại"
 - Tài liệu đo trên corpus pin bằng MD5 ở **Mục 0**. Nếu `thamkhao/JD/` đổi, chạy lại `scripts/measure_jd_corpus.py` và cập nhật **toàn bộ** bảng, không cập nhật từng phần. Script từ chối chạy nếu có file `.md` chưa được xếp vào nhóm.
 - Corpus nằm ngoài repo, không được version control. Các số ở đây là **`metric_type: manual`** theo `docs/evidence/metrics-manifest.yaml`: đo một lần, có phương pháp và ngày đo, **không** đưa vào `verify_readme_metrics.py`.
 - Khi trích số từ tài liệu này: ghi ngày đo và nói rõ raw hay dedup.
+
+---
+
+## 11. Đính chính và trạng thái (kiểm chứng 2026-11)
+
+Đợt kiểm chứng #2 chạy lại `scripts/measure_jd_corpus.py` (22/22 MD5 khớp với §0) và kiểm từng trích dẫn bằng `grep` + đọc cửa sổ nhỏ. Kết quả:
+
+### 11.1 Năm lỗi đã sửa
+
+| # | Mục | Lỗi bản 2026-10-01 | Đã sửa thành |
+|---|---|---|---|
+| 1 | §1.3 | Gán "15–18 tháng thu nhập/năm" cho **VPBank** (`jd15.md:455`) | Là **Amanotes** Analytics Engineer (`jd15.md:453-455`). VPBank có trong jd15 nhưng ở `jd15.md:308-310` |
+| 2 | §5.1 | Coi khối reconciliation (`jd14.md:605-609`) là "lồng trong khối ABBANK" | Là **ad bán lẻ/FMCG riêng biệt** (DMS/OMS/ERP/WMS, Excel/VBA/Power Query) mất header công ty. Stack ABBANK thật ở `jd14.md:39-41` |
+| 3 | §2.2 | "MCP **không lặp lại** ở D" | MCP **có mặt ở cả 4 nhóm**: `jd17.md:1973`, `jd17.md:4122`, `jd20_AE.md:310`. Chỉ *mật độ* thấp ở D, không phải *vắng mặt* |
+| 4 | §4 | 283 repo · 137 có lakehouse/iceberg | **290** repo · **149** có lakehouse/iceberg (≈51%) · CDC **12** |
+| 5 | §0 | Nhóm C dedup = 595.597 | **635.597** (đảo chữ số) |
+
+### 11.2 Trạng thái code — bản 2026-10-01 đã cũ
+
+Giữa ngày đo (2026-10-01) và đợt kiểm chứng có **72 commit**. Nhiều "khoảng trống P1" đã được lấp. Bảng đầy đủ ở **§6.2**. Tóm tắt:
+
+- ✅ **Đã xong**: schema drift severity (#1) · mart nợ quá hạn + roll rate + vintage (#2) · semantic layer MetricFlow (#3) · dbt `contract: enforced` (5a).
+- ❌ **Còn mở**: reconciliation 5 lớp (#4) · `sources.freshness` (5b, có chủ đích vì Trino `createView` không hỗ trợ) · SQLFluff (5c) · feature store (#6) · MCP read-only (#7) · CLV mart (#9).
+- ⚠️ **Một phần**: Detection Model + Alert routing (#8) — `serving/fraud_risk_txn_current.sql` và `serving/aml_monitoring_current.sql` đã có.
+
+### 11.3 Công ty tài liệu bỏ sót
+
+Đợt kiểm chứng cho thấy **jd12.md và jd13.md gần như chưa được phân tích** (~40 công ty vắng mặt). Đáng chú ý nhất:
+
+- **GreenNode (VNG AI cloud)** `jd13.md:1463-1498` — charter "business ontology / metric layer from scratch / semantic layer cho BI + AI agent qua MCP", nêu tên **"dbt Semantic Layer, Cube, LookML, MCP servers"** (`jd13.md:1493`). Đây là tín hiệu semantic-layer/MCP **mạnh hơn** mọi thứ bản 2026-10-01 trích.
+- **MBBank** `jd14.md:4171` — không có trong danh sách ngân hàng §1.2.
+- **SalesNow** `jd13.md:2231-2289` (remote, "SalesNow MCP used from Claude/Claude-Sonnet", dbt, RAG).
+- **Qode.World** `jd14.md:3276` (graph models, vector DB) · **Golden Gate** `jd14.md:1085/2599` · **Asia White Collar** `jd14.md:1840` (MCP Platform) · **Athena AI, Upskills, CADIVI, Galaxy Holdings, Central Retail, EPOS, Saint-Gobain, Joon Solutions, GEM Careers, Amaris, LG CNS, WeCopy Fintech, FPT Telecom, Viettel Post, Renova Cloud** · jd12: **PVcomBank ×2, ACB, LPBank, GPBank, SiciX, SmartOSC, MiTek, NashTech, Elfie, Maple Labs, I-Konect, FPT Software Innovation, KIMEI, HEINEKEN ×2, Starbucks, ETC Recruiter**.
+
+### 11.4 Đã xác nhận ĐÚNG (không cần bàn lại)
+
+- §2.3 "AI-assisted dev đỉnh ở nhóm B" — **rất mạnh**: `jd9.md` một mình 16 hits (Cursor/Claude/Copilot), `jd10.md` 4 hits. jd9 là nguồn dày nhất toàn corpus.
+- Trích dẫn Mcredit (`jd14.md:1815,1835`), Talentnet (`:2787`), Zalopay (`:1588`), BIDV (`:3246`), MoMo (`:3538`), MWG/Thế Giới Di Động (`:1456`), Viettel Cyber Security (`:2344`) — **nguyên văn chính xác**, đúng tên công ty.
+- SiciX "lương cứng 20–40M" (`jd16.md:795`) — chính xác.
+- Mật độ theo nhóm (MCP 0,4/1,6/2,3/0,7 · semantic layer 1,5/3,5/3,5/**7,6** · feature store 3,0/2,9/2,4/0,5 · data product 3,1/2,7/3,7/8,1 · vector 4,7/3,1/8,4/6,3) — **khớp** một lần chạy JSON trực tiếp.
+
+### 11.5 Cách chạy lại trên Windows
+
+```bash
+PYTHONIOENCODING=utf-8 PYTHONUTF8=1 py -3 scripts/measure_jd_corpus.py ../thamkhao/JD
+```
+
+Console mặc định là cp1258 nên nếu không đặt `PYTHONIOENCODING` sẽ lỗi `UnicodeEncodeError` ở dòng có tiêu đề tiếng Việt — đây là lỗi môi trường, không phải lỗi logic.
