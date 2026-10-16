@@ -4,6 +4,7 @@
 > **Nguồn**: `thamkhao/dataset_thamkhao/` — 2,1 GB · 19 file CSV · 3 bộ dữ liệu độc lập
 > **Mục đích**: Đánh giá dữ liệu tham khảo có dùng được cho Banking Data Platform không, và ở mức nào
 > **Tài liệu liên quan**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) · [`COURSE_BASELINE_DIFF.md`](COURSE_BASELINE_DIFF.md)
+> **Cập nhật trạng thái 2026-11**: cả ba mục P1 và hai mục P2 (#5, #6) của §6 **đã được implement**. Mục P2 #4 (bốn KPI Q8/Q9/Q13/Q15) **vẫn mở**. Chi tiết ở **§8** ở cuối tài liệu.
 
 ---
 
@@ -354,3 +355,28 @@ Không phải để huấn luyện — để **đo rule hiện tại**: precisio
 - Các số phía repo đo bằng `git grep` / parse YAML trên `main` @ `b787616`, ngày 2026-09-21.
 - Phân loại **`metric_type: manual`** theo chuẩn `docs/evidence/metrics-manifest.yaml` — **không** đưa vào `verify_readme_metrics.py`.
 - Không trích con số nào từ tài liệu này vào README mà không kèm ngày đo.
+
+---
+
+## 8. Trạng thái hành động (kiểm chứng 2026-11)
+
+Đối chiếu §6 với code hiện tại:
+
+| Mục | §6 đề xuất | Trạng thái | Bằng chứng |
+|---|---|---|---|
+| P1 #1 | `geo_velocity_flag` trong `aml_monitoring.yml` (join `silver.dim_location`, COUNT DISTINCT state/24h) | ✅ **ĐÃ XONG** | `code_etl/gold/risk/aml_monitoring.yml:112` (`geo_velocity_flag`), `:75` (JOIN dim_location), `:150` (trọng số 3); test `tests/gold/test_aml_geo_velocity.py` |
+| P1 #2 | Test `require_snapshots` ⊆ bảng trong `sql` | ✅ **ĐÃ XONG** | `tests/governance/test_declared_sources_match_sql.py` |
+| P1 #3 | Đưa `is_fraud` vào mart fraud/AML làm cột đối chứng | ✅ **ĐÃ XONG** | `aml_monitoring.yml:129` (`MAX(is_fraud) AS is_fraud_flag`), `:130` (fraud_reason), `:156`; `_gold_sources.yml:297,316` |
+| P2 #4 | Bốn KPI: credit utilization (Q8) · dormant cards (Q9) · MCC outlier (Q13) · heatmap state×category (Q15) | ❌ **VẪN MỞ** | không có model nào tên `credit_utilization` / `dormant` / `mcc_outlier` / `heatmap` trong `dbt/` hay `code_etl/` |
+| P2 #5 | `fraud_reason` suy ra từ điều kiện đã kích hoạt | ✅ **ĐÃ XONG** | `data_generator/generators/digital_banking.py`; test `tests/data_generator/test_fraud_reason.py` |
+| P2 #6 | Phân phối thực tế: amount lognormal · refund âm · lỗi tổ hợp | ✅ **ĐÃ XONG** (amount + refund) | `data_generator/generators/amounts.py` (`lognormal_params(median, p99)`, bỏ `random.uniform`); `card_crm.py:239-240` (REFUND/REVERSAL âm). ⚠️ lỗi tổ hợp (multi-label error) chưa xác nhận |
+
+**Ghi chú quan trọng — bộ tham khảo LÀ đầu vào thiết kế, không phải "không dùng".**
+`amounts.py` (docstring đầu file) trích trực tiếp `thamkhao/dataset_thamkhao/` (157.224 giao dịch
+thẻ, mean 43,72 vs median 31,14) làm **căn cứ thực nghiệm** để chuyển sang log-normal. Vậy phân
+phối của Xóm Bank đã đi thẳng vào generator của repo.
+
+**Còn mở duy nhất**: bốn KPI §6 P2 #4 (Q8/Q9/Q13/Q15) — đều rẻ, đều là câu hỏi nghiệp vụ ngân hàng
+thật, và Q8/Q9/Q13 cần `dim_card`/`dim_location`/`fact_card_txn` đã có sẵn.
+
+Bộ test hiện tại: **90 file** `tests/**/test_*.py`.
