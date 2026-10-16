@@ -44,6 +44,9 @@ sql: |
       t.is_fraud,
       t.fraud_reason,
       t.status,
+      t.merchant_id,
+      t.payment_channel,
+      t.refund_flag,
       t.transaction_date,
       t.created_ts,
       t.cob_dt

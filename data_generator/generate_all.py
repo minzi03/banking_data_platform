@@ -368,6 +368,26 @@ def main():
                 "mcc_code", "description", "category_group", "is_high_risk", "last_updated"
             ], mcc)
 
+        # ── Merchant (needed by online_transaction QR/POS) ──────────────
+        logger.info("")
+        logger.info("═══ MERCHANT (shared reference) ═══")
+        merchants = generate_merchants(
+            db_cfg.get("merchant", {}).get("row_count", 2000),
+            db_cfg.get("merchant", {}),
+            mcc_code_list,
+            db_cfg.get("location", {}).get("cities")
+        )
+        merchant_ids = [r[0] for r in merchants]
+        writer.write_rows("digital_banking", "merchant", [
+            "merchant_id", "merchant_name", "merchant_category", "mcc_code",
+            "city", "state", "risk_category", "is_active", "last_updated"
+        ], merchants)
+        if csv_writer:
+            csv_writer.write_rows("digital_banking", "merchant", [
+                "merchant_id", "merchant_name", "merchant_category", "mcc_code",
+                "city", "state", "risk_category", "is_active", "last_updated"
+            ], merchants)
+
         # ── Card & CRM (3 tables) ───────────────────────────────────────
         logger.info("")
         logger.info("═══ CARD & CRM ═══")
@@ -462,13 +482,14 @@ def main():
             writer, csv_writer, "digital_banking", "online_transaction", [
                 "transaction_id", "account_id", "device_id", "location_id",
                 "customer_id", "transaction_type", "channel", "amount", "currency",
-                "is_fraud", "fraud_reason", "status", "transaction_date",
+                "is_fraud", "fraud_reason", "status", "merchant_id",
+                "payment_channel", "refund_flag", "transaction_date",
                 "created_ts", "last_updated"
             ],
             db_cfg["online_transaction"]["row_count"],
             lambda start, n: generate_online_transactions(
                 n, db_cfg["online_transaction"], customer_ids, device_ids, location_ids,
-                high_risk_location_ids, start_id=start,
+                high_risk_location_ids, start_id=start, merchant_ids=merchant_ids,
             ),
         )
 
@@ -486,24 +507,6 @@ def main():
                 "date_opened", "date_resolved", "resolution_time_hrs",
                 "satisfaction_score", "last_updated"
             ], tickets)
-
-        # Merchant
-        logger.info("  Generating merchants...")
-        merchants = generate_merchants(
-            db_cfg.get("merchant", {}).get("row_count", 2000),
-            db_cfg.get("merchant", {}),
-            mcc_code_list,
-            db_cfg.get("location", {}).get("cities")
-        )
-        writer.write_rows("digital_banking", "merchant", [
-            "merchant_id", "merchant_name", "merchant_category", "mcc_code",
-            "city", "state", "risk_category", "is_active", "last_updated"
-        ], merchants)
-        if csv_writer:
-            csv_writer.write_rows("digital_banking", "merchant", [
-                "merchant_id", "merchant_name", "merchant_category", "mcc_code",
-                "city", "state", "risk_category", "is_active", "last_updated"
-            ], merchants)
 
         # ── Ops Metadata ────────────────────────────────────────────────
         logger.info("")

@@ -73,6 +73,20 @@ def process_cdc_batch(batch_df, batch_id: int, target_table: str, config: dict, 
     # Write invalid events to DLQ
     invalid_count = write_invalid_to_dlq(dlq_df, batch_id)
 
+    # Static dimension join (khoá new2 §4.3) — TUỲ CHỌN, chỉ khi config khai
+    # `enrichment`. Đọc lại Silver dim mỗi micro-batch; ghi bảng enriched riêng,
+    # KHÔNG đụng Bronze (Bronze phải giữ raw).
+    enrichment = config.get("enrichment")
+    if enrichment:
+        from stream_enrichment import enrich_batch, write_enrichment
+
+        try:
+            enriched = enrich_batch(spark, valid_df, enrichment["joins"], batch_id)
+            write_enrichment(spark, enriched, enrichment["target_table"], batch_id)
+        except Exception as exc:  # noqa: BLE001
+            # Enrichment lỗi KHÔNG được làm mất event đã vào Bronze (đã ghi ở trên).
+            print(f"[Batch {batch_id}] ⚠ enrichment failed (Bronze intact): {exc}")
+
     if invalid_count > 0:
         print(f"[Batch {batch_id}] ⚠ DLQ: {invalid_count} invalid events routed to cdc_dead_letter")
         print(f"[Batch {batch_id}] Batch completed: {valid_count} valid → Bronze, {invalid_count} invalid → DLQ")

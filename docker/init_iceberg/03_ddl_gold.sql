@@ -231,6 +231,79 @@ PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
+-- MERCHANT QR/POS — merchant acquiring marts (khoá new2)
+-- =============================================================================
+
+-- MERCHANT_DAILY_SUMMARY (grain: merchant_id × txn_date)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_daily_summary (
+    merchant_id         BIGINT,
+    merchant_name       STRING,
+    merchant_category   STRING,
+    mcc_code            STRING,
+    city                STRING,
+    risk_category       STRING,
+    txn_date            DATE,
+    txn_year            INT,
+    txn_month           INT,
+    txn_count           BIGINT,
+    gross_amount        DECIMAL(18,2),
+    avg_txn_amount      DECIMAL(18,2),
+    refund_rate         DECIMAL(9,4),
+    qr_count            BIGINT,
+    pos_count           BIGINT,
+    peak_hour           INT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- MERCHANT_RANKING (grain: merchant_id × txn_month)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_ranking (
+    merchant_id         BIGINT,
+    merchant_name       STRING,
+    merchant_category   STRING,
+    mcc_code            STRING,
+    city                STRING,
+    txn_year            INT,
+    txn_month           INT,
+    txn_count           BIGINT,
+    revenue             DECIMAL(18,2),
+    prev_revenue        DECIMAL(18,2),
+    pop_growth_rate     DECIMAL(9,4),
+    rank_in_mcc         BIGINT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- MERCHANT_360 (grain: merchant_id, daily snapshot)
+CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_360 (
+    merchant_id          BIGINT,
+    merchant_sk          STRING,
+    merchant_name        STRING,
+    merchant_category    STRING,
+    mcc_code             STRING,
+    city                 STRING,
+    state                STRING,
+    risk_category        STRING,
+    revenue_90d          DECIMAL(18,2),
+    txn_count_90d        BIGINT,
+    avg_daily_revenue    DECIMAL(18,2),
+    active_days_90d      BIGINT,
+    cash_flow_cv         DECIMAL(9,4),
+    revenue_last30       DECIMAL(18,2),
+    revenue_prev30       DECIMAL(18,2),
+    revenue_growth_30d   DECIMAL(9,4),
+    advisory_product_hint STRING,
+    cob_dt               DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
 -- RISK — portfolio / fraud / AML marts
 -- =============================================================================
 

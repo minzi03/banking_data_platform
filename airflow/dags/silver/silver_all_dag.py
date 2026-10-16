@@ -52,6 +52,7 @@ DIM_JOBS = [
     ("dim_location", "scd_type1.py", "dims/dim_location.yml"),
     ("dim_customer", "scd_type2.py", "dims/dim_customer.yml"),
     ("dim_account",  "scd_type2.py", "dims/dim_account.yml"),
+    ("dim_merchant", "scd_type2.py", "dims/dim_merchant.yml"),
     ("dim_deposit",  "scd_type1.py", "dims/dim_deposit.yml"),
     ("dim_loan",     "scd_type1.py", "dims/dim_loan.yml"),
 ]

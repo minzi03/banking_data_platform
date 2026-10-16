@@ -36,6 +36,26 @@ USING iceberg
 PARTITIONED BY (is_current)
 TBLPROPERTIES ('format-version' = '2');
 
+-- 1b. DIM_MERCHANT (SCD Type 2 — merchant acquiring directory, khoá new2)
+CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_merchant (
+    merchant_sk         STRING,
+    merchant_id         BIGINT,
+    merchant_name       STRING,
+    merchant_category   STRING,
+    mcc_code            STRING,
+    city                STRING,
+    state               STRING,
+    risk_category       STRING,
+    is_active           INT,
+    effective_from      DATE,
+    effective_to        DATE,
+    is_current          INT,
+    last_updated        TIMESTAMP
+)
+USING iceberg
+PARTITIONED BY (is_current)
+TBLPROPERTIES ('format-version' = '2');
+
 -- 2. DIM_ACCOUNT (SCD Type 2 — track balance, status, close_date)
 CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_account (
     account_sk          STRING,
@@ -283,6 +303,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.fact_online_transaction (
     is_fraud            INT,
     fraud_reason        STRING,
     status              STRING,
+    merchant_id         BIGINT,
+    payment_channel     STRING,
+    refund_flag         INT,
     transaction_date    TIMESTAMP,
     created_ts          TIMESTAMP,
     cob_dt              DATE
@@ -303,6 +326,31 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.fact_support_ticket (
     date_resolved       TIMESTAMP,
     resolution_time_hrs DECIMAL(8,2),
     satisfaction_score  INT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- 14. FACT_LOAN_PAYMENT (thanh toán khoản vay, full snapshot)
+CREATE TABLE IF NOT EXISTS lakehouse.silver.fact_loan_payment (
+    payment_id          BIGINT,
+    loan_id             BIGINT,
+    product_code        STRING,
+    branch_code         STRING,
+    customer_id         BIGINT,
+    customer_sk         STRING,
+    payment_date        DATE,
+    scheduled_amount    DECIMAL(18,2),
+    amount_paid         DECIMAL(18,2),
+    principal_component DECIMAL(18,2),
+    interest_component  DECIMAL(18,2),
+    penalty             DECIMAL(18,2),
+    outstanding_after   DECIMAL(18,2),
+    days_late           INT,
+    payment_method      STRING,
+    payment_status      STRING,
+    late_payment_flag   INT,
     cob_dt              DATE
 )
 USING iceberg

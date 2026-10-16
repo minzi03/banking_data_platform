@@ -145,7 +145,7 @@ flowchart LR
     %% =========================================================
 
     subgraph Orchestration["Orchestration"]
-        AF["Apache Airflow<br/>19 DAGs"]
+        AF["Apache Airflow<br/>22 DAGs"]
         MAINT["Iceberg<br/>Maintenance"]
     end
 
@@ -178,7 +178,7 @@ flowchart LR
         DEV["Developer"]
         GH["GitHub"]
         GHA["GitHub Actions"]
-        TEST["Tests / Validation<br/>1,050 Automated Tests"]
+        TEST["Tests / Validation<br/>1,142 Automated Tests"]
         DOCKER["Docker Compose"]
     end
 
@@ -458,7 +458,7 @@ Gold tables are produced from the **batch Silver analytical model**.
 
 The current portfolio baseline contains:
 
-- **15 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
+- **18 historical Gold tables** — Spark-managed, partitioned by `cob_dt`
 - **16 current-serving tables** — dbt-managed in `iceberg.serving`, published
   through Trino
 
@@ -1080,7 +1080,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-19 DAGs loaded (zero import errors)
+22 DAGs loaded (zero import errors)
 ```
 
 Representative orchestration responsibilities include:
@@ -1312,7 +1312,7 @@ The repository contains three primary workflow categories:
 ### Automated Testing
 
 ```text
-1,050 automated tests
+1,142 automated tests
 ```
 
 covering areas such as:
@@ -1346,8 +1346,8 @@ CI/CD is an engineering control plane and is not part of the runtime data path.
 | **Serving**       | dbt models                     |             13 |
 | **Governance**    | Data contracts                 |             33 |
 |                   | Data-quality check types       |              9 |
-| **Orchestration** | Airflow DAGs                   |             21 |
-| **Testing**       | Automated tests                |          1,050 |
+| **Orchestration** | Airflow DAGs                   |             22 |
+| **Testing**       | Automated tests                |          1,142 |
 |                   | dbt data tests                 |            117 |
 | **Platform**      | Docker services                |             29 |
 | **CDC Current**   | Customer rows                  |         10,000 |

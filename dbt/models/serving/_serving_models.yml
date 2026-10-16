@@ -224,6 +224,44 @@ models:
         data_tests:
           - not_null
 
+  # ── Merchant QR/POS acquiring (khoá new2) ────────────────────────────────
+  # Grain khác customer: 2 model dưới KHÔNG unique trên merchant_id (daily =
+  # merchant×ngày, ranking = merchant×tháng). merchant_360 mới 1 dòng/merchant.
+  - name: merchant_daily_summary_current
+    description: "Merchant daily revenue — current serving, khoá new2, do dbt/Trino sở hữu."
+    columns:
+      - name: merchant_id
+        data_tests: [not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+      - name: gross_amount
+        data_tests: [not_null]
+      - name: refund_rate
+        data_tests: [not_null]
+
+  - name: merchant_ranking_current
+    description: "Merchant ranking by MCC + PoP growth — current serving, khoá new2."
+    columns:
+      - name: merchant_id
+        data_tests: [not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+      - name: revenue
+        data_tests: [not_null]
+
+  - name: merchant_360_current
+    description: "Merchant 360 advisory — current serving, khoá new2."
+    columns:
+      - name: merchant_id
+        data_tests: [unique, not_null]
+      - name: cob_dt
+        data_tests: [not_null]
+      - name: advisory_product_hint
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['WORKING_CAPITAL_LOAN', 'SAVINGS', 'EXTRA_POS']
+
   - name: loan_portfolio_risk_current
     description: "Loan portfolio risk by branch/product — current serving, risk layer."
     columns:

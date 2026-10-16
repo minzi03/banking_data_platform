@@ -42,7 +42,7 @@ def _business_date(ts: datetime) -> date:
 
 # Vị trí txn_date trong tuple mỗi generator trả về (đo từ generator, không phải
 # từ DDL — phần tử cuối là last_updated = now(), không phải ngày nghiệp vụ).
-TXN_DATE_INDEX = {"account": 3, "card": 3, "online": 12}
+TXN_DATE_INDEX = {"account": 3, "card": 3, "online": 15}
 
 
 @pytest.fixture(autouse=True)

@@ -133,6 +133,32 @@ services:
       - lakehouse_net
 
   # ===========================================================================
+  # SFTP LANDING ZONE (file source — POS files / settlement files, khoá new2)
+  # ===========================================================================
+  # Nguồn file: quy trình đối soát cuối ngày của ngân hàng thả file POS/settlement
+  # vào SFTP; DE nạp vào Bronze. atmoz/sftp là image SFTP nhẹ, tài khoản khai qua
+  # tham số dòng lệnh (user:pass:uid:gid). Thư mục upload mount ra ./sftp_data để
+  # bỏ file mẫu vào (docker/init_sftp/seed.sh chép lúc khởi tạo).
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: banking-sftp
+    hostname: sftp
+    ports:
+      - "2222:22"
+    # user:password:uid:gid:thư-mục. Thư mục là điểm gốc chroot của user.
+    command: "sftp_user:sftp_pass:1001:1001:upload"
+    volumes:
+      - ./init_sftp:/etc/sftp/seed:ro
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 22 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse_net
+
+  # ===========================================================================
   # OBJECT STORAGE LAYER
   # ===========================================================================
 
@@ -971,10 +997,15 @@ services:
     hostname: grafana
     ports:
       - "3000:3000"
+    env_file: .env
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/banking-platform.json
+      # Datasource Postgres-Serving tham chiếu ${POSTGRES_USER}/${POSTGRES_PASSWORD}
+      # (xem provisioniong/datasources/postgres.yml) — cần có trong env container.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -982,6 +1013,7 @@ services:
     mem_limit: 256m
     depends_on:
       - prometheus
+      - postgres
     networks:
       - lakehouse_net
 

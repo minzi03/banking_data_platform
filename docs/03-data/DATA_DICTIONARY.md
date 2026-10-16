@@ -8,20 +8,20 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**89 bảng · 1210 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**96 bảng · 1324 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 27 | 400 |
-| [silver](#silver) | 17 | 231 |
-| [gold](#gold) | 15 | 243 |
+| [bronze](#bronze) | 28 | 418 |
+| [silver](#silver) | 19 | 265 |
+| [gold](#gold) | 18 | 291 |
 | [meta](#meta) | 1 | 5 |
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
-| [digital_banking](#digital_banking) | 6 | 58 |
-| [opslakehouse](#opslakehouse) | 6 | 55 |
+| [digital_banking](#digital_banking) | 6 | 61 |
+| [opslakehouse](#opslakehouse) | 7 | 66 |
 
 ---
 
@@ -455,6 +455,30 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
 
+### `lakehouse.bronze.core_loan_payment`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `payment_id` | `BIGINT` |  |  |
+| `loan_id` | `BIGINT` |  |  |
+| `payment_date` | `DATE` |  |  |
+| `scheduled_amount` | `DECIMAL(18,2)` |  |  |
+| `amount_paid` | `DECIMAL(18,2)` |  |  |
+| `principal_component` | `DECIMAL(18,2)` |  |  |
+| `interest_component` | `DECIMAL(18,2)` |  |  |
+| `penalty` | `DECIMAL(18,2)` |  |  |
+| `outstanding_after` | `DECIMAL(18,2)` |  |  |
+| `days_late` | `INT` |  |  |
+| `payment_method` | `STRING` |  |  |
+| `payment_status` | `STRING` |  |  |
+| `late_payment_flag` | `INT` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
 ### `lakehouse.bronze.core_location`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -526,6 +550,9 @@ _Chưa có data contract trong `governance/datasets/`._
 | `is_fraud` | `INT` |  |  |
 | `fraud_reason` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `payment_channel` | `STRING` |  |  |
+| `refund_flag` | `INT` |  |  |
 | `transaction_date` | `TIMESTAMP` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
@@ -983,6 +1010,28 @@ Cleansed location and merchant dimension. Provides geographic and category infor
 
 <sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
 
+### `lakehouse.silver.dim_merchant`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `merchant_sk` | `STRING` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `merchant_name` | `STRING` |  |  |
+| `merchant_category` | `STRING` |  |  |
+| `mcc_code` | `STRING` |  |  |
+| `city` | `STRING` |  |  |
+| `state` | `STRING` |  |  |
+| `risk_category` | `STRING` |  |  |
+| `is_active` | `INT` |  |  |
+| `effective_from` | `DATE` |  |  |
+| `effective_to` | `DATE` |  |  |
+| `is_current` | `INT` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+
+<sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
+
 ### `lakehouse.silver.dim_product`
 
 Reference dimension for banking products. Provides a standardized catalog of all products offered by the bank including savings, loans, and credit cards with their associated attributes such as interest rates and minimum balance requirements.
@@ -1075,6 +1124,33 @@ Cleansed fact table capturing all customer relationship management interactions 
 
 <sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
 
+### `lakehouse.silver.fact_loan_payment`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `payment_id` | `BIGINT` |  |  |
+| `loan_id` | `BIGINT` |  |  |
+| `product_code` | `STRING` |  |  |
+| `branch_code` | `STRING` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `customer_sk` | `STRING` |  |  |
+| `payment_date` | `DATE` |  |  |
+| `scheduled_amount` | `DECIMAL(18,2)` |  |  |
+| `amount_paid` | `DECIMAL(18,2)` |  |  |
+| `principal_component` | `DECIMAL(18,2)` |  |  |
+| `interest_component` | `DECIMAL(18,2)` |  |  |
+| `penalty` | `DECIMAL(18,2)` |  |  |
+| `outstanding_after` | `DECIMAL(18,2)` |  |  |
+| `days_late` | `INT` |  |  |
+| `payment_method` | `STRING` |  |  |
+| `payment_status` | `STRING` |  |  |
+| `late_payment_flag` | `INT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
+
 ### `lakehouse.silver.fact_online_transaction`
 
 Cleansed fact table capturing all transactions performed through online and digital banking channels. Links transactions to customer devices and merchants. Used for digital channel analytics, device-based fraud detection, and online payment pattern analysis.
@@ -1102,6 +1178,9 @@ Cleansed fact table capturing all transactions performed through online and digi
 | `is_fraud` | `INT` |  |  |
 | `fraud_reason` | `STRING` |  |  |
 | `status` | `STRING` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `payment_channel` | `STRING` |  |  |
+| `refund_flag` | `INT` |  |  |
 | `transaction_date` | `TIMESTAMP` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `cob_dt` | `DATE` |  |  |
@@ -1606,6 +1685,81 @@ Daily snapshot history of the 360-degree customer view joining all dimensions an
 | `rfm_segment` | `STRING` |  |  |
 | `churn_flag` | `INT` |  |  |
 | `cross_sell_credit_card_flag` | `INT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
+### `lakehouse.gold.mart_merchant_360`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `merchant_id` | `BIGINT` |  |  |
+| `merchant_sk` | `STRING` |  |  |
+| `merchant_name` | `STRING` |  |  |
+| `merchant_category` | `STRING` |  |  |
+| `mcc_code` | `STRING` |  |  |
+| `city` | `STRING` |  |  |
+| `state` | `STRING` |  |  |
+| `risk_category` | `STRING` |  |  |
+| `revenue_90d` | `DECIMAL(18,2)` |  |  |
+| `txn_count_90d` | `BIGINT` |  |  |
+| `avg_daily_revenue` | `DECIMAL(18,2)` |  |  |
+| `active_days_90d` | `BIGINT` |  |  |
+| `cash_flow_cv` | `DECIMAL(9,4)` |  |  |
+| `revenue_last30` | `DECIMAL(18,2)` |  |  |
+| `revenue_prev30` | `DECIMAL(18,2)` |  |  |
+| `revenue_growth_30d` | `DECIMAL(9,4)` |  |  |
+| `advisory_product_hint` | `STRING` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
+### `lakehouse.gold.mart_merchant_daily_summary`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `merchant_id` | `BIGINT` |  |  |
+| `merchant_name` | `STRING` |  |  |
+| `merchant_category` | `STRING` |  |  |
+| `mcc_code` | `STRING` |  |  |
+| `city` | `STRING` |  |  |
+| `risk_category` | `STRING` |  |  |
+| `txn_date` | `DATE` |  |  |
+| `txn_year` | `INT` |  |  |
+| `txn_month` | `INT` |  |  |
+| `txn_count` | `BIGINT` |  |  |
+| `gross_amount` | `DECIMAL(18,2)` |  |  |
+| `avg_txn_amount` | `DECIMAL(18,2)` |  |  |
+| `refund_rate` | `DECIMAL(9,4)` |  |  |
+| `qr_count` | `BIGINT` |  |  |
+| `pos_count` | `BIGINT` |  |  |
+| `peak_hour` | `INT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
+### `lakehouse.gold.mart_merchant_ranking`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `merchant_id` | `BIGINT` |  |  |
+| `merchant_name` | `STRING` |  |  |
+| `merchant_category` | `STRING` |  |  |
+| `mcc_code` | `STRING` |  |  |
+| `city` | `STRING` |  |  |
+| `txn_year` | `INT` |  |  |
+| `txn_month` | `INT` |  |  |
+| `txn_count` | `BIGINT` |  |  |
+| `revenue` | `DECIMAL(18,2)` |  |  |
+| `prev_revenue` | `DECIMAL(18,2)` |  |  |
+| `pop_growth_rate` | `DECIMAL(9,4)` |  |  |
+| `rank_in_mcc` | `BIGINT` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
@@ -2126,6 +2280,9 @@ _Chưa có data contract trong `governance/datasets/`._
 | `is_fraud` | `SMALLINT` |  | 0/1 |
 | `fraud_reason` | `VARCHAR(200)` |  |  |
 | `status` | `VARCHAR(20)` |  | SUCCESS / FAILED / PENDING |
+| `merchant_id` | `BIGINT` |  | FK -> merchant (NULL nếu không qua merchant) |
+| `payment_channel` | `VARCHAR(10)` |  | QR / POS (NULL nếu không phải thanh toán merchant) |
+| `refund_flag` | `SMALLINT` |  | 0/1 — dùng cho refund rate |
 | `transaction_date` | `TIMESTAMP` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
@@ -2245,6 +2402,26 @@ _Chưa có data contract trong `governance/datasets/`._
 | `completed_at` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `04_ddl_ops_metadata.sql`</sub>
+
+### `opslakehouse.reconciliation_log`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `id` | `SERIAL` |  |  |
+| `metric_name` | `VARCHAR(200)` |  | tên check (txn_count / txn_amount) |
+| `entity` | `VARCHAR(200)` |  | thực thể được đối soát |
+| `stream_value` | `NUMERIC` |  | giá trị từ đường streaming |
+| `batch_value` | `NUMERIC` |  | giá trị từ đường batch |
+| `delta` | `NUMERIC` |  | stream - batch |
+| `tolerance` | `NUMERIC` |  | ngưỡng cho phép (tuyệt đối) |
+| `check_status` | `VARCHAR(20)` |  | PASS / FAIL / WARN |
+| `details` | `TEXT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+| `checked_at` | `TIMESTAMP` |  |  |
+
+<sub>Nguồn DDL: `00_extensions.sql`</sub>
 
 ### `opslakehouse.source_table_registry`
 

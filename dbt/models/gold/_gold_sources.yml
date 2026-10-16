@@ -322,3 +322,67 @@ sources:
     - name: fraud_reason
       description: Lý do fraud của giao dịch online đầu tiên trong ngày (nếu có)
     - name: cob_dt
+  # ── Merchant QR/POS acquiring (khoá new2) ────────────────────────────────
+  - name: mart_merchant_daily_summary
+    description: Merchant revenue & performance by day — QR/POS acquiring (history by cob_dt)
+    columns:
+    - name: merchant_id
+      data_tests:
+      - not_null
+    - name: merchant_name
+    - name: merchant_category
+    - name: mcc_code
+    - name: city
+    - name: risk_category
+    - name: txn_date
+    - name: txn_year
+    - name: txn_month
+    - name: txn_count
+    - name: gross_amount
+    - name: avg_txn_amount
+    - name: refund_rate
+    - name: qr_count
+    - name: pos_count
+    - name: peak_hour
+    - name: cob_dt
+  - name: mart_merchant_ranking
+    description: Merchant ranking by MCC with period-over-period growth (history by cob_dt)
+    columns:
+    - name: merchant_id
+      data_tests:
+      - not_null
+    - name: merchant_name
+    - name: merchant_category
+    - name: mcc_code
+    - name: city
+    - name: txn_year
+    - name: txn_month
+    - name: txn_count
+    - name: revenue
+    - name: prev_revenue
+    - name: pop_growth_rate
+    - name: rank_in_mcc
+    - name: cob_dt
+  - name: mart_merchant_360
+    description: Merchant 360° — scale, cash-flow stability, growth, advisory hint (history by cob_dt)
+    columns:
+    - name: merchant_id
+      data_tests:
+      - not_null
+    - name: merchant_sk
+    - name: merchant_name
+    - name: merchant_category
+    - name: mcc_code
+    - name: city
+    - name: state
+    - name: risk_category
+    - name: revenue_90d
+    - name: txn_count_90d
+    - name: avg_daily_revenue
+    - name: active_days_90d
+    - name: cash_flow_cv
+    - name: revenue_last30
+    - name: revenue_prev30
+    - name: revenue_growth_30d
+    - name: advisory_product_hint
+    - name: cob_dt

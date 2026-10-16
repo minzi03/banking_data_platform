@@ -1,0 +1,79 @@
+# Gold: mart_merchant_ranking — Merchant ranking by MCC + period-over-period growth
+#
+# ─── Nghiệp vụ (khoá new2) ───────────────────────────────────────────────────
+# Xếp hạng merchant trong cùng ngành hàng (MCC) theo doanh thu tháng, kèm tăng
+# trưởng so với kỳ trước (PoP — period-over-period). Phục vụ báo cáo "so sánh
+# merchant" và tư vấn sản phẩm.
+#
+# Grain: 1 dòng / merchant / tháng.
+#
+# ─── Business-date semantics ─────────────────────────────────────────────────
+# as branch_monthly_summary.yml — derive ngày nghiệp vụ tường minh theo ICT.
+job:
+  type: time_analytics
+
+source:
+  tables:
+    - silver.fact_online_transaction
+    - silver.dim_merchant
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: mart_merchant_ranking
+
+upstream_flags:
+  - silver.fact_online_transaction
+  - silver.dim_merchant
+
+validation:
+  require_non_empty: true
+  require_snapshots:
+    - silver.fact_online_transaction
+
+sql: |
+  WITH monthly AS (
+      SELECT
+          t.merchant_id,
+          YEAR(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS yr,
+          MONTH(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS mo,
+          COUNT(CASE WHEN t.status = 'SUCCESS' THEN t.transaction_id END) AS txn_count,
+          COALESCE(SUM(CASE WHEN t.status = 'SUCCESS' THEN t.amount ELSE 0 END), 0) AS revenue
+      FROM lakehouse.silver.fact_online_transaction t
+      WHERE t.merchant_id IS NOT NULL
+        AND t.cob_dt <= DATE '{{ cob_dt }}'
+      GROUP BY t.merchant_id,
+               YEAR(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)),
+               MONTH(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE))
+  ),
+  with_prev AS (
+      SELECT
+          m.*,
+          -- Kỳ trước: cùng merchant, tháng liền trước trong cùng năm (hoặc tháng 12
+          -- năm trước khi mo = 1 — so sánh theo tháng liên tục, không chỉ cùng năm).
+          LAG(revenue) OVER (PARTITION BY merchant_id ORDER BY yr, mo) AS prev_revenue
+      FROM monthly m
+  )
+  SELECT
+      w.merchant_id,
+      dm.merchant_name,
+      dm.merchant_category,
+      dm.mcc_code,
+      dm.city,
+      w.yr AS txn_year,
+      w.mo AS txn_month,
+      w.txn_count,
+      ROUND(w.revenue, 2) AS revenue,
+      ROUND(COALESCE(w.prev_revenue, 0), 2) AS prev_revenue,
+      CASE
+          WHEN w.prev_revenue IS NULL OR w.prev_revenue = 0 THEN NULL
+          ELSE ROUND((w.revenue - w.prev_revenue) / w.prev_revenue, 4)
+      END AS pop_growth_rate,
+      -- Xếp hạng trong cùng MCC (ngành hàng) theo doanh thu tháng.
+      -- Tie-break bằng merchant_id để kết quả tất định khi hoà doanh thu.
+      RANK() OVER (PARTITION BY dm.mcc_code, w.yr, w.mo ORDER BY w.revenue DESC, w.merchant_id) AS rank_in_mcc,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM with_prev w
+  JOIN lakehouse.silver.dim_merchant dm
+      ON w.merchant_id = dm.merchant_id
+      AND DATE '{{ cob_dt }}' BETWEEN dm.effective_from AND dm.effective_to

@@ -1,0 +1,56 @@
+# Silver: dim_merchant (SCD Type 2 — full history)
+#
+# Merchant directory cho nghiệp vụ Merchant QR/POS acquiring (khoá new2). Yêu cầu
+# nghiệp vụ: lưu lịch sử thay đổi của merchant (địa chỉ, ngành hàng, chi nhánh
+# quản lý) — nên các cột đó được tracked (SCD2). merchant_category và mcc_code
+# đổi = merchant đổi ngành hàng → phải giữ version cũ để báo cáo cùng kỳ đúng.
+#
+# Nguồn: bronze.core_merchant (full snapshot). Key biến mất khỏi nguồn = merchant
+# đã bị xoá → đóng version (close_missing_keys).
+job:
+  type: scd_type2
+
+source:
+  tables:
+    - bronze.core_merchant
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_merchant
+
+business_key:
+  - merchant_id
+
+scd:
+  type: 2
+  effective_from_column: effective_from
+  effective_to_column: effective_to
+  current_flag_column: is_current
+  sk_column: merchant_sk
+  close_missing_keys: true
+
+# Cột thay đổi theo thời gian được theo dõi; cột không liệt kê (last_updated)
+# ghi đè tại chỗ trên version hiện hành (Type 1).
+tracked_columns:
+  - merchant_name
+  - merchant_category
+  - mcc_code
+  - city
+  - state
+  - risk_category
+  - is_active
+
+sql: |
+  SELECT
+      merchant_id,
+      merchant_name,
+      merchant_category,
+      mcc_code,
+      city,
+      state,
+      risk_category,
+      is_active,
+      last_updated
+  FROM lakehouse.bronze.core_merchant
+  WHERE cob_dt = DATE '{{ cob_dt }}'

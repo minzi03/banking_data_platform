@@ -83,6 +83,13 @@ SILVER_JOB_ORDER = [
         "type": "scd_type2",
         "config": "code_etl/silver/dims/dim_account.yml",
     },
+    {
+        # Merchant directory (SCD2) cho Merchant QR/POS acquiring (khoá new2).
+        # Nguồn bronze.core_merchant, không phụ thuộc dim nào khác.
+        "name": "dim_merchant",
+        "type": "scd_type2",
+        "config": "code_etl/silver/dims/dim_merchant.yml",
+    },
     # === Phase 3: Facts (depend on dimensions) ===
     {
         "name": "fact_txn_account",

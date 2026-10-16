@@ -1,7 +1,7 @@
 # Phân Tích Giáo Trình Bootcamp — Đối Chiếu Với Thị Trường & Dự Án
 
-> **Ngày đo**: 2026-09-21
-> **Nguồn**: 15 file trong `thamkhao/bootcamp_class/` — 5 giáo trình + 1 community feed
+> **Ngày đo**: 2026-09-21 (bổ sung `new2/` ngày 2026-10-15)
+> **Nguồn**: 15 file trong `thamkhao/bootcamp_class/` — 5 giáo trình + 1 community feed; **+ `new2/` — bản mở rộng của khoá #1 (Merchant QR/POS)**
 > **Mục đích**: Xác định phần nào của giáo trình đáng áp dụng vào Banking Data Platform, dựa trên **đối chiếu với corpus JD đã đo**, không dựa trên uy tín của khoá học
 > **Tài liệu liên quan**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) — nguồn của mọi con số thị trường trích dẫn ở đây
 
@@ -46,6 +46,7 @@ Tổng: 48.256.202 bytes. Bản `.xlsx` và `.pdf` là phiên bản có cấu tr
 | # | Giáo trình | Thời lượng | Mentor | Nền tảng cược vào |
 |---|---|---|---|---|
 | 1 | **Data Engineering for Modern Banking: From Batch to Real-Time** | 12 buổi + capstone | **Hồ Đức Huy** — Sr Big Data Engineer, VietinBank (+ LPBank, MB Bank, FPT Software) | On-prem OSS: Spark · Iceberg · MinIO · Trino · Airflow · Kafka |
+| 1b | **Master Class Lakehouse & Event-Driven Data Platform for Banking/Finance** (`new2/`) | 13 buổi + capstone | **Hồ Đức Huy** — Sr Big Data Engineer, VietinBank | On-prem OSS — **bản mở rộng của #1**: thêm nghiệp vụ **Merchant QR/POS acquiring**, Grafana real-time, yêu cầu đối soát streaming=batch |
 | 2 | **DataOps for Data Platforms: From Pipeline to Production** | 11 buổi + capstone | **Nguyễn Hoàng Quốc Anh** — Sr Data/DataOps Engineer, Techcombank | Stack-agnostic (DWH *hoặc* Lakehouse) |
 | 3 | **Data Engineer Financial Data Platform: Ingestion → Lakehouse → Production** | 13 buổi / 5 phase | **Trần Sỹ Hùng** — DE, Grasshopper Asia (Singapore) | Snowflake + dbt |
 | 4 | **SERIES BOOTCAMP BIGDATA PLATFORM** (3 khoá) | 5–6 buổi/khoá | Hùng (Snowflake) · **Nguyễn Đình Tương** — Rightship, ex-BIDV/MB Bank (Databricks) · **Lê Phong Vũ** — Lead DE MoMo (MS Fabric) | Vendor platform |
@@ -258,6 +259,37 @@ Top-3 K22 (Cường)        + Superset: Portfolio · Churn Watchlist
 
 **Dự án có 14 Gold model / 4 domain**, vượt `mart_customer_360` đơn lẻ của giáo trình. Thiếu: CLV, Finance, Operations mart.
 
+### 5.2 Nghiệp vụ Merchant QR/POS (`new2/`, mentor Huy — bản mở rộng)
+
+`new2/` không thêm tech stack (vẫn Spark · Iceberg · MinIO · Trino · Airflow · Kafka · Debezium), nhưng **cụ thể hoá bài toán nghiệp vụ** thành **Merchant Acquiring (thanh toán QR/POS)** — mảng retail banking có khối lượng giao dịch lớn và là nguồn cross-sell:
+
+```text
+Phase 1 (Batch)   Postgres (merchant/store/account/txn) · Oracle (khu vực/branch/MCC/sản phẩm) · SFTP (POS + settlement)
+                  → SCD2 merchant/store · báo cáo ngày/tuần/tháng (doanh thu, số GD, giá trị TB, refund rate)
+                  → xếp hạng merchant theo MCC · tăng trưởng kỳ trước · phân tích khu vực
+                  → Merchant 360 mart (quy mô, tăng trưởng, độ ổn định dòng tiền, sản phẩm)
+                     → tư vấn vay vốn lưu động / tiết kiệm / POS bổ sung
+
+Phase 2 (Streaming) Debezium CDC + QR producer → Kafka → Spark Structured Streaming
+                  → thông báo tiền về (vài giây) · doanh thu theo cửa hàng theo phút · giờ cao điểm
+                  → Grafana real-time dashboard
+```
+
+Yêu cầu đúng đắn đặc thù (new2 nhấn mạnh, dự án đối chiếu):
+
+| Yêu cầu new2 | Repo hiện tại | Bằng chứng / gap |
+|---|---|---|
+| Batch idempotent (re-run không trùng) | ✅ | `overwritePartitions theo cob_dt` (ADR-0007) |
+| Streaming event time + watermark + dedup | ✅ | `code_etl/cdc/` streaming job |
+| Restart từ checkpoint không trùng/không mất | ✅ | checkpoint CDC consolidation |
+| Ghi Postgres serving bằng upsert `ON CONFLICT` | ❌ | serving hiện ghi **Iceberg**, không có Postgres writer |
+| **Đối soát cuối ngày: streaming = batch** | ❌ | `reconcile_cdc.py` chỉ so nguồn↔topic↔Bronze, không so doanh thu streaming vs báo cáo batch |
+| Static dimension join, refresh mỗi micro-batch | ⚠️ | cần kiểm tra `code_etl/cdc/` — chưa xác nhận pattern này |
+| PII (tên, SĐT merchant) mask trước Gold | ✅ | `ops_pii_masking_daily_dag` |
+| Iceberg maintenance (compaction/expire/orphan) | ✅ | `ops_maintenance_weekly_dag` |
+
+**Kết luận 5.2:** Dự án đã có sẵn 6/8 yêu cầu. Hai gap thật & đáng làm: **(a) đối soát streaming=batch**, **(b) Gold→Postgres serving** — đúng hai điểm khác biệt kiến trúc mà new2 nhấn mạnh. Xem [[bootcamp-class-new2]] (memory) cho kế hoạch đóng gap.
+
 ---
 
 ## 6. Repo so với 3 final project
@@ -318,6 +350,12 @@ Khoảng trống **tài liệu hoá**, không phải năng lực. Dùng đúng t
 Đóng gói `ml/pipeline/*` + Gold mart thành feature view có versioning. Giáo trình chỉ nhắc như "nền tảng để học tiếp", nhưng đây là khái niệm **được JD nhắc nhiều nhất** trong nhóm dự án chưa có.
 
 *Thị trường*: 81 lần (2,6/100k).
+
+**4. (từ `new2/`) Đối soát cuối ngày streaming = batch + Gold→Postgres serving**
+
+Hai gap duy nhất còn lại từ Mục 5.2. new2 coi "streaming khớp batch" là tiêu chí nghiệm thu bắt buộc của nghiệp vụ ngân hàng — repo chưa có. Cách làm: mở rộng `reconcile_cdc.py` thêm mode `eod` (so tổng doanh thu/số GD serving vs Gold cùng `cob_dt`, ghi `ops.reconciliation_report` làm gate) + DAG sync Gold→Postgres (`ON CONFLICT` upsert idempotent).
+
+*Thị trường*: `reconciliation` được corpus JD nhắc như tiêu chí production; khớp ADR-0003 (serving là table).
 
 ### P2
 

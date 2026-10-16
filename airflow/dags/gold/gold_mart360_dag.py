@@ -48,12 +48,16 @@ PHASE1_JOBS = [
     ("customer_product_summary",     "mart360/customer_product_summary.yml"),
     ("customer_card_summary",        "mart360/customer_card_summary.yml"),
     ("customer_loan_summary",        "mart360/customer_loan_summary.yml"),
+    ("merchant_360",                 "mart360/merchant_360.yml"),
     # segments (independent)
     ("rfm_segment",          "segmentation/rfm_segment.yml"),
     ("churn_prediction",     "segmentation/churn_prediction.yml"),
     ("cross_sell_segment",   "segmentation/cross_sell_segment.yml"),
     # time_analytics
     ("branch_monthly_summary", "time_analytics/branch_monthly_summary.yml"),
+    # merchant QR/POS (khoá new2)
+    ("merchant_daily_summary", "time_analytics/merchant_daily_summary.yml"),
+    ("merchant_ranking",       "time_analytics/merchant_ranking.yml"),
     # risk
     ("loan_portfolio_risk",    "risk/loan_portfolio_risk.yml"),
     ("fraud_risk_txn",         "risk/fraud_risk_txn.yml"),

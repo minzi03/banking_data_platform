@@ -137,14 +137,22 @@ def generate_locations(count: int, config: dict) -> list[tuple]:
 def generate_online_transactions(count: int, config: dict, customer_ids: list[int],
                                   device_ids: list[int], location_ids: list[int],
                                   high_risk_location_ids: list[int] | None = None,
-                                  start_id: int = 1) -> list[tuple]:
+                                  start_id: int = 1,
+                                  merchant_ids: list[int] | None = None) -> list[tuple]:
     """
     Generate online transaction data with seasonal patterns and enriched fraud.
 
     Args:
         high_risk_location_ids: List of location_ids where is_high_risk_area=1
                                 for correlating fraud with high-risk areas
+        merchant_ids: List of merchant_id cho giao dịch thanh toán QR/POS. Chỉ một
+                      phần giao dịch (merchant_payment_rate) đi qua merchant; phần
+                      còn lại merchant_id/payment_channel = NULL. Nếu None → tất
+                      cả giao dịch không qua merchant (giữ hành vi cũ).
     """
+    merchant_payment_rate = config.get("merchant_payment_rate", 0.45)
+    refund_rate = config.get("refund_rate", 0.012)
+    qr_share = config.get("qr_share", 0.65)  # trong nhóm merchant payment: QR vs POS
     rows = []
     type_dist = config.get("type_distribution", {})
     channel_dist = config.get("channel_distribution", {})
@@ -209,6 +217,19 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
         # Use seasonal datetime
         txn_date = _random_datetime_seasonal(shift("2025-06-01"), shift("2026-08-01"))
 
+        # Merchant QR/POS payment: chỉ một phần giao dịch đi qua merchant. Chỉ
+        # giao dịch QR/POS mới có merchant; phần còn lại (chuyển khoản, rút tiền)
+        # merchant_id/payment_channel = NULL. Refund chỉ xảy ra trên giao dịch
+        # thành công qua merchant.
+        merchant_id = None
+        payment_channel = None
+        refund_flag = 0
+        if merchant_ids and random.random() < merchant_payment_rate:
+            merchant_id = random.choice(merchant_ids)
+            payment_channel = "QR" if random.random() < qr_share else "POS"
+            if status == "SUCCESS" and random.random() < refund_rate:
+                refund_flag = 1
+
         rows.append((
             i,
             None,  # account_id (nullable)
@@ -222,6 +243,9 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
             is_fraud,
             fraud_reason,
             status,
+            merchant_id,
+            payment_channel,
+            refund_flag,
             txn_date,
             txn_date,  # created_ts
             datetime.now(),

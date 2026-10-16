@@ -87,6 +87,9 @@ CREATE TABLE IF NOT EXISTS digital_banking.online_transaction (
     is_fraud            SMALLINT        NOT NULL DEFAULT 0,  -- 0/1
     fraud_reason        VARCHAR(200),
     status              VARCHAR(20)     NOT NULL DEFAULT 'SUCCESS',  -- SUCCESS / FAILED / PENDING
+    merchant_id         BIGINT,                         -- FK -> merchant (NULL nếu không qua merchant)
+    payment_channel     VARCHAR(10),                    -- QR / POS (NULL nếu không phải thanh toán merchant)
+    refund_flag         SMALLINT        NOT NULL DEFAULT 0,  -- 0/1 — dùng cho refund rate
     transaction_date    TIMESTAMP       NOT NULL,
     created_ts          TIMESTAMP       NOT NULL,
     last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
@@ -94,9 +97,13 @@ CREATE TABLE IF NOT EXISTS digital_banking.online_transaction (
     CONSTRAINT pk_online_txn PRIMARY KEY (transaction_id),
     CONSTRAINT chk_otxn_type CHECK (transaction_type IN ('PURCHASE', 'TRANSFER', 'PAYMENT', 'WITHDRAWAL', 'TOP_UP')),
     CONSTRAINT chk_otxn_channel CHECK (channel IN ('MOBILE_APP', 'WEB', 'API', 'POS')),
+    CONSTRAINT chk_otxn_payment_channel CHECK (payment_channel IN ('QR', 'POS')),
+    CONSTRAINT chk_otxn_refund_flag CHECK (refund_flag IN (0, 1)),
     CONSTRAINT chk_otxn_fraud CHECK (is_fraud IN (0, 1)),
     CONSTRAINT chk_otxn_status CHECK (status IN ('SUCCESS', 'FAILED', 'PENDING')),
     CONSTRAINT chk_otxn_amount CHECK (amount > 0)
+    -- FK merchant_id khai ở CUỐI file: merchant định nghĩa SAU online_transaction,
+    -- FK inline sẽ fail trên volume rỗng.
 );
 
 CREATE INDEX IF NOT EXISTS idx_otxn_customer_date ON digital_banking.online_transaction(customer_id, transaction_date);
@@ -189,3 +196,20 @@ DROP TRIGGER IF EXISTS trg_merchant_last_upd ON digital_banking.merchant;
 CREATE TRIGGER trg_merchant_last_upd
     BEFORE UPDATE ON digital_banking.merchant
     FOR EACH ROW EXECUTE FUNCTION digital_banking.set_last_updated();
+
+-- =============================================================================
+-- FK + index cho online_transaction.merchant_id (QR/POS merchant acquiring)
+-- =============================================================================
+-- Khai ở đây vì merchant định nghĩa SAU online_transaction trong file này.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_otxn_merchant') THEN
+        ALTER TABLE digital_banking.online_transaction
+            ADD CONSTRAINT fk_otxn_merchant
+            FOREIGN KEY (merchant_id) REFERENCES digital_banking.merchant(merchant_id);
+    END IF;
+END
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_otxn_merchant ON digital_banking.online_transaction(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_otxn_payment_channel ON digital_banking.online_transaction(payment_channel);

@@ -1,0 +1,68 @@
+# =============================================================================
+# Serving Sync Config — Iceberg serving → PostgreSQL real-time serving
+# =============================================================================
+# Context: xem ADR-0019. Tầng serving hiện ghi vào Iceberg (lakehouse.serving.*)
+# và được đọc qua Trino — đúng cho analytics lịch sử. Nghiệp vụ Merchant QR/POS
+# cần thêm một backend PostgreSQL cho point-lookup độ trễ thấp (app/dashboard).
+#
+# Mỗi mục dưới đây khai một bảng serving cần mirror sang PostgreSQL:
+#   source  : bảng Iceberg (lakehouse.serving.<name>)
+#   target  : bảng PostgreSQL (serving.<name>)
+#   key     : khoá nghiệp vụ để upsert ON CONFLICT (phải unique)
+#
+# Bảng PostgreSQL được tạo tự động từ schema Iceberg lần chạy đầu (xem
+# sync_postgres.py) — không cần viết DDL tay cho từng bảng, đúng ADR-0006
+# (metadata-driven). Chỉ bảng có thật trong Iceberg mới được sync; bảng thiếu
+# thì job bỏ qua kèm cảnh báo, không chết.
+#
+# Grain (từ dbt/models/serving/_serving_models.yml):
+#   customer_id   → 1 dòng / khách hàng (10 bảng)
+#   branch+product→ loan_portfolio_risk
+#   txn_id        → fraud_risk_txn, aml_monitoring
+#   loan_id       → loan_delinquency
+# =============================================================================
+
+target_schema: serving
+
+tables:
+  # ---- Grain: customer_id ----
+  - name: mart_customer_360_current
+    key: [customer_id]
+  - name: rfm_segment_current
+    key: [customer_id]
+  - name: churn_prediction_current
+    key: [customer_id]
+  - name: customer_balance_summary_current
+    key: [customer_id]
+  - name: customer_card_summary_current
+    key: [customer_id]
+  - name: customer_loan_summary_current
+    key: [customer_id]
+  - name: customer_product_summary_current
+    key: [customer_id]
+  - name: customer_transaction_summary_current
+    key: [customer_id]
+  - name: cross_sell_segment_current
+    key: [customer_id]
+  - name: campaign_target_current
+    key: [customer_id]
+
+  # ---- Merchant QR/POS (khoá new2) ----
+  - name: merchant_360_current
+    key: [merchant_id]
+  # Grain merchant×ngày và merchant×tháng: khoá upsert gồm cả khoá thời gian,
+  # nếu không sẽ ghi đè nhiều dòng về một.
+  - name: merchant_daily_summary_current
+    key: [merchant_id, txn_date]
+  - name: merchant_ranking_current
+    key: [merchant_id, txn_year, txn_month]
+
+  # ---- Grain: khoá nghiệp vụ khác ----
+  - name: loan_portfolio_risk_current
+    key: [branch_code, product_code]
+  - name: fraud_risk_txn_current
+    key: [txn_id]
+  - name: aml_monitoring_current
+    key: [txn_id]
+  - name: loan_delinquency_current
+    key: [loan_id]
