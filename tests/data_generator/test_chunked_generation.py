@@ -18,7 +18,23 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "data_generator"))
 
+# generate_all → connectors.postgres_writer import psycopg2, mà venv unit CI không cài
+# (CI đỏ ở #105). Test này không chạm DB: stub chỉ khi gói thật vắng mặt.
+_STUBBED = []
+try:
+    import psycopg2  # noqa: F401
+except ModuleNotFoundError:
+    from unittest.mock import MagicMock
+
+    _STUBBED = ["psycopg2", "psycopg2.extras"]
+    sys.modules["psycopg2"] = MagicMock()
+    sys.modules["psycopg2.extras"] = sys.modules["psycopg2"].extras
+
 import generate_all  # noqa: E402
+
+# Gỡ stub ngay: test khác (test_card_txn_entry_mode) tự patch psycopg2 và cần __spec__ thật.
+for _name in _STUBBED:
+    sys.modules.pop(_name, None)
 import yaml  # noqa: E402
 from connectors.csv_writer import CsvWriter  # noqa: E402
 from generators.card_crm import generate_card_txn  # noqa: E402
