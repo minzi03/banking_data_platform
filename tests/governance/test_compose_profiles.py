@@ -119,9 +119,7 @@ def test_16gb_workloads_stay_within_service_budget():
     def count_active(target_profiles: set[str]) -> int:
         count = 0
         for name, spec in services.items():
-            if name in BASE_SERVICES:
-                count += 1
-            elif set(spec.get("profiles", [])) & target_profiles:
+            if name in BASE_SERVICES or set(spec.get("profiles", [])) & target_profiles:
                 count += 1
         return count
 
