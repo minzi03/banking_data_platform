@@ -1700,7 +1700,7 @@ _Chưa có data contract trong `governance/datasets/`._
 |---|---|:-:|---|
 | `merchant_id` | `BIGINT` |  |  |
 | `merchant_sk` | `STRING` |  |  |
-| `merchant_name` | `STRING` |  |  |
+| `merchant_name_masked` | `STRING` |  |  |
 | `merchant_category` | `STRING` |  |  |
 | `mcc_code` | `STRING` |  |  |
 | `city` | `STRING` |  |  |
@@ -1726,7 +1726,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `merchant_id` | `BIGINT` |  |  |
-| `merchant_name` | `STRING` |  |  |
+| `merchant_name_masked` | `STRING` |  |  |
 | `merchant_category` | `STRING` |  |  |
 | `mcc_code` | `STRING` |  |  |
 | `city` | `STRING` |  |  |
@@ -1752,7 +1752,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | Cột | Kiểu | PII | Ghi chú |
 |---|---|:-:|---|
 | `merchant_id` | `BIGINT` |  |  |
-| `merchant_name` | `STRING` |  |  |
+| `merchant_name_masked` | `STRING` |  |  |
 | `merchant_category` | `STRING` |  |  |
 | `mcc_code` | `STRING` |  |  |
 | `city` | `STRING` |  |  |

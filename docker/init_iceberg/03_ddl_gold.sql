@@ -237,7 +237,7 @@ TBLPROPERTIES ('format-version' = '2');
 -- MERCHANT_DAILY_SUMMARY (grain: merchant_id × txn_date)
 CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_daily_summary (
     merchant_id         BIGINT,
-    merchant_name       STRING,
+    merchant_name_masked STRING,
     merchant_category   STRING,
     mcc_code            STRING,
     city                STRING,
@@ -261,7 +261,7 @@ TBLPROPERTIES ('format-version' = '2');
 -- MERCHANT_RANKING (grain: merchant_id × txn_month)
 CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_ranking (
     merchant_id         BIGINT,
-    merchant_name       STRING,
+    merchant_name_masked STRING,
     merchant_category   STRING,
     mcc_code            STRING,
     city                STRING,
@@ -282,7 +282,7 @@ TBLPROPERTIES ('format-version' = '2');
 CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_merchant_360 (
     merchant_id          BIGINT,
     merchant_sk          STRING,
-    merchant_name        STRING,
+    merchant_name_masked STRING,
     merchant_category    STRING,
     mcc_code             STRING,
     city                 STRING,

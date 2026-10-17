@@ -152,6 +152,19 @@ def _column_masks(table_path: str, masks: dict[str, str]) -> list[Permission]:
     ]
 
 
+# Merchant (khoá new2 §4.3): với hộ kinh doanh, merchant_name chính là tên chủ
+# cửa hàng — cùng loại PII như full_name của khách. Silver vẫn LƯU tên gốc
+# (Gold cần nó để tạo merchant_name_masked), nên che lúc đọc qua Trino, đúng
+# mô hình đang dùng cho dim_customer.
+# Chỉ `dim_merchant` (có DDL trong 02_ddl_silver.sql). Không khai
+# `dim_merchant_current`: bảng đó không có DDL trong repo (nếu dbt sinh ra) nên
+# mask sẽ trỏ tới cột không tồn tại — test_rbac_matrix bắt đúng điều này.
+_MERCHANT_NAME_MASK = "concat(substr(%s, 1, 1), '**')"
+_SILVER_MERCHANT_MASKS = _column_masks(
+    "iceberg.silver.dim_merchant", {"merchant_name": _MERCHANT_NAME_MASK}
+)
+
+
 _BRONZE_AML_MASKS = _column_masks("iceberg.bronze.core_aml_alert", _AML_ALERT_MASKED) + _column_masks(
     "iceberg.bronze.core_aml_customer_risk", _AML_CUSTOMER_RISK_MASKED
 )
@@ -207,6 +220,7 @@ ROLES = {
             Permission(ResourceType.CATALOG, "iceberg", AccessLevel.READ),
             *_read("gold", "silver", "sandbox", "serving"),
             *_SILVER_CUSTOMER_MASKS,
+            *_SILVER_MERCHANT_MASKS,
         ],
     ),
     "readonly": Role(
@@ -255,6 +269,7 @@ ROLES = {
             *_BRONZE_CUSTOMER_MASKS,
             *_BRONZE_AML_MASKS,
             *_SILVER_CUSTOMER_MASKS,
+            *_SILVER_MERCHANT_MASKS,
         ],
     ),
 }

@@ -78,7 +78,8 @@ sql: |
   )
   SELECT
       d.merchant_id,
-      dm.merchant_name,
+      -- PII (khoá new2 §4.3): Gold chỉ mang tên đã che, không mang tên gốc.
+      CONCAT(SPLIT(dm.merchant_name, ' ')[0], ' **') AS merchant_name_masked,
       dm.merchant_category,
       dm.mcc_code,
       dm.city,

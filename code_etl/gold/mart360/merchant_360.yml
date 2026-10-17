@@ -75,7 +75,11 @@ sql: |
   SELECT
       b.merchant_id,
       b.merchant_sk,
-      b.merchant_name,
+      -- PII (khoá new2 §4.3): tên chủ merchant/hộ kinh doanh là dữ liệu cá nhân
+      -- → Gold CHỈ mang bản che, không mang tên gốc (cùng pattern
+      -- full_name_masked của dim_customer). Giữ ký tự đầu + ' **' để vẫn nhận
+      -- diện được giữa các merchant mà không lộ danh tính đầy đủ.
+      CONCAT(SPLIT(b.merchant_name, ' ')[0], ' **') AS merchant_name_masked,
       b.merchant_category,
       b.mcc_code,
       b.city,

@@ -27,7 +27,7 @@ ai đó mang mẫu này sang hệ thống có dữ liệu thật — đúng cả
 | Bao nhiêu bảng chứa dữ liệu cá nhân? | **31** (23 trong lakehouse, 8 trong PostgreSQL nguồn) |
 | Bronze có được che? | **Lưu gốc, che lúc đọc qua Trino** — với user không phải admin/ETL (§7) |
 | Silver có được che? | **Lưu gốc, che lúc đọc qua Trino** — `silver.dim_customer` vẫn *lưu* `cccd`, `full_name`, `phone`, `email`, `address` nguyên bản |
-| Gold có được che? | **Có** — chỉ còn `full_name_masked`, không còn `cccd`/`phone`/`email` |
+| Gold có được che? | **Có** — chỉ còn `full_name_masked` / `merchant_name_masked`, không còn `cccd`/`phone`/`email` |
 | Tầng serving có được che? | **Có**, bằng cách thừa hưởng từ Gold (`select *`) |
 | Lakehouse có kiểm soát truy cập? | **Có ở Trino, có xác thực mật khẩu** (ADR-0016) — Spark và MinIO không đi qua lớp này (§7) |
 | Có phân loại dữ liệu ở dạng máy đọc được? | **Không** (§9) |
@@ -78,7 +78,11 @@ thấy.
 | Bảng | Cột | Trạng thái |
 |---|---|---|
 | `gold.mart_customer_360` | `full_name_masked` | đã che tại nguồn ghi |
+| `gold.mart_merchant_360` | `merchant_name_masked` | đã che tại nguồn ghi (khoá new2 §4.3) |
+| `gold.mart_merchant_daily_summary` | `merchant_name_masked` | đã che tại nguồn ghi (khoá new2 §4.3) |
+| `gold.mart_merchant_ranking` | `merchant_name_masked` | đã che tại nguồn ghi (khoá new2 §4.3) |
 | `serving.mart_customer_360_current` | `full_name_masked` | thừa hưởng từ Gold qua `select *` |
+| `serving.merchant_*_current` | `merchant_name_masked` | thừa hưởng từ Gold qua `select *` |
 | `sandbox.dim_customer_masked` | `full_name_masked` · `phone_masked` · `email_masked` · `cccd_hash` · `age_group_decade` | bản phái sinh |
 | `sandbox.mart_customer_360_masked` | `full_name_masked` · `age` | bản phái sinh |
 

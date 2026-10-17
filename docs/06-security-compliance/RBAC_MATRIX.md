@@ -66,16 +66,16 @@ vẫn là bản gốc.
 
 ### 3.1 Ai thấy PII gốc
 
-| Role | `bronze.core_aml_alert` | `bronze.core_aml_customer_risk` | `bronze.core_customer` | `bronze.core_customer_cdc` | `silver.dim_customer` | `silver.dim_customer_current` |
-|---|---|---|---|---|---|---|
-| `admin` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
-| `etl_user` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
-| `analytics` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột |
-| `readonly` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
-| `data_steward` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột |
-| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
-| `serving_consumer` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
-| `observer` | che 6 cột | che 7 cột | che 6 cột | che 6 cột | che 6 cột | che 6 cột |
+| Role | `bronze.core_aml_alert` | `bronze.core_aml_customer_risk` | `bronze.core_customer` | `bronze.core_customer_cdc` | `silver.dim_customer` | `silver.dim_customer_current` | `silver.dim_merchant` |
+|---|---|---|---|---|---|---|---|
+| `admin` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
+| `etl_user` | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** | **bản gốc** |
+| `analytics` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột | che 1 cột |
+| `readonly` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `data_steward` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột | che 1 cột |
+| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `serving_consumer` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `observer` | che 6 cột | che 7 cột | che 6 cột | che 6 cột | che 6 cột | che 6 cột | che 1 cột |
 
 ### 3.2 Biểu thức che
 
@@ -118,6 +118,7 @@ vẫn là bản gốc.
 | `silver.dim_customer_current` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `analytics`, `data_steward`, `observer` |
 | `silver.dim_customer_current` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `analytics`, `data_steward`, `observer` |
 | `silver.dim_customer_current` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `analytics`, `data_steward`, `observer` |
+| `silver.dim_merchant` | `merchant_name` | `concat(substr(merchant_name, 1, 1), '**')` | `analytics`, `data_steward`, `observer` |
 
 Gold và `serving` không cần mask đọc: chúng chỉ mang PII đã che **lúc ghi** (`full_name_masked`).
 Phạm vi che là nhóm *Cao nhất* và *Cao* của PII_INVENTORY §3 trên bảng khách hàng; nhóm
