@@ -124,7 +124,7 @@ config tham chiếu hợp lệ, tài liệu, 9 test mới.
 - Mục tiêu B10 là *"driver map & mock reference"* — chứng minh platform hiểu và
   cấu hình đúng nguồn Oracle, không phải dựng một Oracle thật.
 - Thêm service Oracle (~4GB RAM) sẽ phá ngân sách 16GB vừa thiết lập ở
-  [docker-compose profiles](docker-compose-profiles).
+  [docker-compose profiles](../../docker/docker-compose.yml) (`--profile` trong header file).
 
 Khi có Oracle thật (hoặc Testcontainers/Oracle XE), chỉ cần thêm service + đổi
 `source.type` trong config — không phải sửa code.

@@ -8,13 +8,13 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**96 bảng · 1324 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**96 bảng · 1327 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 28 | 418 |
+| [bronze](#bronze) | 28 | 421 |
 | [silver](#silver) | 19 | 265 |
 | [gold](#gold) | 18 | 291 |
 | [meta](#meta) | 1 | 5 |
@@ -690,6 +690,9 @@ _Chưa có data contract trong `governance/datasets/`._
 | `is_fraud` | `VARCHAR(10)` |  |  |
 | `fraud_reason` | `VARCHAR(500)` |  |  |
 | `status` | `VARCHAR(20)` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `payment_channel` | `VARCHAR(10)` |  |  |
+| `refund_flag` | `INT` |  |  |
 | `transaction_date` | `BIGINT` |  |  |
 | `created_ts` | `BIGINT` |  |  |
 | `last_updated` | `BIGINT` |  |  |

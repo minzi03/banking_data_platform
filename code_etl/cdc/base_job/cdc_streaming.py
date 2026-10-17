@@ -145,6 +145,21 @@ def main():
         .load()
     )
 
+    # ── Event-time watermark + dedup (khoá new2 §4.3) ────────────────────
+    # Debezium bảo đảm at-least-once; replay (rebalance/restart/retry) sẽ ghi
+    # trùng vào Bronze append-only. Watermark đặt TRƯỚC dedup để state dedup
+    # bị chặn — nếu đảo, job chết vì hết bộ nhớ sau vài ngày.
+    dedup_cfg = config.get("dedup")
+    if dedup_cfg:
+        from stream_dedup import apply_watermark_and_dedup
+
+        stream_df = apply_watermark_and_dedup(
+            stream_df,
+            dedup_cfg,
+            target_primary_key=config["target"].get("primary_key"),
+        )
+        print(f"  Watermark: {dedup_cfg.get('watermark_delay')} · dedup by {dedup_cfg.get('keys') or config['target'].get('primary_key')}")
+
     # Write stream with foreachBatch
     query = (
         stream_df.writeStream.foreachBatch(lambda df, id: process_cdc_batch(df, id, target_table, config, spark))
