@@ -1887,3 +1887,65 @@ same change. Also removed: `tests/governance/test_terraform_secrets.py` (tested 
 - `docs/evidence/0*-*.png` — screenshots from earlier runs; replace after the next demo.
 - `docker/conf/*.der` — mounted by OpenMetadata in compose.
 - `docker/init_postgres/08_ddl_data_vault_example.sql` — illustrates ADR-0014 and `DATA_VAULT_MAPPING.md`.
+
+---
+
+## TD-21 — The Lint job cannot go green: unpinned ruff, and a formatter gate that already failed
+
+**Status:** open (recorded 2026-10-18). The `check` half is fixed; the `format` half needs a scope decision.
+
+The Lint & Format job runs two commands against `governance/ code_etl/ tests/`:
+
+```yaml
+ruff check  governance/ code_etl/ tests/ --output-format=github
+ruff format --check governance/ code_etl/ tests/
+```
+
+CI installs ruff with a bare `pip install ruff`, so the version is whatever pip resolves
+that morning — 0.17.1 during the run on 2026-10-18, while the developer machine had
+0.16.2. Formatting is version-dependent, so the gate's verdict depends on the calendar,
+not on the code: `git stash` on this branch and re-running `ruff format --check` on
+`origin/main` still reports 9 files that would be reformatted under 0.16.2.
+
+### What was fixed
+
+`ruff check` was failing for two real reasons, both predating this branch:
+
+- `tests/governance/test_ddl_yaml_column_alignment.py` imported `pytest` unused (F401).
+- `tests/governance/test_compose_profiles.py` had two identical `+= 1` branches (SIM114).
+
+Both are fixed, and `ruff check governance/ code_etl/ tests/` now passes locally.
+
+### What is deliberately not fixed
+
+`ruff format --check` reports 13 files on this branch and 9 on `main`. Every one is
+pre-existing and untouched by the current work:
+
+```text
+code_etl/cdc/base_job/cdc_streaming.py        code_etl/cdc/base_job/stream_dedup.py
+governance/rbac.py                            tests/bronze/test_oracle_source_reference.py
+tests/cdc/test_stream_dedup.py                tests/gold/test_region_monthly_summary.py
+tests/governance/test_airflow_dag_contracts.py tests/governance/test_compose_profiles.py
+tests/governance/test_ddl_yaml_column_alignment.py tests/governance/test_gold_pii_masking.py
+tests/governance/test_realtime_serving_tables.py tests/plugins/test_jdbc_conn_utils.py
+tests/silver/test_dim_store.py
+```
+
+Reformatting them in this branch would produce a large diff unrelated to the change under
+review, and would need redoing whenever ruff's style changes again.
+
+### Why this is a debt, not a footnote
+
+The job is named as a gate. While it is red for reasons unrelated to the change, a real
+lint regression lands in the same red signal and nobody can tell the two apart — the same
+false-green/false-red failure mode TD-5 records for `|| true`, inverted.
+
+### Acceptance
+
+```text
+[ ] ruff is pinned (or the project commits to a ruff version) so the gate is reproducible
+[ ] either `ruff format --check` is enforced after one formatting pass across the tree,
+    or the format half stops being a blocking gate and is recorded as such
+[ ] the file list above reaches zero, verified by running the same command CI runs
+[ ] the job goes green on an unmodified `main` checkout
+```
