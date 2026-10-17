@@ -15,6 +15,8 @@ Test này chốt:
   2. Mọi cột khai trong `cdc_qr_payment.yml` đều có trong event.
   3. Config QR bật dedup và trỏ topic riêng (không trộn với topic Debezium).
   4. DDL `qr_payment_cdc` có đủ cột merchant.
+  5. Replay (`--txn-ids`, `--event-ts-ms`) phát đúng ID cũ, đúng event-time,
+     không lặp vô hạn — dùng bởi scripts/verify_checkpoint_restart.py.
 
 Chạy: pytest tests/cdc/test_qr_payment_producer.py -v
 """
@@ -22,6 +24,7 @@ Chạy: pytest tests/cdc/test_qr_payment_producer.py -v
 from __future__ import annotations
 
 import importlib.util
+import json
 import random
 from pathlib import Path
 
@@ -61,6 +64,25 @@ def test_event_has_debezium_envelope():
     assert str(payload["__ts_ms"]).isdigit(), "__ts_ms phải là chuỗi số (ms)"
 
 
+def test_event_accepts_fixed_event_time_for_replay():
+    """Replay phải giữ nguyên event-time để dedup state nhận diện đúng event cũ."""
+    mod = _load_producer()
+    event = mod.build_qr_event(1003, 5, rng=random.Random(1), event_ts_ms=1_700_000_000_123)
+
+    assert event["payload"]["__ts_ms"] == "1700000000123"
+    assert event["payload"]["transaction_date"] == "1700000000123"
+
+
+def test_fixed_transaction_ids_are_emitted_once_in_dry_run(capsys):
+    """The replay CLI must not loop forever or generate replacement IDs."""
+    mod = _load_producer()
+    assert mod.main(["--dry-run", "--txn-ids", "7001,7002", "--rate", "0"]) == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    payloads = [json.loads(line)["payload"] for line in lines if line.startswith("{")]
+    assert [payload["transaction_id"] for payload in payloads] == [7001, 7002]
+
+
 def test_event_carries_every_configured_column():
     """Mỗi cột YAML khai phải có trong payload — thiếu là NULL lặng lẽ ở Bronze."""
     mod = _load_producer()
@@ -86,7 +108,7 @@ def test_decimal_amount_is_a_string():
     mod = _load_producer()
     p = mod.build_qr_event(3001, 8, rng=random.Random(3))["payload"]
     assert isinstance(p["amount"], str), "amount phải là chuỗi decimal"
-    float(p["amount"])  # parse được
+    float(p["amount"])
 
 
 def test_qr_config_targets_its_own_topic_and_table():

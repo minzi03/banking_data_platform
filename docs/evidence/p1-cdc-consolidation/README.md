@@ -48,6 +48,31 @@ Silver Current-State Tables
 | No duplicate business keys after restart | ✅ |
 | Watermark never regresses | ✅ |
 
+### Streaming Checkpoint Restart Smoke Test (P1.5)
+
+Docker-backed verification run on 2026-10-17 using the isolated test channel
+`qr.payment.restart_test`:
+
+| Check | Result |
+|-------|--------|
+| Phase A: 12 events reached Bronze | ✅ 12/12 |
+| Forced streaming-job kill | ✅ |
+| Phase C: 8 new events + 1 replay | ✅ |
+| Final accepted rows / distinct transaction IDs | ✅ 20 / 20 |
+| Restart offset | ✅ Kafka partition 0, offset 12 |
+| Exit code | ✅ 0 |
+
+The restart log resumed from the committed checkpoint at offset 12 rather than
+Kafka offset 0. The replayed event was removed by the configured watermark/dedup
+state, so the append-only Bronze test table ended with 20 rows and 20 distinct
+business keys. This proves checkpoint recovery and bounded watermark
+deduplication; it is not an unbounded exactly-once claim.
+
+Evidence script: `scripts/verify_checkpoint_restart.py`.
+Raw logs:
+- `logs/restart_stream_1792253768.log` (phase A)
+- `logs/restart_stream_1792253827.log` (phase D restart)
+
 ### Latency (P1.4)
 5 local trials, no manual intervention:
 

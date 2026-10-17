@@ -72,6 +72,7 @@ def build_qr_event(
     now: datetime | None = None,
     rng: random.Random | None = None,
     operation: str = "c",
+    event_ts_ms: int | None = None,
 ) -> dict:
     """
     Dựng một event QR đúng envelope Debezium.
@@ -82,7 +83,10 @@ def build_qr_event(
     """
     rng = rng or random.Random()
     now = now or datetime.now(timezone.utc)
-    ts_ms = str(int(now.timestamp() * 1000))
+    # `event_ts_ms` cho phép tiêm event mang event-time CỐ ĐỊNH — dùng trong
+    # checkpoint-restart test để phát lại đúng một event cũ. Không có nó, event
+    # replay mang timestamp mới và sẽ không rơi vào cửa sổ watermark cũ.
+    ts_ms = str(event_ts_ms if event_ts_ms is not None else int(now.timestamp() * 1000))
 
     amount = round(rng.uniform(20_000, 5_000_000), 2)
     status = _pick_status(rng)
@@ -124,6 +128,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--merchant-ids", default="1-20", help="Dải merchant, vd 1-20")
     parser.add_argument("--seed", type=int, default=None, help="Seed để tái lập")
     parser.add_argument("--dry-run", action="store_true", help="In payload, không gửi Kafka")
+    parser.add_argument(
+        "--txn-ids",
+        default=None,
+        help="Danh sách transaction_id cố định, phân tách bằng dấu phẩy (dùng để phát lại event cũ)",
+    )
+    parser.add_argument(
+        "--event-ts-ms",
+        type=int,
+        default=None,
+        help="Event time cố định (ms) cho mọi event — dùng khi phát lại để rơi đúng cửa sổ watermark",
+    )
     args = parser.parse_args(argv)
 
     rng = random.Random(args.seed)
@@ -133,14 +148,24 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         parser.error(f"--merchant-ids phải có dạng 'lo-hi', nhận: {args.merchant_ids!r}")
 
+    fixed_txn_ids: list[int] = []
+    if args.txn_ids:
+        try:
+            fixed_txn_ids = [int(x) for x in args.txn_ids.split(",") if x.strip()]
+        except ValueError:
+            parser.error(f"--txn-ids phải là danh sách số nguyên: {args.txn_ids!r}")
+        if not fixed_txn_ids:
+            parser.error("--txn-ids rỗng")
+        # Gửi đúng danh sách **một lần**, không lặp vô hạn.
+        args.count = len(fixed_txn_ids)
+
     producer = None
     if not args.dry_run:
         try:
             from kafka import KafkaProducer
         except ImportError:
             print(
-                "Thiếu thư viện kafka-python. Cài: pip install kafka-python "
-                "(hoặc chạy với --dry-run để xem payload).",
+                "Thiếu thư viện kafka-python. Cài: pip install kafka-python (hoặc chạy với --dry-run để xem payload).",
                 file=sys.stderr,
             )
             return 2
@@ -160,9 +185,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         while True:
-            transaction_id = rng.randint(10_000_000, 99_999_999)
+            transaction_id = fixed_txn_ids[sent] if fixed_txn_ids else rng.randint(10_000_000, 99_999_999)
             merchant_id = rng.randint(lo, hi)
-            event = build_qr_event(transaction_id, merchant_id, rng=rng)
+            event = build_qr_event(transaction_id, merchant_id, rng=rng, event_ts_ms=args.event_ts_ms)
 
             if producer is None:
                 print(json.dumps(event, ensure_ascii=False))
