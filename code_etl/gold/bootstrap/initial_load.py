@@ -117,6 +117,12 @@ GOLD_JOB_ORDER = [
         "type": "time_analytics",
         "config": "code_etl/gold/time_analytics/merchant_ranking.yml",
     },
+    {
+        # Phân tích khu vực: doanh thu theo tỉnh/thành + MoM growth (khoá new2 §2.2).
+        "name": "region_monthly_summary",
+        "type": "time_analytics",
+        "config": "code_etl/gold/time_analytics/region_monthly_summary.yml",
+    },
     # === Phase 2: Depends on Phase 1 outputs ===
     {
         "name": "campaign_target",

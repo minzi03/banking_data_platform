@@ -159,7 +159,7 @@ class TestRepoCollectors:
         Neu con so nay nhay ve ~18 kem theo object `*_current`, nghia la co ai
         do them lai CTAS vao DDL → dual ownership quay lai.
         """
-        assert gen._gold_ddl_tables(contract) == 18
+        assert gen._gold_ddl_tables(contract) == 19
 
     def test_docker_services_three_way_split(self, contract):
         """30 = 26 long-running + 4 one-shot (thêm sftp landing zone, khoá new2)."""
@@ -579,11 +579,11 @@ class TestVerificationScope:
 class TestServingVisibility:
     def test_gold_ddl_declares_no_current_objects(self, contract):
         """
-        Sau retirement: 15 CREATE TABLE lich su, 0 CREATE VIEW.
+        Sau retirement: 19 CREATE TABLE lich su, 0 CREATE VIEW.
         Gold DDL khong con khai bao bat ky serving object nao.
         """
-        assert gen._gold_ddl_objects(contract) == 18
-        assert gen._gold_ddl_tables(contract) == 18
+        assert gen._gold_ddl_objects(contract) == 19
+        assert gen._gold_ddl_tables(contract) == 19
 
         ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
         created = re.findall(r"CREATE (?:TABLE IF NOT EXISTS|OR REPLACE VIEW)\s+[\w.]*\.(\w+)", ddl)

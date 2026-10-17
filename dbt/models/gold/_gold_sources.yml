@@ -363,6 +363,20 @@ sources:
     - name: pop_growth_rate
     - name: rank_in_mcc
     - name: cob_dt
+  - name: mart_region_monthly_summary
+    description: Phân tích khu vực — doanh thu theo tỉnh/thành, MoM growth, rank
+    columns:
+    - name: city
+    - name: txn_year
+    - name: txn_month
+    - name: active_merchants
+    - name: txn_count
+    - name: revenue
+    - name: avg_txn_amount
+    - name: prev_revenue
+    - name: mom_growth_rate
+    - name: rank_in_month
+    - name: cob_dt
   - name: mart_merchant_360
     description: Merchant 360° — scale, cash-flow stability, growth, advisory hint (history by cob_dt)
     columns:

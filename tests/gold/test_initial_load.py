@@ -95,9 +95,9 @@ class TestGoldJobOrder:
         assert len(segment_jobs) == 4
 
     def test_time_analytics_jobs_count(self):
-        """Should have 3 time_analytics jobs (branch_monthly + merchant daily/ranking)."""
+        """Should have 4 time_analytics jobs (branch + merchant daily/ranking + region)."""
         time_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "time_analytics"]
-        assert len(time_jobs) == 3
+        assert len(time_jobs) == 4
 
     def test_risk_jobs_count(self):
         """Should have 4 risk jobs (loan_portfolio, fraud, aml, loan_delinquency)."""

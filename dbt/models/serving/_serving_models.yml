@@ -499,3 +499,15 @@ models:
       - name: cob_dt
         data_type: date
         data_tests: [not_null]
+
+  - name: region_monthly_summary_current
+    description: "Phân tích khu vực — doanh thu theo tỉnh/thành, MoM growth, xếp hạng."
+    columns:
+      - name: city
+        data_tests: [not_null]
+      - name: txn_month
+        data_tests: [not_null]
+      - name: revenue
+        data_tests: [not_null]
+      - name: cob_dt
+        data_tests: [not_null]

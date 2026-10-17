@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**97 bảng · 1352 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**98 bảng · 1363 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -16,7 +16,7 @@
 |---|---:|---:|
 | [bronze](#bronze) | 29 | 446 |
 | [silver](#silver) | 19 | 265 |
-| [gold](#gold) | 18 | 291 |
+| [gold](#gold) | 19 | 302 |
 | [meta](#meta) | 1 | 5 |
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
@@ -1797,6 +1797,26 @@ _Chưa có data contract trong `governance/datasets/`._
 | `prev_revenue` | `DECIMAL(18,2)` |  |  |
 | `pop_growth_rate` | `DECIMAL(9,4)` |  |  |
 | `rank_in_mcc` | `BIGINT` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_gold.sql`</sub>
+
+### `lakehouse.gold.mart_region_monthly_summary`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `city` | `STRING` |  |  |
+| `txn_year` | `INT` |  |  |
+| `txn_month` | `INT` |  |  |
+| `active_merchants` | `BIGINT` |  |  |
+| `txn_count` | `BIGINT` |  |  |
+| `revenue` | `DECIMAL(38,2)` |  |  |
+| `avg_txn_amount` | `DECIMAL(38,2)` |  |  |
+| `prev_revenue` | `DECIMAL(38,2)` |  |  |
+| `mom_growth_rate` | `DECIMAL(18,4)` |  |  |
+| `rank_in_month` | `INT` |  |  |
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_gold.sql`</sub>

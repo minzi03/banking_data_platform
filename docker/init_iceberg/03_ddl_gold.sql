@@ -455,6 +455,31 @@ PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
 
 -- =============================================================================
+-- REGION ANALYTICS (khoá new2 §2.2 — phân tích khu vực)
+-- =============================================================================
+
+-- REGION_MONTHLY_SUMMARY (grain: city × tháng)
+-- Đề bài: "doanh thu theo tỉnh/quận, chi nhánh; khu vực tăng trưởng nhanh".
+-- Cấp địa bàn lấy `city` từ dim_merchant (nguồn chỉ có city/state, không có
+-- district của merchant). MoM growth + rank_in_month trả lời "tăng trưởng nhanh".
+CREATE TABLE IF NOT EXISTS lakehouse.gold.mart_region_monthly_summary (
+    city                STRING,
+    txn_year            INT,
+    txn_month           INT,
+    active_merchants    BIGINT,
+    txn_count           BIGINT,
+    revenue             DECIMAL(38,2),
+    avg_txn_amount      DECIMAL(38,2),
+    prev_revenue        DECIMAL(38,2),
+    mom_growth_rate     DECIMAL(18,4),
+    rank_in_month       INT,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
 -- RETIRED: current-serving objects
 -- =============================================================================
 -- 8 bảng `gold.*_current` (CTAS) và view `gold.mart_customer_360_current` đã

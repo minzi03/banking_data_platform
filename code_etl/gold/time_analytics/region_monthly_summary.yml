@@ -1,0 +1,105 @@
+# Gold: mart_region_monthly_summary — Phân tích khu vực (khoá new2 §2.2)
+#
+# ─── Nghiệp vụ ───────────────────────────────────────────────────────────────
+# Đề bài: *"Phân tích khu vực: doanh thu theo tỉnh/quận, chi nhánh; khu vực
+# tăng trưởng nhanh."*
+#
+# Merchant mang `city`/`state` (tỉnh/thành) đã chuẩn hoá ở Silver SCD2. Mart này
+# gom doanh thu merchant theo ĐỊA BÀN và THÁNG, kèm:
+#   - số merchant hoạt động
+#   - doanh thu, số giao dịch, giá trị trung bình
+#   - tăng trưởng so với tháng liền trước (MoM)
+#   - xếp hạng khu vực theo doanh thu trong tháng (tìm "khu vực tăng trưởng nhanh")
+#
+# Grain: 1 dòng / city / tháng.
+#
+# ─── Vì sao `city` chứ không phải `district` ────────────────────────────────
+# Đề bài ghi "tỉnh/quận". Nguồn merchant chỉ có `city` và `state` (state trùng
+# city trong dữ liệu sinh — xem dữ liệu thật: Hanoi/Hanoi, Da Nang/Da Nang).
+# Không bịa ra cột `district` không tồn tại ở nguồn merchant. Cấp quận nếu cần
+# phải đến từ `dim_branch.district` theo chi nhánh quản lý — việc đó cần map
+# merchant → branch, hiện chưa có ở nguồn.
+#
+# ─── Business-date semantics ────────────────────────────────────────────────
+# as merchant_ranking.yml — ngày nghiệp vụ derive tường minh theo ICT.
+job:
+  type: time_analytics
+
+source:
+  tables:
+    - silver.fact_online_transaction
+    - silver.dim_merchant
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: mart_region_monthly_summary
+
+upstream_flags:
+  - silver.fact_online_transaction
+  - silver.dim_merchant
+
+validation:
+  require_non_empty: true
+  require_snapshots:
+    - silver.fact_online_transaction
+
+sql: |
+  WITH merchant_monthly AS (
+      -- Doanh thu theo merchant × tháng, gắn địa bàn từ SCD2 hiện hành.
+      SELECT
+          dm.city,
+          t.merchant_id,
+          YEAR(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS yr,
+          MONTH(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS mo,
+          COUNT(CASE WHEN t.status = 'SUCCESS' THEN t.transaction_id END) AS txn_count,
+          COALESCE(SUM(CASE WHEN t.status = 'SUCCESS' THEN t.amount ELSE 0 END), 0) AS revenue
+      FROM lakehouse.silver.fact_online_transaction t
+      JOIN lakehouse.silver.dim_merchant dm
+          ON t.merchant_id = dm.merchant_id
+          AND DATE '{{ cob_dt }}' BETWEEN dm.effective_from AND dm.effective_to
+      WHERE t.merchant_id IS NOT NULL
+        AND dm.city IS NOT NULL
+        AND t.cob_dt <= DATE '{{ cob_dt }}'
+      GROUP BY dm.city, t.merchant_id,
+               YEAR(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)),
+               MONTH(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE))
+  ),
+  city_monthly AS (
+      SELECT
+          city,
+          yr,
+          mo,
+          COUNT(DISTINCT merchant_id) AS active_merchants,
+          SUM(txn_count) AS txn_count,
+          SUM(revenue) AS revenue,
+          CASE WHEN SUM(txn_count) > 0 THEN SUM(revenue) / SUM(txn_count) ELSE 0 END AS avg_txn_amount
+      FROM merchant_monthly
+      GROUP BY city, yr, mo
+  ),
+  with_prev AS (
+      SELECT
+          c.*,
+          LAG(revenue) OVER (PARTITION BY city ORDER BY yr, mo) AS prev_revenue
+      FROM city_monthly c
+  )
+  SELECT
+      city,
+      yr AS txn_year,
+      mo AS txn_month,
+      active_merchants,
+      txn_count,
+      ROUND(revenue, 2) AS revenue,
+      ROUND(avg_txn_amount, 2) AS avg_txn_amount,
+      ROUND(COALESCE(prev_revenue, 0), 2) AS prev_revenue,
+      -- Tăng trưởng MoM: NULL khi kỳ trước không có doanh thu (không chia 0,
+      -- và không giả vờ tăng trưởng 100% từ 0).
+      CASE
+          WHEN prev_revenue IS NULL OR prev_revenue = 0 THEN NULL
+          ELSE ROUND((revenue - prev_revenue) / prev_revenue, 4)
+      END AS mom_growth_rate,
+      -- Xếp hạng khu vực theo doanh thu trong tháng. Tie-break theo city để kết
+      -- quả tất định khi hai khu vực hoà doanh thu.
+      RANK() OVER (PARTITION BY yr, mo ORDER BY revenue DESC, city) AS rank_in_month,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM with_prev
