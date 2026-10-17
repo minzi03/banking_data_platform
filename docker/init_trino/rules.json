@@ -441,6 +441,91 @@
     {
       "user": "dbt",
       "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_customer_current",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "address",
+          "mask": "CAST('[REDACTED]' AS VARCHAR)"
+        },
+        {
+          "name": "cccd",
+          "mask": "concat('***********', substr(cccd, -4))"
+        },
+        {
+          "name": "date_of_birth",
+          "mask": "date_trunc('year', date_of_birth)"
+        },
+        {
+          "name": "email",
+          "mask": "concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))"
+        },
+        {
+          "name": "full_name",
+          "mask": "concat(substr(full_name, 1, 1), '**')"
+        },
+        {
+          "name": "phone",
+          "mask": "concat(substr(phone, 1, 3), '****', substr(phone, 8))"
+        }
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "table": "dim_merchant",
+      "privileges": [
+        "SELECT"
+      ],
+      "columns": [
+        {
+          "name": "merchant_name",
+          "mask": "concat(substr(merchant_name, 1, 1), '**')"
+        }
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
       "schema": "gold",
       "privileges": [
         "SELECT"
@@ -456,6 +541,14 @@
         "DELETE",
         "UPDATE",
         "OWNERSHIP"
+      ]
+    },
+    {
+      "user": "dbt",
+      "catalog": "iceberg",
+      "schema": "silver",
+      "privileges": [
+        "SELECT"
       ]
     },
     {

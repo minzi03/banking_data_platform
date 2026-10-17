@@ -25,7 +25,7 @@ nên thuộc đúng một khối luật.
 | `analytics` | Read-only access to gold/silver/serving, PII in Silver masked | `analytics_report` |
 | `readonly` | Read-only access to gold and serving | `readonly_viewer` |
 | `data_steward` | Manage data governance, contracts, and quality — kế thừa `analytics` | `data_steward_user` |
-| `serving_builder` | dbt: đọc Gold, tạo/thay bảng trong serving | `dbt` |
+| `serving_builder` | dbt: đọc Gold (+ một Silver fact cho serving real-time), tạo/thay bảng trong serving | `dbt` |
 | `serving_consumer` | Superset, API, Streamlit, ML: chỉ đọc serving | `customer_api`, `ml`, `streamlit`, `superset` |
 | `observer` | Freshness exporter, metrics manifest: đọc mọi tầng, PII và dữ liệu tuân thủ AML bị che | `freshness_exporter`, `manifest_collector` |
 
@@ -40,7 +40,7 @@ Quyền trên **bảng** trong từng schema của catalog `iceberg`, sau khi g�
 | `analytics` | read-only | — | R ⁽ᵐ⁾ | — | R | R | R | — | — |
 | `readonly` | read-only | — | — | — | R | — | R | — | — |
 | `data_steward` | all | — | R ⁽ᵐ⁾ | — | R | W | R | — | `sandbox` |
-| `serving_builder` | all | — | — | — | R | — | W | — | `serving` |
+| `serving_builder` | all | — | R ⁽ᵐ⁾ | — | R | — | W | — | `serving` |
 | `serving_consumer` | read-only | — | — | — | — | — | R | — | — |
 | `observer` | read-only | R ⁽ᵐ⁾ | R ⁽ᵐ⁾ | R | R | R | R | — | — |
 
@@ -73,7 +73,7 @@ vẫn là bản gốc.
 | `analytics` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột | che 1 cột |
 | `readonly` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
 | `data_steward` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột | che 1 cột |
-| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
+| `serving_builder` | không đọc được | không đọc được | không đọc được | không đọc được | che 6 cột | che 6 cột | che 1 cột |
 | `serving_consumer` | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được | không đọc được |
 | `observer` | che 6 cột | che 7 cột | che 6 cột | che 6 cột | che 6 cột | che 6 cột | che 1 cột |
 
@@ -106,19 +106,19 @@ vẫn là bản gốc.
 | `bronze.core_customer_cdc` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `observer` |
 | `bronze.core_customer_cdc` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `observer` |
 | `bronze.core_customer_cdc` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `observer` |
-| `silver.dim_customer` | `address` | `CAST('[REDACTED]' AS VARCHAR)` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer` | `cccd` | `concat('***********', substr(cccd, -4))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer` | `date_of_birth` | `date_trunc('year', date_of_birth)` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `address` | `CAST('[REDACTED]' AS VARCHAR)` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `cccd` | `concat('***********', substr(cccd, -4))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `date_of_birth` | `date_trunc('year', date_of_birth)` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_customer_current` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `analytics`, `data_steward`, `observer` |
-| `silver.dim_merchant` | `merchant_name` | `concat(substr(merchant_name, 1, 1), '**')` | `analytics`, `data_steward`, `observer` |
+| `silver.dim_customer` | `address` | `CAST('[REDACTED]' AS VARCHAR)` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer` | `cccd` | `concat('***********', substr(cccd, -4))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer` | `date_of_birth` | `date_trunc('year', date_of_birth)` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `address` | `CAST('[REDACTED]' AS VARCHAR)` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `cccd` | `concat('***********', substr(cccd, -4))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `date_of_birth` | `date_trunc('year', date_of_birth)` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `email` | `concat(substr(email, 1, 1), '*****', '@', split_part(email, '@', 2))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `full_name` | `concat(substr(full_name, 1, 1), '**')` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_customer_current` | `phone` | `concat(substr(phone, 1, 3), '****', substr(phone, 8))` | `analytics`, `data_steward`, `serving_builder`, `observer` |
+| `silver.dim_merchant` | `merchant_name` | `concat(substr(merchant_name, 1, 1), '**')` | `analytics`, `data_steward`, `serving_builder`, `observer` |
 
 Gold và `serving` không cần mask đọc: chúng chỉ mang PII đã che **lúc ghi** (`full_name_masked`).
 Phạm vi che là nhóm *Cao nhất* và *Cao* của PII_INVENTORY §3 trên bảng khách hàng; nhóm

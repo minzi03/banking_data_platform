@@ -351,9 +351,20 @@ class TestPolicy:
         assert rules.can_select("dbt", "iceberg", "gold", "mart_customer_360")
         assert rules.can_create_table("dbt", "iceberg", "serving")
         assert rules.can_insert("dbt", "iceberg", "serving", "mart_customer_360_current")
-        for schema in ("bronze", "silver", "silver_cdc", "sandbox"):
-            assert not rules.can_select("dbt", "iceberg", schema, "t"), schema
         assert not rules.can_create_table("dbt", "iceberg", "gold")
+
+    def test_dbt_can_read_silver_for_realtime_serving(self, rules):
+        """
+        Từ 2026-10-17 dbt đọc thêm Silver (khoá new2 §3.2): ba serving bảng
+        real-time cần grain theo giao dịch, Gold marts chỉ có aggregate ngày.
+        Quyền mở ĐÚNG schema silver — không mở bronze/sandbox/silver_cdc.
+        """
+        assert rules.can_select("dbt", "iceberg", "silver", "fact_online_transaction")
+        for schema in ("bronze", "silver_cdc", "sandbox"):
+            assert not rules.can_select("dbt", "iceberg", schema, "t"), schema
+        # PII trên Silver vẫn bị che với dbt.
+        assert rules.mask("dbt", "iceberg", "silver", "dim_customer", "full_name")
+        assert rules.mask("dbt", "iceberg", "silver", "dim_merchant", "merchant_name")
 
     def test_every_declared_user_can_read_engine_metadata(self, rules):
         """dbt-trino join system.metadata.materialized_views ở MỌI lần list

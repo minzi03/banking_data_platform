@@ -262,6 +262,100 @@ models:
           - accepted_values:
               values: ['WORKING_CAPITAL_LOAN', 'SAVINGS', 'EXTRA_POS']
 
+  # ── Real-time use case Phase 2 (khoá new2 §3.2) ────────────────────────
+  # Ba bảng dưới dựng THẲNG từ silver.fact_online_transaction, không qua Gold
+  # marts: Gold chỉ có aggregate ngày/tháng, còn ba use case này cần grain
+  # chi tiết hơn (theo giao dịch / theo phút / theo giờ).
+  # Ba model dưới KHÔNG phải `select * from gold` (tự aggregate từ Silver fact),
+  # nên phải khai contract enforced: dbt build kiểm schema thật khớp danh sách
+  # cột + data_type — đúng quy ước test_contracts_match_tables.
+  - name: merchant_payment_notification_current
+    description: "Thông báo tiền về — giao dịch thành công gần nhất của mỗi merchant."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: merchant_id
+        data_type: bigint
+        data_tests: [unique, not_null]
+      - name: latest_transaction_id
+        data_type: bigint
+        data_tests: [not_null]
+      - name: latest_amount
+        data_type: "decimal(18,2)"
+        data_tests: [not_null]
+      - name: currency
+        data_type: varchar
+      - name: payment_channel
+        data_type: varchar
+      - name: latest_transaction_date
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: latest_notified_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: cob_dt
+        data_type: date
+        data_tests: [not_null]
+
+  - name: merchant_revenue_per_minute_current
+    description: "Doanh thu merchant theo phút — dashboard real-time."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: merchant_id
+        data_type: bigint
+        data_tests: [not_null]
+      - name: txn_minute
+        data_type: timestamp(6)
+        data_tests: [not_null]
+      - name: success_txn_count
+        data_type: bigint
+        data_tests: [not_null]
+      - name: failed_txn_count
+        data_type: bigint
+        data_tests: [not_null]
+      - name: revenue
+        data_type: "decimal(38,2)"
+        data_tests: [not_null]
+      - name: avg_txn_amount
+        data_type: "decimal(38,2)"
+      - name: qr_count
+        data_type: bigint
+        data_tests: [not_null]
+      - name: pos_count
+        data_type: bigint
+        data_tests: [not_null]
+      - name: cob_dt
+        data_type: date
+        data_tests: [not_null]
+
+  - name: merchant_peak_hours_current
+    description: "Giờ cao điểm merchant — số giao dịch và doanh thu theo giờ ICT."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: merchant_id
+        data_type: bigint
+        data_tests: [not_null]
+      - name: txn_hour
+        # Trino hour() trả BIGINT (không phải INTEGER) — contract enforced bắt đúng điều này.
+        data_type: bigint
+        data_tests: [not_null]
+      - name: success_txn_count
+        data_type: bigint
+        data_tests: [not_null]
+      - name: revenue
+        data_type: "decimal(38,2)"
+        data_tests: [not_null]
+      - name: avg_txn_amount
+        data_type: "decimal(38,2)"
+      - name: cob_dt
+        data_type: date
+        data_tests: [not_null]
+
   - name: loan_portfolio_risk_current
     description: "Loan portfolio risk by branch/product — current serving, risk layer."
     columns:

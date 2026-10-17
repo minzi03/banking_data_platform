@@ -73,6 +73,10 @@ SPARK_TO_PG = {
     "BooleanType": "BOOLEAN",
     "DateType": "DATE",
     "TimestampType": "TIMESTAMP",
+    # Trino trả cột `timestamp` (không kèm zone) về Spark dưới dạng NTZ. Thiếu
+    # dòng này thì mọi bảng serving có cột timestamp do dbt sinh (ví dụ
+    # merchant_payment_notification_current) fail lúc sync.
+    "TimestampNTZType": "TIMESTAMP",
     "DecimalType": "NUMERIC",
 }
 

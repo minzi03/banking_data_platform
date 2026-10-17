@@ -78,6 +78,14 @@ class TestPgTypeMapping:
         assert _pg_type(_fake_type("TimestampType")) == "TIMESTAMP"
         assert _pg_type(_fake_type("BooleanType")) == "BOOLEAN"
 
+    def test_timestamp_ntz_maps(self):
+        """
+        Trino trả `timestamp` (không zone) về Spark dưới dạng TimestampNTZType.
+        Thiếu map này thì bảng serving có cột timestamp do dbt sinh (vd
+        merchant_payment_notification_current) fail lúc sync — đã gặp thật.
+        """
+        assert _pg_type(_fake_type("TimestampNTZType")) == "TIMESTAMP"
+
     def test_decimal_keeps_precision_scale(self):
         assert _pg_type(_fake_type("DecimalType", precision=18, scale=2)) == "NUMERIC(18,2)"
 

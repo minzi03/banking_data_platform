@@ -386,3 +386,18 @@ sources:
     - name: revenue_growth_30d
     - name: advisory_product_hint
     - name: cob_dt
+
+# =============================================================================
+# Silver — nguồn cho các serving aggregate real-time (khoá new2 §3.2)
+# =============================================================================
+# Ba use case Phase 2 (thông báo tiền về, doanh thu theo phút, giờ cao điểm)
+# cần grain CHI TIẾT theo giao dịch. Gold marts chỉ có aggregate ngày/tháng,
+# nên dựng thẳng từ Silver fact.
+- name: silver
+  description: Silver layer — Spark transforms (Bronze→Silver)
+  database: iceberg
+  schema: silver
+  loader: spark_etl
+  tables:
+  - name: fact_online_transaction
+    description: Giao dịch online (QR/POS), grain 1 dòng/giao dịch

@@ -57,6 +57,16 @@ tables:
   - name: merchant_ranking_current
     key: [merchant_id, txn_year, txn_month]
 
+  # ---- Real-time use case Phase 2 (§3.2) ----
+  # Khoá upsert phải gồm cả chiều thời gian, nếu không nhiều dòng (mỗi phút /
+  # mỗi giờ của cùng merchant) sẽ bị ghi đè về một.
+  - name: merchant_payment_notification_current
+    key: [merchant_id]
+  - name: merchant_revenue_per_minute_current
+    key: [merchant_id, txn_minute]
+  - name: merchant_peak_hours_current
+    key: [merchant_id, txn_hour]
+
   # ---- Grain: khoá nghiệp vụ khác ----
   - name: loan_portfolio_risk_current
     key: [branch_code, product_code]
