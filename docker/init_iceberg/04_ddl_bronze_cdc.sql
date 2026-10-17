@@ -158,3 +158,37 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.online_transaction_cdc (
     __kafka_offset BIGINT
 ) USING iceberg
 PARTITIONED BY (DATE(__cdc_timestamp));
+
+-- =============================================================================
+-- qr_payment_cdc — sự kiện thanh toán QR từ producer (khoá new2 §3.1)
+-- Cùng cột với online_transaction_cdc: producer phát đúng envelope Debezium nên
+-- một streaming job xử lý được cả hai nguồn.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.qr_payment_cdc (
+    transaction_id BIGINT,
+    account_id BIGINT,
+    device_id BIGINT,
+    location_id BIGINT,
+    customer_id BIGINT,
+    transaction_type VARCHAR(50),
+    channel VARCHAR(50),
+    amount DECIMAL(18,2),
+    currency VARCHAR(10),
+    is_fraud VARCHAR(10),
+    fraud_reason VARCHAR(500),
+    status VARCHAR(20),
+    merchant_id BIGINT,
+    payment_channel VARCHAR(10),
+    refund_flag INT,
+    transaction_date BIGINT,
+    created_ts BIGINT,
+    last_updated BIGINT,
+    __cdc_operation VARCHAR(10),
+    __cdc_timestamp TIMESTAMP,
+    __cdc_timestamp_ms BIGINT,
+    __spark_batch_id BIGINT,
+    __ingestion_time TIMESTAMP,
+    __kafka_partition INT,
+    __kafka_offset BIGINT
+) USING iceberg
+PARTITIONED BY (DATE(__cdc_timestamp));

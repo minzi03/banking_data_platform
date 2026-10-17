@@ -60,6 +60,8 @@ with DAG(
     - card_account (30s trigger)
     - card_transaction (10s trigger)
     - online_transaction (10s trigger)
+    - qr_payment (10s trigger) — sự kiện QR từ `scripts/qr_payment_producer.py`,
+      không qua Debezium; producer phát đúng envelope nên dùng chung job này.
     """,
 ) as dag:
 

@@ -353,12 +353,22 @@ class TestCdcStreamingFitsTheWorker:
         assert caps, "cdc_streaming_dag không đặt --conf spark.cores.max cho query streaming"
 
     def test_all_queries_leave_room_for_consolidation(self):
+        """
+        Bất biến thật là BẤT ĐẲNG THỨC, không phải con số 6 cố định: số query
+        nhân core mỗi query phải chừa chỗ cho consolidation. Khi thêm nguồn
+        streaming mới (vd qr_payment) điều cần kiểm tra là tổng vẫn < worker
+        cores, không phải đếm file bằng đúng một hằng số.
+        """
         cap = int(re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))[0])
         worker_cores = int(re.search(r"^SPARK_WORKER_CORES=(\d+)", self.ENV_EXAMPLE.read_text(), re.M).group(1))
         used = cap * len(self.CDC_CONFIGS)
-        assert len(self.CDC_CONFIGS) == 6
         assert used < worker_cores, (
-            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker"
+            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker — "
+            "consolidation sẽ WAITING vô hạn"
+        )
+        # Chừa ít nhất 1 core cho consolidation + các job batch.
+        assert worker_cores - used >= 1, (
+            f"chỉ còn {worker_cores - used} core cho consolidation — cần ít nhất 1"
         )
 
 
