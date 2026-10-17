@@ -134,8 +134,8 @@ class TestRepoCollectors:
           - file_sources/pos_settlement.yml (nguồn SFTP) — thiếu contract shape.
         KHÔNG phải blacklist tên file.
         """
-        assert gen._bronze_ingestion_workloads(contract) == 22
-        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 25
+        assert gen._bronze_ingestion_workloads(contract) == 23
+        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 26
 
     def test_debezium_topics_reads_config_not_docstring(self, contract):
         """Docstring đầu register_connectors.py ghi 8/3/5 — sai. Config là 6/3/3."""
@@ -143,11 +143,11 @@ class TestRepoCollectors:
         assert gen._debezium_connectors(contract) == 3
 
     def test_silver_dimension_split(self):
-        assert gen._silver_dims(None) == 11
+        assert gen._silver_dims(None) == 12
         # dim_product / dim_branch / dim_merchant là SCD2 (lưu lịch sử;
         # merchant thêm 2026-10-16 cho nghiệp vụ QR/POS — khoá new2).
         assert gen._silver_dims("scd_type1") == 6
-        assert gen._silver_dims("scd_type2") == 5
+        assert gen._silver_dims("scd_type2") == 6
 
     def test_dq_check_types(self, contract):
         assert gen._dq_check_types(contract) == 9

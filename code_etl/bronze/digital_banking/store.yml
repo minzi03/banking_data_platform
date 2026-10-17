@@ -1,0 +1,30 @@
+# Bronze Ingestion: store (dimension — full snapshot)
+#
+# Điểm bán của merchant (khoá new2 §2.2). Đề bài yêu cầu SCD2 cho
+# "merchant VÀ cửa hàng"; merchant đã có (core_merchant), đây là cấp cửa hàng.
+# FK store.merchant_id → digital_banking.merchant.
+source:
+  type: postgresql
+  schema: digital_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_store
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  SELECT
+    store_id,
+    merchant_id,
+    store_name,
+    store_type,
+    address,
+    city,
+    district,
+    is_active,
+    last_updated
+  FROM digital_banking.store

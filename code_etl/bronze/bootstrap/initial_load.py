@@ -61,6 +61,7 @@ BRONZE_CONFIGS = [
     "code_etl/bronze/digital_banking/support_ticket.yml",
     "code_etl/bronze/digital_banking/mcc_code.yml",
     "code_etl/bronze/digital_banking/merchant.yml",
+    "code_etl/bronze/digital_banking/store.yml",
 ]
 
 

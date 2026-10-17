@@ -402,6 +402,73 @@ def generate_merchants(count: int, config: dict, mcc_codes: list[str],
     return rows
 
 
+def generate_stores(count: int, config: dict, merchant_ids: list[int],
+                    cities: list[str] | None = None) -> list[tuple]:
+    """
+    Sinh danh bạ CỬA HÀNG (store) — khoá new2 §2.2.
+
+    Đề bài yêu cầu *"Lịch sử thay đổi (SCD2) của merchant VÀ CỬA HÀNG"*. Một
+    merchant (chuỗi, hộ kinh doanh) có thể có nhiều điểm bán; báo cáo "doanh thu
+    theo merchant VÀ cửa hàng" trong đề bài chính là cấp store.
+
+    Mỗi store thuộc đúng một merchant. Phần lớn merchant có 1 store; một số
+    chuỗi có 2–5. Store mang `district` — cấp địa bàn "quận" mà nguồn merchant
+    không có.
+    """
+    if cities is None:
+        cities = ["Hanoi", "HCM", "Da Nang", "Hai Phong", "Can Tho",
+                  "Bien Hoa", "Nha Trang", "Vung Tau", "Hue", "Quy Nhon"]
+
+    districts_by_city = {
+        "Hanoi": ["Ba Dinh", "Hoan Kiem", "Cau Giay", "Dong Da", "Hai Ba Trung"],
+        "HCM": ["District 1", "District 3", "District 7", "Binh Thanh", "Tan Binh"],
+        "Da Nang": ["Hai Chau", "Thanh Khe", "Son Tra", "Ngu Hanh Son"],
+        "Hai Phong": ["Hong Bang", "Le Chan", "Ngo Quyen"],
+        "Can Tho": ["Ninh Kieu", "Binh Thuy", "Cai Rang"],
+        "Bien Hoa": ["Bien Hoa Center", "Long Binh", "Tam Hiep"],
+        "Nha Trang": ["Nha Trang Center", "Vinh Hoa", "Loc Tho"],
+        "Vung Tau": ["Vung Tau Center", "Thang Tam", "Rach Dua"],
+        "Hue": ["Hue Center", "Phu Hoi", "Vinh Ninh"],
+        "Quy Nhon": ["Quy Nhon Center", "Hai Cang", "Ngo May"],
+    }
+
+    store_types = ["FLAGSHIP", "STANDARD", "KIOSK", "OUTLET"]
+    streets = ["Nguyen Trai", "Le Loi", "Tran Hung Dao", "Hai Ba Trung", "Pham Van Dong"]
+
+    rows = []
+    store_id = 0
+
+    for merchant_id in merchant_ids:
+        if len(rows) >= count:
+            break
+
+        # Phần lớn merchant 1 điểm bán; số ít chuỗi có nhiều cửa hàng.
+        n_stores = random.choices([1, 2, 3, 4, 5], weights=[0.80, 0.10, 0.05, 0.03, 0.02])[0]
+        home_city = random.choice(cities)
+
+        for seq in range(n_stores):
+            if len(rows) >= count:
+                break
+            store_id += 1
+            store_city = home_city if seq == 0 else random.choice(cities)
+            districts = districts_by_city.get(store_city, ["Central"])
+            stype = "FLAGSHIP" if (seq == 0 and n_stores >= 3) else random.choice(store_types)
+
+            rows.append((
+                store_id,
+                merchant_id,
+                f"Store #{store_id} - {store_city}",
+                stype,
+                f"{random.randint(1, 300)} {random.choice(streets)}",
+                store_city,
+                districts[seq % len(districts)],
+                1 if random.random() < 0.93 else 0,   # 93% đang hoạt động
+                datetime.now(),
+            ))
+
+    return rows
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _random_datetime(start_str: str, end_str: str) -> datetime:

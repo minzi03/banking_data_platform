@@ -163,3 +163,10 @@ tables:
     target_table: core_merchant
     load_strategy: full_snapshot
     partitioned: true
+
+  - source_schema: digital_banking
+    source_table: store
+    target_schema: bronze
+    target_table: core_store
+    load_strategy: full_snapshot
+    partitioned: true

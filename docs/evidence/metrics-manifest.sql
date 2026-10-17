@@ -129,6 +129,7 @@ WITH per_table AS (
   UNION ALL SELECT 'core_location' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_location WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_mcc_code' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_mcc_code WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_merchant' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_merchant WHERE cob_dt = DATE ':cob_dt'
+  UNION ALL SELECT 'core_store' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_store WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_online_transaction' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_online_transaction WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_product' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_product WHERE cob_dt = DATE ':cob_dt'
   UNION ALL SELECT 'core_standing_order' AS table_name, COUNT(*) > 0 AS present FROM :catalog.bronze.core_standing_order WHERE cob_dt = DATE ':cob_dt'

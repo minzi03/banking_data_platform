@@ -36,6 +36,7 @@ from generators.card_crm import generate_cards, generate_card_txn, generate_crm_
 from generators.digital_banking import (
     generate_devices, generate_locations, generate_online_transactions,
     generate_support_tickets, generate_mcc_codes, generate_merchants,
+    generate_stores,
 )
 from generators.ops_metadata import generate_source_registry
 from generators.timeline import current_as_of, set_as_of
@@ -388,6 +389,23 @@ def main():
                 "city", "state", "risk_category", "is_active", "last_updated"
             ], merchants)
 
+        # ── Store (khoá new2 §2.2 — SCD2 của "merchant VÀ cửa hàng") ────
+        logger.info("")
+        logger.info("═══ STORE (điểm bán theo merchant) ═══")
+        stores = generate_stores(
+            db_cfg.get("store", {}).get("row_count", 3000),
+            db_cfg.get("store", {}),
+            merchant_ids,
+            db_cfg.get("location", {}).get("cities")
+        )
+        store_cols = [
+            "store_id", "merchant_id", "store_name", "store_type",
+            "address", "city", "district", "is_active", "last_updated"
+        ]
+        writer.write_rows("digital_banking", "store", store_cols, stores)
+        if csv_writer:
+            csv_writer.write_rows("digital_banking", "store", store_cols, stores)
+
         # ── Card & CRM (3 tables) ───────────────────────────────────────
         logger.info("")
         logger.info("═══ CARD & CRM ═══")
@@ -583,6 +601,7 @@ def main():
             ("digital_banking", "online_transaction"),
             ("digital_banking", "support_ticket"), ("digital_banking", "mcc_code"),
             ("digital_banking", "merchant"),
+            ("digital_banking", "store"),
             ("opslakehouse", "source_table_registry"),
             ("core_banking", "aml_rule"),
             ("core_banking", "aml_alert"),

@@ -157,6 +157,7 @@ class PostgresWriter:
             ("digital_banking", "location"),
             ("digital_banking", "mcc_code"),
             ("digital_banking", "merchant"),
+            ("digital_banking", "store"),
             # card_crm
             ("card_crm", "crm_interaction"),
             ("card_crm", "card_txn"),

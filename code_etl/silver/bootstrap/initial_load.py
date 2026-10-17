@@ -90,6 +90,13 @@ SILVER_JOB_ORDER = [
         "type": "scd_type2",
         "config": "code_etl/silver/dims/dim_merchant.yml",
     },
+    {
+        # Cửa hàng/điểm bán (SCD2) — đề bài yêu cầu SCD2 cho "merchant VÀ cửa
+        # hàng" (khoá new2 §2.2). Nguồn bronze.core_store.
+        "name": "dim_store",
+        "type": "scd_type2",
+        "config": "code_etl/silver/dims/dim_store.yml",
+    },
     # === Phase 3: Facts (depend on dimensions) ===
     {
         "name": "fact_txn_account",

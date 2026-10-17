@@ -351,3 +351,7 @@ digital_banking:
       - {mcc: "9402", desc: "Postal Services - Government Only", group: "SERVICES", risk: 0}
   merchant:
     row_count: 2000
+  # Điểm bán của merchant (khoá new2 §2.2 — SCD2 "merchant và cửa hàng").
+  # Trần theo số merchant: phần lớn merchant 1 cửa hàng, số ít chuỗi 2–5.
+  store:
+    row_count: 3000

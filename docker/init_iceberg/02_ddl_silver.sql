@@ -56,6 +56,26 @@ USING iceberg
 PARTITIONED BY (is_current)
 TBLPROPERTIES ('format-version' = '2');
 
+-- 1c. DIM_STORE (SCD Type 2 — điểm bán của merchant, khoá new2 §2.2)
+CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_store (
+    store_sk            STRING,
+    store_id            BIGINT,
+    merchant_id         BIGINT,
+    store_name          STRING,
+    store_type          STRING,
+    address             STRING,
+    city                STRING,
+    district            STRING,
+    is_active           INT,
+    effective_from      DATE,
+    effective_to        DATE,
+    is_current          INT,
+    last_updated        TIMESTAMP
+)
+USING iceberg
+PARTITIONED BY (is_current)
+TBLPROPERTIES ('format-version' = '2');
+
 -- 2. DIM_ACCOUNT (SCD Type 2 — track balance, status, close_date)
 CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_account (
     account_sk          STRING,

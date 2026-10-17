@@ -8,19 +8,19 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**98 bảng · 1363 cột · 25 bảng có data contract · 35 cột nghi chứa PII**
+**101 bảng · 1395 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 29 | 446 |
-| [silver](#silver) | 19 | 265 |
+| [bronze](#bronze) | 30 | 456 |
+| [silver](#silver) | 20 | 278 |
 | [gold](#gold) | 19 | 302 |
 | [meta](#meta) | 1 | 5 |
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
-| [digital_banking](#digital_banking) | 6 | 61 |
+| [digital_banking](#digital_banking) | 7 | 70 |
 | [opslakehouse](#opslakehouse) | 7 | 66 |
 
 ---
@@ -600,6 +600,25 @@ _Chưa có data contract trong `governance/datasets/`._
 
 <sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
 
+### `lakehouse.bronze.core_store`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `store_id` | `BIGINT` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `store_name` | `STRING` |  |  |
+| `store_type` | `STRING` |  |  |
+| `address` | `STRING` | ⚠️ |  |
+| `city` | `STRING` |  |  |
+| `district` | `STRING` |  |  |
+| `is_active` | `INT` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+| `cob_dt` | `DATE` |  |  |
+
+<sub>Nguồn DDL: `01_ddl_bronze.sql`</sub>
+
 ### `lakehouse.bronze.core_support_ticket`
 
 _Chưa có data contract trong `governance/datasets/`._
@@ -1091,6 +1110,28 @@ Reference dimension for banking products. Provides a standardized catalog of all
 | `currency` | `STRING` |  |  |
 | `is_active` | `INT` |  |  |
 | `launch_date` | `DATE` |  |  |
+| `effective_from` | `DATE` |  |  |
+| `effective_to` | `DATE` |  |  |
+| `is_current` | `INT` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+
+<sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
+
+### `lakehouse.silver.dim_store`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `store_sk` | `STRING` |  |  |
+| `store_id` | `BIGINT` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `store_name` | `STRING` |  |  |
+| `store_type` | `STRING` |  |  |
+| `address` | `STRING` | ⚠️ |  |
+| `city` | `STRING` |  |  |
+| `district` | `STRING` |  |  |
+| `is_active` | `INT` |  |  |
 | `effective_from` | `DATE` |  |  |
 | `effective_to` | `DATE` |  |  |
 | `is_current` | `INT` |  |  |
@@ -2342,6 +2383,24 @@ _Chưa có data contract trong `governance/datasets/`._
 | `refund_flag` | `SMALLINT` |  | 0/1 — dùng cho refund rate |
 | `transaction_date` | `TIMESTAMP` |  |  |
 | `created_ts` | `TIMESTAMP` |  |  |
+| `last_updated` | `TIMESTAMP` |  |  |
+
+<sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>
+
+### `digital_banking.store`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `store_id` | `BIGINT` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `store_name` | `VARCHAR(200)` |  |  |
+| `store_type` | `VARCHAR(20)` |  |  |
+| `address` | `VARCHAR(300)` | ⚠️ |  |
+| `city` | `VARCHAR(100)` |  |  |
+| `district` | `VARCHAR(100)` |  |  |
+| `is_active` | `SMALLINT` |  |  |
 | `last_updated` | `TIMESTAMP` |  |  |
 
 <sub>Nguồn DDL: `03_ddl_digital_banking.sql`</sub>

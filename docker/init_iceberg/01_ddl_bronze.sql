@@ -500,3 +500,22 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_loan_payment (
 USING iceberg
 PARTITIONED BY (cob_dt)
 TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 23. CORE_STORE (dimension — điểm bán của merchant, khoá new2 §2.2)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_store (
+    store_id            BIGINT,
+    merchant_id         BIGINT,
+    store_name          STRING,
+    store_type          STRING,
+    address             STRING,
+    city                STRING,
+    district            STRING,
+    is_active           INT,
+    last_updated        TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');

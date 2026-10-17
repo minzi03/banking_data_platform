@@ -198,6 +198,38 @@ CREATE TRIGGER trg_merchant_last_upd
     FOR EACH ROW EXECUTE FUNCTION digital_banking.set_last_updated();
 
 -- =============================================================================
+-- STORE — điểm bán của merchant (khoá new2 §2.2)
+-- =============================================================================
+-- Đề bài yêu cầu SCD2 cho "merchant VÀ CỬA HÀNG", và báo cáo doanh thu theo
+-- "merchant và cửa hàng". Một merchant có thể có nhiều điểm bán.
+-- `district` ở đây là cấp địa bàn "quận" mà bảng merchant không có.
+CREATE TABLE IF NOT EXISTS digital_banking.store (
+    store_id            BIGINT          NOT NULL,
+    merchant_id         BIGINT          NOT NULL,
+    store_name          VARCHAR(200)    NOT NULL,
+    store_type          VARCHAR(20)     NOT NULL DEFAULT 'STANDARD',
+    address             VARCHAR(300),
+    city                VARCHAR(100),
+    district            VARCHAR(100),
+    is_active           SMALLINT        NOT NULL DEFAULT 1,
+    last_updated        TIMESTAMP       NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT pk_store PRIMARY KEY (store_id),
+    CONSTRAINT fk_store_merchant FOREIGN KEY (merchant_id)
+        REFERENCES digital_banking.merchant(merchant_id),
+    CONSTRAINT chk_store_type CHECK (store_type IN ('FLAGSHIP', 'STANDARD', 'KIOSK', 'OUTLET')),
+    CONSTRAINT chk_store_active CHECK (is_active IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_store_merchant ON digital_banking.store(merchant_id);
+CREATE INDEX IF NOT EXISTS idx_store_city ON digital_banking.store(city);
+
+DROP TRIGGER IF EXISTS trg_store_last_upd ON digital_banking.store;
+CREATE TRIGGER trg_store_last_upd
+    BEFORE UPDATE ON digital_banking.store
+    FOR EACH ROW EXECUTE FUNCTION digital_banking.set_last_updated();
+
+-- =============================================================================
 -- FK + index cho online_transaction.merchant_id (QR/POS merchant acquiring)
 -- =============================================================================
 -- Khai ở đây vì merchant định nghĩa SAU online_transaction trong file này.
