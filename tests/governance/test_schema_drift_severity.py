@@ -14,6 +14,7 @@ dữ liệu (scripts/generate_data_dictionary.py) trên toàn bộ DDL.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -169,13 +170,19 @@ def test_check_tables_reports_every_table():
 
 def test_runs_as_a_script_like_spark_submit():
     """Chạy như spark-submit chạy: `python governance/schema_drift.py`. Không có
-    entrypoint thì lệnh này in ra rỗng và thoát 0 — đúng lỗi của DAG cũ."""
+    entrypoint thì lệnh này in ra rỗng và thoát 0 — đúng lỗi của DAG cũ.
+
+    stdout của tiến trình con phải là UTF-8: help text có tiếng Việt, còn console
+    Windows mặc định cp1258 và `argparse --help` sẽ chết với UnicodeEncodeError
+    trước khi test kịp kiểm entrypoint. Đặt qua env để không phụ thuộc máy chạy."""
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "governance" / "schema_drift.py"), "--help"],
         capture_output=True,
         text=True,
         encoding="utf-8",
         cwd=REPO_ROOT / "airflow",  # không phải gốc repo: import phải tự tìm được governance/
+        env=env,
         check=False,
     )
     assert result.returncode == 0, result.stderr
