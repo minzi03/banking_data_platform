@@ -126,13 +126,16 @@ class TestContractValidation:
 class TestRepoCollectors:
     def test_source_datasets_excludes_template_by_semantics(self, contract):
         """
-        Glob thô ra 24 file; đúng phải là 22 workload.
-        templates/source_registry.yml và file_sources/pos_settlement.yml (nguồn
-        SFTP) bị loại vì thiếu contract shape (source+target+load+sql), KHÔNG
-        phải vì blacklist tên file.
+        Glob thô ra 25 file; đúng phải là 22 workload.
+        Bị loại:
+          - templates/source_registry.yml — thiếu contract shape.
+          - templates/oracle_source_reference.yml — CÓ đủ shape nhưng là tài liệu
+            mẫu (khoá new2 C2), nên loại theo thư mục templates/.
+          - file_sources/pos_settlement.yml (nguồn SFTP) — thiếu contract shape.
+        KHÔNG phải blacklist tên file.
         """
         assert gen._bronze_ingestion_workloads(contract) == 22
-        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 24
+        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 25
 
     def test_debezium_topics_reads_config_not_docstring(self, contract):
         """Docstring đầu register_connectors.py ghi 8/3/5 — sai. Config là 6/3/3."""
