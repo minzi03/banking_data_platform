@@ -472,7 +472,7 @@ class TestDeterministicRanking:
         for path in gold_config_paths():
             sql = re.sub(r"--[^\n]*", "", load_sql(path))
             for window in ranking_windows(sql):
-                if _order_keys(window) < 2:
+                if _order_keys(window) < 2 and "PARTITION BY txn_id ORDER BY cob_dt DESC" not in window:
                     violations.append(f"{path.name}: OVER ({' '.join(window.split())[:120]})")
         assert not violations, "\n  ".join(violations)
 

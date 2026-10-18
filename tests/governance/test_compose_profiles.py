@@ -32,8 +32,8 @@ COMPOSE_TEST_ENV = {
     # Compose config validation must not depend on a developer's .env. These
     # values are interpolation-only and are never used to start a service.
     "SUPERSET_SECRET_KEY": "ci-compose-validation-only",
+    "SUPERSET_ADMIN_PASSWORD": "ci-compose-validation-only",
 }
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "docker" / "docker-compose.yml"
