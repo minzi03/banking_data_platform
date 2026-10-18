@@ -21,6 +21,8 @@ schedule changes that number, so re-measure if you change it.
 
 from datetime import datetime, timedelta
 
+from etl_flag import make_end_flag_task, make_start_flag_task
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
@@ -87,8 +89,12 @@ with DAG(
     tags=["cdc", "consolidation", "silver"],
 ) as dag:
     # Create consolidation tasks
+    dag_start = make_start_flag_task("dag_start", "cdc_consolidation_pipeline", "cdc", dag)
+    dag_end = make_end_flag_task("dag_end", "cdc_consolidation_pipeline", "cdc", dag)
+
     consolidate_customer = create_consolidation_task(CONSOLIDATION_CONFIGS[0])
     consolidate_account = create_consolidation_task(CONSOLIDATION_CONFIGS[1])
+    consolidate_online_transaction = create_consolidation_task(CONSOLIDATION_CONFIGS[2])
 
-    # Task dependency: customer first, then account
-    consolidate_customer >> consolidate_account
+    # Task dependency: dimensions first, then transaction current-state projection.
+    dag_start >> consolidate_customer >> consolidate_account >> consolidate_online_transaction >> dag_end
