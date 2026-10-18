@@ -78,9 +78,8 @@ def test_merchant_marts_do_not_select_raw_name():
         stripped = _MASK_EXPR.sub("SPLIT(<masked>", tail)
         for m in re.finditer(r"\b(\w+\.)?merchant_name\b(?!_masked)", stripped, re.IGNORECASE):
             violations.append(f"{rel}: {m.group(0)}")
-    assert not violations, (
-        "Gold xuất tên merchant NGUYÊN BẢN — vi phạm §4.3 (PII mask trước Gold):\n  "
-        + "\n  ".join(violations)
+    assert not violations, "Gold xuất tên merchant NGUYÊN BẢN — vi phạm §4.3 (PII mask trước Gold):\n  " + "\n  ".join(
+        violations
     )
 
 
@@ -106,9 +105,7 @@ def test_gold_ddl_declares_masked_column():
         assert len(block) == 2, f"thiếu CREATE TABLE cho {table}"
         body = block[1].split("USING iceberg", 1)[0]
         assert "merchant_name_masked" in body, f"{table}: DDL thiếu merchant_name_masked"
-        assert not re.search(r"\bmerchant_name\b(?!_masked)", body), (
-            f"{table}: DDL còn khai merchant_name gốc"
-        )
+        assert not re.search(r"\bmerchant_name\b(?!_masked)", body), f"{table}: DDL còn khai merchant_name gốc"
 
 
 def test_serving_merchant_models_inherit_masking():
@@ -125,9 +122,5 @@ def test_serving_merchant_models_inherit_masking():
 
 def test_pii_inventory_records_merchant_masking():
     """Bản kiểm kê phải ghi merchant_name_masked — nếu không, tài liệu lệch code."""
-    inventory = (PROJECT_ROOT / "docs" / "06-security-compliance" / "PII_INVENTORY.md").read_text(
-        encoding="utf-8"
-    )
-    assert "merchant_name_masked" in inventory, (
-        "PII_INVENTORY chưa ghi nhận merchant_name_masked"
-    )
+    inventory = (PROJECT_ROOT / "docs" / "06-security-compliance" / "PII_INVENTORY.md").read_text(encoding="utf-8")
+    assert "merchant_name_masked" in inventory, "PII_INVENTORY chưa ghi nhận merchant_name_masked"

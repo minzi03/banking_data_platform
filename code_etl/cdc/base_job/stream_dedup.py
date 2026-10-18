@@ -60,7 +60,9 @@ from pyspark.sql import functions as F
 DEFAULT_EVENT_TIME_COLUMN = "__cdc_ts"
 
 
-def apply_watermark_and_dedup(stream_df: DataFrame, dedup_cfg: dict | None, target_primary_key: str | None = None) -> DataFrame:
+def apply_watermark_and_dedup(
+    stream_df: DataFrame, dedup_cfg: dict | None, target_primary_key: str | None = None
+) -> DataFrame:
     """
     Áp watermark + dedup lên stream DataFrame trước khi `writeStream`.
 
@@ -88,10 +90,7 @@ def apply_watermark_and_dedup(stream_df: DataFrame, dedup_cfg: dict | None, targ
 
     keys = dedup_cfg.get("keys") or ([target_primary_key] if target_primary_key else [])
     if not keys:
-        raise ValueError(
-            "dedup.keys rỗng và target.primary_key cũng không khai — không có khoá "
-            "nào để chống trùng."
-        )
+        raise ValueError("dedup.keys rỗng và target.primary_key cũng không khai — không có khoá nào để chống trùng.")
 
     # Tombstone (value NULL) theo sau mỗi delete để log compaction — không phải
     # event nghiệp vụ. Debezium đã gửi delete thật ở bản ghi `__op=d` trước đó.

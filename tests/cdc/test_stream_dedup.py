@@ -39,6 +39,7 @@ def _cdc_configs() -> dict[str, dict]:
 # Lớp 1 — Contract tĩnh (không cần Spark)
 # =============================================================================
 
+
 class TestDedupConfigContract:
     def test_every_declared_dedup_block_is_valid(self):
         """Khối `dedup` trong mọi YAML CDC phải hợp lệ — nếu không job chết lúc chạy."""
@@ -96,6 +97,7 @@ class TestDedupConfigContract:
 # Lớp 2 — Hành vi thật trên stream (cần Spark)
 # =============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     sys.platform == "win32",
@@ -129,8 +131,7 @@ class TestWatermarkAndDedupBehaviour:
     def _run_stream(spark, transformed_df, tmp_path, name: str):
         """Ghi stream ra memory sink rồi trả toàn bộ dòng đã nhận."""
         query = (
-            transformed_df.writeStream
-            .format("memory")
+            transformed_df.writeStream.format("memory")
             .queryName(name)
             .outputMode("append")
             .option("checkpointLocation", str(tmp_path / f"ckpt_{name}"))
@@ -181,14 +182,10 @@ class TestWatermarkAndDedupBehaviour:
         stream = self._stream_from_payloads(
             spark, [{"payload": {"transaction_id": "9", "__ts_ms": "1700000000000"}}], tmp_path, "ts"
         )
-        out = mod.apply_watermark_and_dedup(
-            stream, {"watermark_delay": "10 minutes", "keys": ["transaction_id"]}
-        )
+        out = mod.apply_watermark_and_dedup(stream, {"watermark_delay": "10 minutes", "keys": ["transaction_id"]})
         result = self._run_stream(spark, out, tmp_path, "dedup_ts")
         assert result, "stream không trả dòng nào"
-        assert result[0][mod.DEFAULT_EVENT_TIME_COLUMN] is not None, (
-            "event time NULL → watermark vô hiệu"
-        )
+        assert result[0][mod.DEFAULT_EVENT_TIME_COLUMN] is not None, "event time NULL → watermark vô hiệu"
 
     def test_tombstones_are_dropped_before_watermark(self, env, tmp_path):
         """Tombstone (value NULL) không có event time — phải bị loại trước watermark."""
@@ -202,9 +199,7 @@ class TestWatermarkAndDedupBehaviour:
             encoding="utf-8",
         )
         stream = spark.readStream.schema("value STRING").json(str(src))
-        out = mod.apply_watermark_and_dedup(
-            stream, {"watermark_delay": "10 minutes", "keys": ["transaction_id"]}
-        )
+        out = mod.apply_watermark_and_dedup(stream, {"watermark_delay": "10 minutes", "keys": ["transaction_id"]})
         result = self._run_stream(spark, out, tmp_path, "tomb")
         assert len(result) == 1, f"tombstone phải bị loại, nhận {len(result)} dòng"
 
@@ -229,9 +224,7 @@ class TestWatermarkAndDedupBehaviour:
             spark, [{"payload": {"transaction_id": "1", "__ts_ms": "1700000000000"}}], tmp_path, "err"
         )
         with pytest.raises(ValueError, match="khoá"):
-            mod.apply_watermark_and_dedup(
-                stream, {"watermark_delay": "10 minutes"}, target_primary_key=None
-            )
+            mod.apply_watermark_and_dedup(stream, {"watermark_delay": "10 minutes"}, target_primary_key=None)
 
     def test_dedup_without_delay_raises(self, env, tmp_path):
         spark, mod = env

@@ -93,7 +93,7 @@ def test_profile_combinations_have_no_broken_dependencies():
         ["apps"],
         ["observability"],
         ["orchestration", "serving"],  # Batch Lakehouse
-        ["streaming", "serving"],      # Streaming Lakehouse
+        ["streaming", "serving"],  # Streaming Lakehouse
         ["all"],
     ]
 
@@ -103,9 +103,7 @@ def test_profile_combinations_have_no_broken_dependencies():
             cmd.extend(["--profile", prof])
         cmd.extend(["config", "--services"])
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        assert res.returncode == 0, (
-            f"Profile combination {p} bị lỗi dependency:\n{res.stderr}"
-        )
+        assert res.returncode == 0, f"Profile combination {p} bị lỗi dependency:\n{res.stderr}"
 
 
 def test_16gb_workloads_stay_within_service_budget():

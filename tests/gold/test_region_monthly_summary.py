@@ -87,9 +87,7 @@ def test_region_comes_from_scd2_current_version():
     """
     sql = _sql()
     assert "dim_merchant" in sql
-    assert "BETWEEN dm.effective_from AND dm.effective_to" in sql, (
-        "phải join SCD2 theo khoảng hiệu lực tại cob_dt"
-    )
+    assert "BETWEEN dm.effective_from AND dm.effective_to" in sql, "phải join SCD2 theo khoảng hiệu lực tại cob_dt"
 
 
 def test_no_zero_division_in_growth():

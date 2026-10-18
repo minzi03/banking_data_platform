@@ -170,9 +170,7 @@ def _render(template: str, conn) -> str:
     """Render template như Airflow làm lúc task chạy."""
     import jinja2
 
-    return jinja2.Template(template, undefined=jinja2.StrictUndefined).render(
-        conn={"c": conn}
-    )
+    return jinja2.Template(template, undefined=jinja2.StrictUndefined).render(conn={"c": conn})
 
 
 class TestJdbcJinjaRendering:

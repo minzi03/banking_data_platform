@@ -367,9 +367,7 @@ class TestCdcStreamingFitsTheWorker:
             "consolidation sẽ WAITING vô hạn"
         )
         # Chừa ít nhất 1 core cho consolidation + các job batch.
-        assert worker_cores - used >= 1, (
-            f"chỉ còn {worker_cores - used} core cho consolidation — cần ít nhất 1"
-        )
+        assert worker_cores - used >= 1, f"chỉ còn {worker_cores - used} core cho consolidation — cần ít nhất 1"
 
 
 SCHEDULED_DAGS = [p for p in DAG_FILES if re.search(r'schedule_interval\s*=\s*"[^"]+"', p.read_text(encoding="utf-8"))]

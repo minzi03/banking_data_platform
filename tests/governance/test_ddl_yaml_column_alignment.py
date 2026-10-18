@@ -71,13 +71,15 @@ def _yaml_workloads() -> list[dict]:
         if not isinstance(cfg, dict) or "target" not in cfg or "sql" not in cfg:
             continue
         cols = _extract_select_columns(cfg["sql"])
-        workloads.append({
-            "path": path,
-            "target": f"bronze.{cfg['target']['table'].lower()}",
-            "cols": cols,
-            "layer": "bronze",
-            "type": cfg.get("load", {}).get("strategy", "full_snapshot"),
-        })
+        workloads.append(
+            {
+                "path": path,
+                "target": f"bronze.{cfg['target']['table'].lower()}",
+                "cols": cols,
+                "layer": "bronze",
+                "type": cfg.get("load", {}).get("strategy", "full_snapshot"),
+            }
+        )
 
     # Silver dims + facts
     for path in sorted(SILVER_DIR.glob("*/*.yml")):
@@ -87,13 +89,15 @@ def _yaml_workloads() -> list[dict]:
         if not isinstance(cfg, dict) or "target" not in cfg or "sql" not in cfg:
             continue
         cols = _extract_select_columns(cfg["sql"])
-        workloads.append({
-            "path": path,
-            "target": f"silver.{cfg['target']['table'].lower()}",
-            "cols": cols,
-            "layer": "silver",
-            "type": (cfg.get("job") or {}).get("type", "fact_txn"),
-        })
+        workloads.append(
+            {
+                "path": path,
+                "target": f"silver.{cfg['target']['table'].lower()}",
+                "cols": cols,
+                "layer": "silver",
+                "type": (cfg.get("job") or {}).get("type", "fact_txn"),
+            }
+        )
 
     return workloads
 

@@ -160,9 +160,7 @@ def _column_masks(table_path: str, masks: dict[str, str]) -> list[Permission]:
 # `dim_merchant_current`: bảng đó không có DDL trong repo (nếu dbt sinh ra) nên
 # mask sẽ trỏ tới cột không tồn tại — test_rbac_matrix bắt đúng điều này.
 _MERCHANT_NAME_MASK = "concat(substr(%s, 1, 1), '**')"
-_SILVER_MERCHANT_MASKS = _column_masks(
-    "iceberg.silver.dim_merchant", {"merchant_name": _MERCHANT_NAME_MASK}
-)
+_SILVER_MERCHANT_MASKS = _column_masks("iceberg.silver.dim_merchant", {"merchant_name": _MERCHANT_NAME_MASK})
 
 
 _BRONZE_AML_MASKS = _column_masks("iceberg.bronze.core_aml_alert", _AML_ALERT_MASKED) + _column_masks(

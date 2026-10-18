@@ -75,9 +75,7 @@ def test_reference_sql_targets_oracle_semantics():
 
     raw = _load_reference()["sql"]
     # Bỏ comment SQL/YAML trước khi kiểm — comment cố ý nhắc tới cú pháp Postgres.
-    sql = "\n".join(
-        line for line in raw.splitlines() if not line.lstrip().startswith("--")
-    ).lower()
+    sql = "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("--")).lower()
     assert "timezone(" not in sql, "Oracle không có timezone() — dùng AT TIME ZONE"
     assert "::date" not in sql, "Oracle không có cast ::date — dùng TRUNC()/CAST"
     assert re.search(r"\btrunc\(", sql), "SQL Oracle mẫu nên dùng TRUNC() cho ngày"
@@ -94,9 +92,7 @@ def test_reference_is_not_a_jdbc_workload_in_registry():
     """Registry contract test loại templates/; xác nhận ở đây để thay đổi sau không phá."""
     bronze_dir = PROJECT_ROOT / "code_etl" / "bronze"
     workloads = {
-        p.parent.name
-        for p in bronze_dir.glob("*/*.yml")
-        if p.parent.name not in {"templates", "file_sources"}
+        p.parent.name for p in bronze_dir.glob("*/*.yml") if p.parent.name not in {"templates", "file_sources"}
     }
     assert "templates" not in workloads
 

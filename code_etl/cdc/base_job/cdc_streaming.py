@@ -158,7 +158,9 @@ def main():
             dedup_cfg,
             target_primary_key=config["target"].get("primary_key"),
         )
-        print(f"  Watermark: {dedup_cfg.get('watermark_delay')} · dedup by {dedup_cfg.get('keys') or config['target'].get('primary_key')}")
+        print(
+            f"  Watermark: {dedup_cfg.get('watermark_delay')} · dedup by {dedup_cfg.get('keys') or config['target'].get('primary_key')}"
+        )
 
     # Write stream with foreachBatch
     query = (

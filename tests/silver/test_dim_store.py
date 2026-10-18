@@ -54,11 +54,19 @@ def test_silver_ddl_has_scd2_columns():
     ddl = SILVER_DDL.read_text(encoding="utf-8")
     block = ddl.split("lakehouse.silver.dim_store", 1)[1].split("USING iceberg", 1)[0]
     for col in (
-        "store_sk", "store_id", "merchant_id", "store_name", "city", "district",
-        "effective_from", "effective_to", "is_current", "last_updated",
+        "store_sk",
+        "store_id",
+        "merchant_id",
+        "store_name",
+        "city",
+        "district",
+        "effective_from",
+        "effective_to",
+        "is_current",
+        "last_updated",
     ):
         assert col in block, f"dim_store DDL thiếu {col}"
-    assert "PARTITIONED BY (is_current)" in ddl[ddl.index("lakehouse.silver.dim_store"):]
+    assert "PARTITIONED BY (is_current)" in ddl[ddl.index("lakehouse.silver.dim_store") :]
 
 
 def test_bronze_and_silver_bootstraps_schedule_store():

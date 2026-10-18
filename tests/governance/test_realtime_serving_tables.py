@@ -85,17 +85,13 @@ def test_peak_hours_converts_to_business_timezone():
     Cửa sổ 1 GIỜ phụ thuộc múi giờ. Gom theo UTC sẽ khiến giờ cao điểm
     (tan tầm ~17–19h ICT) hiện ra là 10–12h. Quy đổi phải tường minh.
     """
-    sql = _strip_comments(
-        (SERVING_DIR / "merchant_peak_hours_current.sql").read_text(encoding="utf-8")
-    )
+    sql = _strip_comments((SERVING_DIR / "merchant_peak_hours_current.sql").read_text(encoding="utf-8"))
     assert "Asia/Ho_Chi_Minh" in sql, "peak-hours chưa quy đổi múi giờ nghiệp vụ"
 
 
 def test_payment_notification_is_one_row_per_merchant():
     """Bảng thông báo phải 1 dòng/merchant (badge mới nhất), không phải log mọi giao dịch."""
-    sql = _strip_comments(
-        (SERVING_DIR / "merchant_payment_notification_current.sql").read_text(encoding="utf-8")
-    )
+    sql = _strip_comments((SERVING_DIR / "merchant_payment_notification_current.sql").read_text(encoding="utf-8"))
     assert "row_number()" in sql.lower(), "phải chọn giao dịch mới nhất mỗi merchant"
     assert REALTIME_MODELS["merchant_payment_notification_current"] == ["merchant_id"]
 
@@ -112,9 +108,5 @@ def test_serving_builder_can_read_silver_but_pii_stays_masked():
     assert "iceberg.silver.*" in paths, "serving_builder cần đọc Silver fact"
 
     masked = {p.resource_path for p in perms if p.column_mask}
-    assert "iceberg.silver.dim_merchant.merchant_name" in masked, (
-        "dbt đọc được Silver nhưng merchant_name phải bị che"
-    )
-    assert "iceberg.silver.dim_customer.full_name" in masked, (
-        "dbt đọc được Silver nhưng full_name khách phải bị che"
-    )
+    assert "iceberg.silver.dim_merchant.merchant_name" in masked, "dbt đọc được Silver nhưng merchant_name phải bị che"
+    assert "iceberg.silver.dim_customer.full_name" in masked, "dbt đọc được Silver nhưng full_name khách phải bị che"
