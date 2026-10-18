@@ -137,6 +137,16 @@ class TestMerchantReconciliationHelpers:
         assert "payment_channel IN ('QR', 'POS')" in query
         assert "refund_flag = 1" in query
 
+    def test_cdc_epoch_uses_microseconds(self):
+        """Debezium emits transaction_date as microseconds; millis would put every
+        row in 1970 and silently empty the merchant CDC cohort (measured on the
+        merchant-e2e fixture: 1789870177000000 == 2026-09-20 02:09:37 UTC)."""
+        query = merchant_metric_sql(
+            "lakehouse.silver.fact_online_transaction_current", "2026-09-20", epoch_timestamp=True
+        )
+        assert "timestamp_micros(" in query
+        assert "timestamp_millis(" not in query
+
     def test_metric_map_normalizes_currency_and_nulls(self):
         rows = [
             {

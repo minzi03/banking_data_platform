@@ -139,7 +139,7 @@ def _merchant_source_query(cob_dt: str) -> str:
 def _merchant_metric_sql(table: str, cob_dt: str, *, epoch_timestamp: bool = False) -> str:
     """Aggregate batch/current CDC at the exact source cohort and metric grain."""
     date_expr = (
-        "CAST(from_utc_timestamp(timestamp_millis(CAST(transaction_date AS BIGINT)), 'Asia/Ho_Chi_Minh') AS DATE)"
+        "CAST(from_utc_timestamp(timestamp_micros(CAST(transaction_date AS BIGINT)), 'Asia/Ho_Chi_Minh') AS DATE)"
         if epoch_timestamp
         else "CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)"
     )
