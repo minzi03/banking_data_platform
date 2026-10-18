@@ -69,7 +69,13 @@ sql: |
       FROM lakehouse.silver.dim_customer
       WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
-  -- Account transactions — 365d lookback, conditional aggregate 30d/90d tại chỗ
+  -- Facts are full snapshots: select each transaction's latest copy first.
+  acct_snapshot AS (
+      SELECT f.*, ROW_NUMBER() OVER (PARTITION BY txn_id ORDER BY cob_dt DESC) AS snapshot_rn
+      FROM lakehouse.silver.fact_txn_account f
+      WHERE cob_dt <= DATE '{{ cob_dt }}'
+  ),
+  -- Account transactions — 365d lookback, conditional aggregate 30d/90d at once.
   acct_txn AS (
       SELECT
           customer_id,
@@ -78,13 +84,18 @@ sql: |
           COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30) THEN ABS(txn_amount) END), 0) AS acct_amt_30d,
           COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90) THEN ABS(txn_amount) END), 0) AS acct_amt_90d,
           MAX(txn_date) AS acct_last_txn_date
-      FROM lakehouse.silver.fact_txn_account
-      WHERE cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -365) AND DATE '{{ cob_dt }}'
+      FROM acct_snapshot
+      WHERE snapshot_rn = 1
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
       GROUP BY customer_id
   ),
-  -- Card transactions — 365d lookback, conditional aggregate 30d/90d tại chỗ
+  card_snapshot AS (
+      SELECT f.*, ROW_NUMBER() OVER (PARTITION BY txn_id ORDER BY cob_dt DESC) AS snapshot_rn
+      FROM lakehouse.silver.fact_card_txn f
+      WHERE cob_dt <= DATE '{{ cob_dt }}'
+  ),
+  -- Card transactions — 365d lookback, conditional aggregate 30d/90d at once.
   card_txn AS (
       SELECT
           customer_id,
@@ -95,8 +106,8 @@ sql: |
           COALESCE(SUM(CASE WHEN CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
                              AND txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount END), 0) AS card_amt_90d,
           MAX(txn_date) AS card_last_txn_date
-      FROM lakehouse.silver.fact_card_txn
-      WHERE cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -365) AND DATE '{{ cob_dt }}'
+      FROM card_snapshot
+      WHERE snapshot_rn = 1
         AND status = 'SUCCESS'
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -365)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'

@@ -21,10 +21,19 @@ Chạy: pytest tests/governance/test_compose_profiles.py -v
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 import yaml
+
+COMPOSE_TEST_ENV = {
+    **os.environ,
+    # Compose config validation must not depend on a developer's .env. These
+    # values are interpolation-only and are never used to start a service.
+    "SUPERSET_SECRET_KEY": "ci-compose-validation-only",
+}
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "docker" / "docker-compose.yml"
@@ -102,7 +111,7 @@ def test_profile_combinations_have_no_broken_dependencies():
         for prof in p:
             cmd.extend(["--profile", prof])
         cmd.extend(["config", "--services"])
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        res = subprocess.run(cmd, capture_output=True, text=True, env=COMPOSE_TEST_ENV, check=False)
         assert res.returncode == 0, f"Profile combination {p} bị lỗi dependency:\n{res.stderr}"
 
 
