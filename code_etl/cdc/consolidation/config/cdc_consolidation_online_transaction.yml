@@ -1,0 +1,42 @@
+# CDC Consolidation Config — online_transaction current state
+# Source: Bronze append-only CDC; target: one latest row per transaction_id.
+source_table: lakehouse.bronze.online_transaction_cdc
+target_table: lakehouse.silver.fact_online_transaction_current
+business_key: transaction_id
+
+columns:
+  - transaction_id
+  - account_id
+  - device_id
+  - location_id
+  - customer_id
+  - transaction_type
+  - channel
+  - amount
+  - currency
+  - is_fraud
+  - fraud_reason
+  - status
+  - merchant_id
+  - payment_channel
+  - refund_flag
+  - transaction_date
+  - created_ts
+  - last_updated
+
+# Keep source epoch fields as BIGINT; EOD derives ICT dates explicitly with
+# timestamp_millis() and does not change the CDC storage contract.
+conversions:
+  amount: decimal_nullable
+
+ordering:
+  - column: __cdc_timestamp_ms
+    direction: desc
+  - column: __spark_batch_id
+    direction: desc
+
+metadata:
+  operation_column: __cdc_operation
+  event_timestamp_column: __cdc_timestamp
+  event_timestamp_ms_column: __cdc_timestamp_ms
+  batch_id_column: __spark_batch_id

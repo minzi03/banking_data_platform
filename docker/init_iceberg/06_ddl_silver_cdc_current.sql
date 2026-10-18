@@ -59,6 +59,36 @@ CREATE TABLE IF NOT EXISTS lakehouse.silver.dim_account_current (
 USING iceberg
 TBLPROPERTIES ('format-version' = '2');
 
+-- ONLINE TRANSACTION CURRENT (latest state for Merchant QR/POS EOD reconciliation)
+-- One row per transaction_id, consolidated from bronze.online_transaction_cdc.
+CREATE TABLE IF NOT EXISTS lakehouse.silver.fact_online_transaction_current (
+    transaction_id      BIGINT,
+    account_id          BIGINT,
+    device_id           BIGINT,
+    location_id         BIGINT,
+    customer_id         BIGINT,
+    transaction_type    VARCHAR(50),
+    channel              VARCHAR(50),
+    amount               DECIMAL(18,2),
+    currency             VARCHAR(10),
+    is_fraud             VARCHAR(10),
+    fraud_reason         VARCHAR(500),
+    status               VARCHAR(20),
+    merchant_id          BIGINT,
+    payment_channel      VARCHAR(10),
+    refund_flag          INT,
+    transaction_date     BIGINT,
+    created_ts           BIGINT,
+    last_updated         BIGINT,
+    __cdc_operation      VARCHAR(10),
+    __cdc_timestamp      TIMESTAMP,
+    __cdc_timestamp_ms   BIGINT,
+    __source_spark_batch_id BIGINT,
+    __consolidated_at    TIMESTAMP
+)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2');
+
 -- CDC Watermark (track consolidation progress)
 -- last_snapshot_id = tiến độ (snapshot Bronze CDC đã MERGE); ts/batch chỉ để quan sát.
 CREATE TABLE IF NOT EXISTS lakehouse.meta.cdc_watermark (

@@ -8,14 +8,14 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**101 bảng · 1395 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
+**102 bảng · 1418 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
 | [bronze](#bronze) | 30 | 456 |
-| [silver](#silver) | 20 | 278 |
+| [silver](#silver) | 21 | 301 |
 | [gold](#gold) | 19 | 302 |
 | [meta](#meta) | 1 | 5 |
 | [card_crm](#card_crm) | 3 | 42 |
@@ -1264,6 +1264,38 @@ Cleansed fact table capturing all transactions performed through online and digi
 | `cob_dt` | `DATE` |  |  |
 
 <sub>Nguồn DDL: `02_ddl_silver.sql`</sub>
+
+### `lakehouse.silver.fact_online_transaction_current`
+
+_Chưa có data contract trong `governance/datasets/`._
+
+| Cột | Kiểu | PII | Ghi chú |
+|---|---|:-:|---|
+| `transaction_id` | `BIGINT` |  |  |
+| `account_id` | `BIGINT` |  |  |
+| `device_id` | `BIGINT` |  |  |
+| `location_id` | `BIGINT` |  |  |
+| `customer_id` | `BIGINT` |  |  |
+| `transaction_type` | `VARCHAR(50)` |  |  |
+| `channel` | `VARCHAR(50)` |  |  |
+| `amount` | `DECIMAL(18,2)` |  |  |
+| `currency` | `VARCHAR(10)` |  |  |
+| `is_fraud` | `VARCHAR(10)` |  |  |
+| `fraud_reason` | `VARCHAR(500)` |  |  |
+| `status` | `VARCHAR(20)` |  |  |
+| `merchant_id` | `BIGINT` |  |  |
+| `payment_channel` | `VARCHAR(10)` |  |  |
+| `refund_flag` | `INT` |  |  |
+| `transaction_date` | `BIGINT` |  |  |
+| `created_ts` | `BIGINT` |  |  |
+| `last_updated` | `BIGINT` |  |  |
+| `__cdc_operation` | `VARCHAR(10)` |  |  |
+| `__cdc_timestamp` | `TIMESTAMP` |  |  |
+| `__cdc_timestamp_ms` | `BIGINT` |  |  |
+| `__source_spark_batch_id` | `BIGINT` |  |  |
+| `__consolidated_at` | `TIMESTAMP` |  |  |
+
+<sub>Nguồn DDL: `06_ddl_silver_cdc_current.sql`</sub>
 
 ### `lakehouse.silver.fact_support_ticket`
 

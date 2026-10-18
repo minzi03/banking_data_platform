@@ -51,6 +51,7 @@ sql: |
           HOUR(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh')) AS txn_hour
       FROM lakehouse.silver.fact_online_transaction t
       WHERE t.merchant_id IS NOT NULL
+        AND t.payment_channel IN ('QR', 'POS')
         AND t.cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -1) AND DATE '{{ cob_dt }}'
   ),
   daily AS (

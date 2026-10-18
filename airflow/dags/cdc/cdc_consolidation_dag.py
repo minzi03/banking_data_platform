@@ -20,10 +20,9 @@ schedule changes that number, so re-measure if you change it.
 """
 
 from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.operators.python import PythonOperator
-from airflow.utils.trigger_rule import TriggerRule
 
 # Default args
 default_args = {
@@ -45,6 +44,10 @@ CONSOLIDATION_CONFIGS = [
         "name": "account",
         "config_path": "/opt/project/code_etl/cdc/consolidation/config/cdc_consolidation_account.yml",
     },
+    {
+        "name": "online_transaction",
+        "config_path": "/opt/project/code_etl/cdc/consolidation/config/cdc_consolidation_online_transaction.yml",
+    },
 ]
 
 
@@ -64,9 +67,7 @@ def create_consolidation_task(config: dict) -> BashOperator:
     """Create a BashOperator for consolidation task."""
     return BashOperator(
         task_id=f"consolidate_{config['name']}",
-        bash_command=(
-            f"{SPARK_SUBMIT} {CONSOLIDATION_APP} --config {config['config_path']}"
-        ),
+        bash_command=(f"{SPARK_SUBMIT} {CONSOLIDATION_APP} --config {config['config_path']}"),
         dag=None,  # Set by DAG definition
     )
 
@@ -85,7 +86,6 @@ with DAG(
     max_active_runs=1,
     tags=["cdc", "consolidation", "silver"],
 ) as dag:
-
     # Create consolidation tasks
     consolidate_customer = create_consolidation_task(CONSOLIDATION_CONFIGS[0])
     consolidate_account = create_consolidation_task(CONSOLIDATION_CONFIGS[1])
