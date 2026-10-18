@@ -73,6 +73,12 @@ sql: |
       FROM lakehouse.silver.dim_card
       GROUP BY customer_id
   ),
+  -- Fact is a full snapshot: keep the latest copy of each transaction.
+  card_snapshot AS (
+      SELECT f.*, ROW_NUMBER() OVER (PARTITION BY txn_id ORDER BY cob_dt DESC) AS snapshot_rn
+      FROM lakehouse.silver.fact_card_txn f
+      WHERE cob_dt <= DATE '{{ cob_dt }}'
+  ),
   -- Card transactions 30d — grain: customer_id
   card_txn AS (
       SELECT
@@ -82,8 +88,8 @@ sql: |
           COALESCE(AVG(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount END), 0) AS avg_card_txn_amount_30d,
           COUNT(DISTINCT merchant_category) AS distinct_merchant_categories,
           MAX(txn_date) AS last_card_txn_date
-      FROM lakehouse.silver.fact_card_txn
-      WHERE cob_dt = DATE '{{ cob_dt }}'
+      FROM card_snapshot
+      WHERE snapshot_rn = 1
         AND status = 'SUCCESS'
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -30)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'

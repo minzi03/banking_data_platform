@@ -31,6 +31,15 @@ COB_DT = (
 )
 
 
+# Lần nạp đầu cho bảng incremental (ADR-0018): trigger với conf {"backfill_from": "1900-01-01"}.
+# ds_format parse giá trị như một ngày — chuỗi khác làm task fail thay vì lọt vào bash_command.
+# Chỉ gắn vào lệnh của job incremental; job full_snapshot từ chối --backfill_from.
+BACKFILL_FROM_ARG = (
+    "{{ ('--backfill_from ' ~ macros.ds_format(dag_run.conf['backfill_from'], '%Y-%m-%d', '%Y-%m-%d')) "
+    "if (dag_run and dag_run.conf and dag_run.conf.get('backfill_from')) else '' }}"
+)
+
+
 def cob_dt_from_context(context) -> str:
     """Cùng quy tắc với COB_DT cho PythonOperator (nhận **context)."""
     dag_run = context.get("dag_run")

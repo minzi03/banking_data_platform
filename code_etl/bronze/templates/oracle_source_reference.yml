@@ -1,0 +1,54 @@
+# Bronze Ingestion: dim_region_oracle (MOCK reference — Oracle source, khoá new2 C2)
+#
+# ─── Đây là FILE THAM CHIẾU, KHÔNG nằm trong DAG nào ────────────────────────
+# Nghiệp vụ new2: Core Banking chạy Oracle (khu vực/chi nhánh/MCC/sản phẩm),
+# Digital Banking chạy PostgreSQL. Platform phải nạp được CẢ HAI cùng một
+# Bronze layer, không chỉ Postgres.
+#
+# File này nằm trong `templates/` nên bị loại khỏi `BRONZE_CONFIGS` và khỏi
+# mọi DAG glob — nó không chạy, chỉ là khuôn mẫu để:
+#   1. Chứng minh hình dạng config Oracle là hợp lệ với `validate_config()`.
+#   2. Là điểm khởi đầu khi bật một Oracle thật (copy sang `core_banking/`).
+#
+# ─── Bật Oracle thật, 4 bước ────────────────────────────────────────────────
+#   1. Driver JAR: thêm ojdbc11 vào `docker/Dockerfile.spark` cạnh postgresql jar
+#        https://repo1.maven.org/maven2/com/oracle/database/jdbc/ojdbc11/23.5.0.24.07/ojdbc11-23.5.0.24.07.jar
+#      (Spark chọn driver class `oracle.jdbc.OracleDriver` theo prefix
+#       `jdbc:oracle:` — đã có trong `_DRIVER_MAP` của ingestion_jdbc.py.)
+#   2. Airflow Connection: conn_type = `oracle` (KHÔNG phải `postgres`).
+#        Host=ora-core  Port=1521  Schema=ORCLPDB1  Login=etl  Password=…
+#      `jdbc_conn_utils.jdbc_jinja_args` sinh
+#        jdbc:oracle:thin:@//ora-core:1521/ORCLPDB1
+#      theo conn_type tại thời điểm render.
+#   3. Copy file này sang `code_etl/bronze/core_banking/region_oracle.yml`
+#      và trỏ DAG sang connection Oracle.
+#   4. `Oracle` không có `timezone()` như Postgres: cột ngày dùng
+#      `CAST(... AS DATE)` / `TRUNC(...)`. Xem `cob_dt` bên dưới.
+source:
+  type: postgresql   # ← ĐỔI thành "oracle" khi dùng thật. `type` hiện chỉ là
+                     #    nhãn mô tả; driver thật do conn_type của Airflow quyết định.
+  schema: core_banking
+  fetchsize: 10000
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: core_region_oracle
+
+load:
+  strategy: full_snapshot
+
+sql: |
+  -- Cú pháp Oracle: không có `timezone(...)`; dùng TRUNC/CAST.
+  -- Cob_dt ở đây lấy từ cột ngày nghiệp vụ sẵn có của bảng, không tự tính.
+  SELECT
+    region_id,
+    region_code,
+    region_name,
+    parent_region_id,
+    branch_count,
+    risk_zone,
+    is_active,
+    last_updated,
+    TRUNC(business_date) AS business_date
+  FROM core_banking.region

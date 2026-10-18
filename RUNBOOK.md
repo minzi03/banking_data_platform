@@ -760,7 +760,65 @@ SELECT snapshot_id, made_current_at FROM bronze."core_customer_cdc$history" ORDE
   total). Without the cap, standalone Spark gave the first query 6 of 8 cores. Four
   queries and consolidation then stayed `WAITING` while Airflow reported success.
 
+### Checkpoint restart smoke test
+
+`scripts/verify_checkpoint_restart.py` proves that killing the streaming query and
+restarting on the same checkpoint loses nothing and produces no duplicate business key.
+It builds its own channel — topic `qr.payment.restart_test`, checkpoint prefix
+`checkpoints/cdc/qr_payment_restart_test/`, table `bronze.qr_restart_test_cdc` — and
+never touches `qr.payment.events` or `qr_payment_v1`.
+
+```bash
+cd banking_data_platform
+python scripts/verify_checkpoint_restart.py --json    # exit 0 = PASS, 1 = FAIL, 2 = ENV
+```
+
+Four phases: 12 events → Bronze, SIGKILL, 8 new events + 1 replay of an old event with
+its original event time, restart, then assert `no_loss`, `no_duplicate_keys` and
+`checkpoint_resumed`. The last one parses Spark's `Stream started from` line, because
+Spark 3.5 does not emit `Initial offsets` once a checkpoint exists — expecting that line
+makes a passing run report FAIL.
+
+**The script never deletes its topic, checkpoint or keeps state.** A rerun exits `2` (ENV)
+until you clean up. Cleaning is a deliberate two-step, because both resources are shared:
+
+```bash
+# 1. Topic (offset must start again at 0)
+docker exec banking-kafka kafka-topics --bootstrap-server localhost:9092 \
+  --delete --topic qr.payment.restart_test
+
+# 2. Checkpoint prefix, on the MinIO volume
+docker exec banking-minio sh -c \
+  'rm -rf /data/lakehouse/checkpoints/cdc/qr_payment_restart_test'
+```
+
+Never delete `checkpoints/cdc/qr_payment_v1/` — that is the production QR stream.
+
+The table and the generated config are dropped automatically by the script.
+
+Scope: this demonstrates checkpoint recovery plus **bounded** watermark deduplication.
+The watermark is not partition-aware and Kafka offsets are not persisted on the valid
+Bronze path, so it is not an exactly-once guarantee beyond the watermark window.
+
 ---
+
+## Incremental transaction facts (ADR-0018)
+
+`core_txn_account`, `core_card_txn`, `core_online_transaction` and their Silver facts hold
+one **business day** (ICT) per `cob_dt`. The daily run reads only that day.
+
+- **New stack / first load**: backfill history once. Airflow: trigger Bronze, Silver, Gold, dbt
+  with `--conf '{"cob_dt": "YYYY-MM-DD", "backfill_from": "1900-01-01"}'` (upstream first). CLI:
+  `ingestion_jdbc.py … --backfill_from 1900-01-01`, `fact_txn.py … --backfill_from 1900-01-01`.
+  The bootstraps (`code_etl/*/bootstrap/initial_load.py`) backfill on their own. Without it,
+  Gold 30/90/365-day KPIs see a single day.
+- **Re-run one day**: trigger that `cob_dt` without `backfill_from`; `overwritePartitions`
+  replaces only that day's partition.
+- **Late-arriving transactions** (event date D, reaching the source after D was loaded) are
+  missed until D is re-run. The synthetic source has none; a real one would re-run D-1 daily.
+- **Data for a second day** on the synthetic source:
+  `python data_generator/append_day.py --day YYYY-MM-DD --host localhost` copies day D-7's
+  transactions into D (credentials from `POSTGRES_*`).
 
 ## Backfill Playbook
 

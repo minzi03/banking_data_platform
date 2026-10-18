@@ -3,7 +3,7 @@
 # Quick commands for managing the data platform
 # =============================================================================
 
-.PHONY: help env-check secrets up down restart logs status clean seed superset superset-init
+.PHONY: help env-check secrets up up-core up-batch up-streaming up-observability up-governance up-apps up-lite up-db up-airflow down restart logs status clean seed superset superset-init
 
 COMPOSE_FILE := docker/docker-compose.yml
 # Image Spark không đưa /opt/spark/bin vào PATH: `docker exec … spark-submit` trần
@@ -17,9 +17,15 @@ help:
 	@echo " Banking Data Platform — Commands"
 	@echo "=========================================="
 	@echo ""
-	@echo "  Infrastructure:"
-	@echo "    make up          Start all services"
-	@echo "    make up-lite     Start without CDC (lighter)"
+	@echo "  Infrastructure (Docker Compose Profiles — 16GB RAM friendly):"
+	@echo "    make up          Start all 30 services (--profile all, >=32GB RAM)"
+	@echo "    make up-core     Start base Lakehouse (Postgres, MinIO, Iceberg, Spark — ~4.5GB RAM)"
+	@echo "    make up-batch    Start Batch Lakehouse (Core + Airflow + Trino/dbt — ~9GB RAM)"
+	@echo "    make up-streaming Start Streaming Lakehouse (Core + Kafka + Debezium + Trino — ~10GB)"
+	@echo "    make up-observability Start Observability stack (Prometheus + Grafana + Exporter)"
+	@echo "    make up-governance Start Governance stack (OpenMetadata)"
+	@echo "    make up-apps     Start User Apps & BI (FastAPI + Streamlit + Superset + MLflow)"
+	@echo "    make up-lite     Alias for make up-batch (no CDC, fits in 16GB RAM)"
 	@echo "    make up-db       Start only PostgreSQL + MinIO (for seed data)"
 	@echo "    make down        Stop all services"
 	@echo "    make restart     Restart all services"
@@ -93,14 +99,42 @@ secrets: env-check
 	$(PYTHON) scripts/bootstrap_trino_auth.py
 
 up: secrets
+	$(DC) --profile all up -d
+	@echo ""
+	@echo "All 30 services starting (--profile all)... check status with: make status"
+
+up-core: secrets
 	$(DC) up -d
 	@echo ""
-	@echo "All services starting... check status with: make status"
+	@echo "Foundation Lakehouse starting (Postgres, MinIO, Iceberg, Spark)..."
 
-up-lite: secrets
-	$(DC) up -d --scale debezium=0 --scale kafka=0 --scale zookeeper=0
+up-batch: secrets
+	$(DC) --profile orchestration --profile serving up -d
 	@echo ""
-	@echo "Core services starting (no CDC)..."
+	@echo "Batch Lakehouse starting (Core + Airflow + Trino/dbt — ~9GB RAM)..."
+
+up-streaming: secrets
+	$(DC) --profile streaming --profile serving up -d
+	@echo ""
+	@echo "Streaming Lakehouse starting (Core + Kafka + Debezium + Trino — ~10GB RAM)..."
+
+up-observability: secrets
+	$(DC) --profile observability up -d
+	@echo ""
+	@echo "Observability stack starting (Core + Prometheus + Alertmanager + Grafana)..."
+
+up-governance: secrets
+	$(DC) --profile governance up -d
+	@echo ""
+	@echo "Governance stack starting (Core + OpenMetadata)..."
+
+up-apps: secrets
+	$(DC) --profile apps up -d
+	@echo ""
+	@echo "User Apps & BI starting (Core + Streamlit + FastAPI + Superset + MLflow)..."
+
+up-lite: up-batch
+	@echo "up-lite is an alias for up-batch (Batch Lakehouse on 16GB RAM)"
 
 up-db: env-check
 	$(DC) up -d postgres minio mc iceberg-rest
@@ -108,7 +142,7 @@ up-db: env-check
 	@echo "Database + Storage services starting..."
 
 up-airflow:
-	$(DC) up -d airflow-init airflow-webserver airflow-scheduler
+	$(DC) --profile orchestration up -d airflow-init airflow-webserver airflow-scheduler
 	@echo ""
 	@echo "Airflow services starting..."
 

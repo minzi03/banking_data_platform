@@ -3,6 +3,11 @@ Framework nạp dữ liệu vào tầng Bronze qua kết nối JDBC.
 Được điều khiển bằng file YAML (metadata-driven), dùng lại được cho nhiều bảng.
 Hỗ trợ 3 chiến lược nạp: full_snapshot, incremental, initial_full.
 
+incremental (ADR-0018): SQL chỉ lấy dòng có ngày nghiệp vụ trong [window_start, window_end)
+và tự tính cột cob_dt = ngày nghiệp vụ. Hằng ngày: cửa sổ = đúng ngày cob_dt. Nạp lịch sử
+lần đầu: --backfill_from YYYY-MM-DD mở rộng window_start; overwritePartitions ghi mọi
+partition ngày có trong kết quả.
+
 Nguồn: PostgreSQL (single source) → Lakehouse Bronze (Iceberg)
 """
 
@@ -18,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "shared"))
 
 from spark.iceberg_utils import get_iceberg_table_name, write_to_iceberg
 from spark.spark_session import get_spark_session
+from utils.business_window import load_window
 from utils.logger import get_logger
 from utils.sql_renderer import render_sql
 from utils.yaml_loader import load_config
@@ -37,6 +43,12 @@ def parse_arguments():
         "(Airflow truyền qua env để mật khẩu không nằm trong argv / ps / Spark UI).",
     )
     parser.add_argument("--fetchsize", type=int, default=10000, help="Số dòng mỗi lần JDBC kéo về (mặc định: 10000)")
+    parser.add_argument(
+        "--backfill_from",
+        default=None,
+        help="Chỉ cho strategy incremental: nạp mọi ngày nghiệp vụ từ ngày này tới cob_dt "
+        "(lần nạp đầu). Bỏ trống = chỉ ngày cob_dt.",
+    )
     args = parser.parse_args()
     if args.db_password is None:
         args.db_password = os.environ.get("DB_PASSWORD")
@@ -71,9 +83,17 @@ def validate_config(config):
     strategy = config["load"]["strategy"]
     if strategy not in ["full_snapshot", "incremental", "initial_full"]:
         raise ValueError(f"Chiến lược nạp không hợp lệ: {strategy}")
+    if strategy == "incremental":
+        # Thiếu một trong hai thì mỗi lần chạy lặng lẽ nạp sai: không có cột ngày nghiệp vụ
+        # → mọi dòng mang cob_dt của lần chạy; không có cửa sổ → kéo toàn bảng mỗi ngày.
+        if config["load"].get("cob_dt_from_column") != "cob_dt":
+            raise ValueError("incremental cần load.cob_dt_from_column: cob_dt (ngày nghiệp vụ tính trong SQL)")
+        for var in ("window_start", "window_end"):
+            if "{{ " + var + " }}" not in config["sql"]:
+                raise ValueError(f"incremental cần {{{{ {var} }}}} trong SQL")
 
 
-def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger):
+def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger, backfill_from=None):
     """
     Kết nối JDBC đến database nguồn, chạy SQL và trả về DataFrame.
 
@@ -84,7 +104,7 @@ def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, f
     4. Gắn cột cob_dt vào mỗi dòng dữ liệu.
     """
     sql = config["sql"]
-    template_vars = {"cob_dt": cob_dt}
+    template_vars = {"cob_dt": cob_dt, **load_window(cob_dt, backfill_from)}
     logic_sql = render_sql(sql, template_vars)
     logger.info(f"SQL sau khi render:\n{logic_sql}")
 
@@ -137,13 +157,17 @@ def extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, f
     return df.withColumn("cob_dt", F.lit(cob_dt).cast("date"))
 
 
-def run_ingestion(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger):
+def run_ingestion(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger, backfill_from=None):
     """Luồng chính của job: đọc dữ liệu từ nguồn rồi ghi vào bảng Iceberg tầng Bronze."""
     logger.info("Bắt đầu job nạp dữ liệu Bronze")
     logger.info(f"Bảng đích: {config['target']}")
     logger.info(f"Chiến lược nạp: {config['load']['strategy']}")
 
-    df = extract_from_source(spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger)
+    if backfill_from and config["load"]["strategy"] != "incremental":
+        raise ValueError(f"--backfill_from chỉ dùng cho strategy incremental, không cho {config['load']['strategy']}")
+    df = extract_from_source(
+        spark, config, cob_dt, jdbc_url, db_user, db_password, fetchsize, logger, backfill_from=backfill_from
+    )
 
     target = config["target"]
     table_name = get_iceberg_table_name(catalog=target["catalog"], schema=target["schema"], table=target["table"])
@@ -174,6 +198,7 @@ def main():
             db_password=args.db_password,
             fetchsize=args.fetchsize,
             logger=logger,
+            backfill_from=args.backfill_from or None,
         )
 
     except Exception:

@@ -38,7 +38,8 @@ quality_rules:
     - transaction_date
     - amount
     - status
-  min_row_count: 5000
+  # Một partition = MỘT ngày nghiệp vụ (ADR-0018). ×1 đo 2026-09-29: ~1.200 dòng/ngày.
+  min_row_count: 500
   unique_check:
     - transaction_id
   freshness_sla_hours: 24

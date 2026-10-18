@@ -41,7 +41,9 @@ def _workloads() -> dict[str, dict]:
     """rel_path → {schema, table, target, strategy} cho mọi workload Bronze."""
     out = {}
     for path in sorted(BRONZE_DIR.glob("*/*.yml")):
-        if path.parent.name == "templates":
+        # templates/ là tài liệu mẫu; file_sources/ là nguồn FILE (SFTP), không có
+        # SQL FROM → không thuộc registry JDBC. Cả hai loại trừ đúng nghĩa.
+        if path.parent.name in {"templates", "file_sources"}:
             continue
         config = yaml.safe_load(path.read_text(encoding="utf-8"))
         match = _FROM.search(config["sql"])

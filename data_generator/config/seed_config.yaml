@@ -233,6 +233,12 @@ digital_banking:
       p99:     50000000
       min:        10000
       max:    100000000
+    # QR/POS merchant acquiring (khoá new2): tỷ lệ giao dịch đi qua merchant,
+    # và trong nhóm đó tỷ lệ dùng QR vs POS; tỷ lệ hoàn tiền trên giao dịch
+    # thành công qua merchant.
+    merchant_payment_rate: 0.45
+    qr_share: 0.65
+    refund_rate: 0.012
 
   support_ticket:
     row_count: 25000
@@ -345,3 +351,7 @@ digital_banking:
       - {mcc: "9402", desc: "Postal Services - Government Only", group: "SERVICES", risk: 0}
   merchant:
     row_count: 2000
+  # Điểm bán của merchant (khoá new2 §2.2 — SCD2 "merchant và cửa hàng").
+  # Trần theo số merchant: phần lớn merchant 1 cửa hàng, số ít chuỗi 2–5.
+  store:
+    row_count: 3000

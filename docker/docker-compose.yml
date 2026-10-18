@@ -20,34 +20,41 @@
 #   om-mysql → om-elasticsearch → openmetadata (Data Catalog & Lineage)
 #
 # =============================================================================
-# QUICK START:
+# PROFILES & QUICK START (Tối ưu cho máy 16GB RAM — Khoá new2 C8):
 #
-#   [1] Start everything:
+#   Platform chia thành các profile để không bật toàn bộ 30 container cùng lúc.
+#   Các dịch vụ nền tảng (Postgres, MinIO, Iceberg, Spark) luôn chạy mặc định.
+#
+#   [1] Foundation Lakehouse (Batch dev / Seed data — ~4.5GB RAM):
 #       docker compose up -d
 #
-#   [2] Start without CDC (lighter):
-#       docker compose up -d --scale debezium=0
+#   [2] Batch Lakehouse (Core + Airflow + Trino/dbt — ~9GB RAM — CHẠY TỐT TRÊN 16GB):
+#       docker compose --profile orchestration --profile serving up -d
 #
-#   [3] Start without Airflow:
-#       docker compose up -d --scale airflow-webserver=0 --scale airflow-scheduler=0
+#   [3] Real-time Streaming (Core + Kafka + Debezium + Trino — ~10GB RAM):
+#       docker compose --profile streaming --profile serving up -d
 #
-#   [4] Start without OpenMetadata (lighter):
-#       docker compose up -d --scale openmetadata=0 --scale om-mysql=0 --scale om-elasticsearch=0
+#   [4] Monitoring & Observability (Core + Prometheus + Grafana — ~7.5GB RAM):
+#       docker compose --profile observability up -d
 #
-# RESOURCE BUDGET (Docker Desktop ~14GB):
+#   [5] Governance & Data Catalog (Core + OpenMetadata — ~7.5GB RAM):
+#       docker compose --profile governance up -d
 #
-#   postgres          400m  │ dev scale
-#   minio             384m  │ object storage
-#   iceberg-rest      384m  │ REST adapter
-#   spark-master      400m  │ coordinate only
-#   spark-worker-1   9000m  │ 8 cores, 8GB for 6 streaming jobs
-#   zookeeper         256m  │ lightweight
-#   kafka            1024m  │ single broker
-#   debezium         2048m  │ CDC connector (snapshot memory)
-#   trino            1200m  │ heap 768m + code-cache 128m + JVM overhead
-#   airflow-web       800m  │ web UI
-#   airflow-sched    1300m  │ scheduler
-#   om-mysql          500m  │ OpenMetadata backend
+#   [6] User Apps & BI (Core + Streamlit + FastAPI + Superset + MLflow):
+#       docker compose --profile apps up -d
+#
+#   [7] Full Production Stack (Toàn bộ 30 container — máy >= 32GB RAM):
+#       docker compose --profile all up -d
+#
+# PROFILE MAPPING:
+#   core (default) : postgres, sftp, minio, mc, iceberg-rest, spark-master, spark-worker-1, iceberg-init
+#   orchestration  : airflow-init, airflow-webserver, airflow-scheduler
+#   serving        : trino, dbt
+#   streaming      : zookeeper, kafka, debezium, kafka-ui
+#   governance     : om-mysql, om-elasticsearch, om-migrate, openmetadata
+#   observability  : prometheus, alertmanager, grafana, freshness-exporter
+#   apps           : streamlit, api, superset, superset-init, mlflow
+# =============================================================================
 #   om-elasticsearch 1024m  │ OpenMetadata search
 #   openmetadata     1500m  │ Data Catalog & Lineage
 #   ─────────────────────────────────────────────────────────────────────
@@ -127,6 +134,32 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse_net
+
+  # ===========================================================================
+  # SFTP LANDING ZONE (file source — POS files / settlement files, khoá new2)
+  # ===========================================================================
+  # Nguồn file: quy trình đối soát cuối ngày của ngân hàng thả file POS/settlement
+  # vào SFTP; DE nạp vào Bronze. atmoz/sftp là image SFTP nhẹ, tài khoản khai qua
+  # tham số dòng lệnh (user:pass:uid:gid). Thư mục upload mount ra ./sftp_data để
+  # bỏ file mẫu vào (docker/init_sftp/seed.sh chép lúc khởi tạo).
+  sftp:
+    image: atmoz/sftp:alpine
+    container_name: banking-sftp
+    hostname: sftp
+    ports:
+      - "2222:22"
+    # user:password:uid:gid:thư-mục. Thư mục là điểm gốc chroot của user.
+    command: "sftp_user:sftp_pass:1001:1001:upload"
+    volumes:
+      - ./init_sftp:/etc/sftp/seed:ro
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 22 || exit 1"]
+      interval: 15s
       timeout: 5s
       retries: 5
     networks:
@@ -350,6 +383,7 @@ services:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: banking-zookeeper
     hostname: zookeeper
+    profiles: ["streaming", "all"]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -371,6 +405,7 @@ services:
     image: confluentinc/cp-kafka:7.6.0
     container_name: banking-kafka
     hostname: kafka
+    profiles: ["streaming", "all"]
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -400,6 +435,7 @@ services:
     image: debezium/connect:2.6
     container_name: banking-debezium
     hostname: debezium
+    profiles: ["streaming", "all"]
     depends_on:
       kafka:
         condition: service_healthy
@@ -430,6 +466,7 @@ services:
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: banking-kafka-ui
+    profiles: ["streaming", "all"]
     ports:
       - "8089:8080"
     environment:
@@ -450,6 +487,7 @@ services:
   trino:
     image: trinodb/trino:443
     container_name: banking-trino
+    profiles: ["serving", "analytics", "apps", "observability", "all"]
     # keystore password, shared secret, mật khẩu `trino` cho CLI trong container — sinh bởi scripts/bootstrap_trino_auth.py (ADR-0016).
     env_file:
       - ./secrets/trino/env/trino-server.env
@@ -499,6 +537,7 @@ services:
   airflow-init:
     <<: *airflow-common
     container_name: banking-airflow-init
+    profiles: ["orchestration", "all"]
     entrypoint: /bin/bash
     command:
       - -c
@@ -558,6 +597,7 @@ services:
   airflow-webserver:
     <<: *airflow-common
     container_name: banking-airflow-webserver
+    profiles: ["orchestration", "all"]
     command: airflow webserver --port 8080
     ports:
       - "8080:8080"
@@ -577,6 +617,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: banking-airflow-scheduler
+    profiles: ["orchestration", "all"]
     command: airflow scheduler
     mem_limit: 1300m
     healthcheck:
@@ -599,6 +640,7 @@ services:
     image: mysql:8.0
     container_name: banking-om-mysql
     hostname: om-mysql
+    profiles: ["governance", "all"]
     environment:
       MYSQL_ROOT_PASSWORD: ${OM_MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${OM_DB_NAME}
@@ -621,6 +663,7 @@ services:
     image: elasticsearch:8.12.0
     container_name: banking-om-elasticsearch
     hostname: om-elasticsearch
+    profiles: ["governance", "all"]
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -642,6 +685,7 @@ services:
     image: openmetadata/server:1.5.6
     container_name: banking-om-migrate
     hostname: om-migrate
+    profiles: ["governance", "all"]
     env_file: .env
     command: "./bootstrap/openmetadata-ops.sh migrate"
     environment:
@@ -676,6 +720,7 @@ services:
     image: openmetadata/server:1.5.6
     container_name: banking-openmetadata
     hostname: openmetadata
+    profiles: ["governance", "all"]
     env_file: .env
     environment:
       SERVER_PORT: "8585"
@@ -723,6 +768,7 @@ services:
       context: ../streamlit
       dockerfile: Dockerfile
     container_name: banking-streamlit
+    profiles: ["apps", "all"]
     # Chỉ mật khẩu Trino của `streamlit` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/streamlit.env
@@ -753,6 +799,7 @@ services:
       context: ../dbt
       dockerfile: Dockerfile
     container_name: banking-dbt
+    profiles: ["serving", "analytics", "all"]
     # Chỉ mật khẩu Trino của `dbt` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/dbt.env
@@ -784,6 +831,7 @@ services:
       context: ../api
       dockerfile: Dockerfile
     container_name: banking-api
+    profiles: ["apps", "all"]
     # Chỉ mật khẩu Trino của `customer_api` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/customer_api.env
@@ -821,6 +869,7 @@ services:
       context: ./superset
       dockerfile: Dockerfile
     container_name: banking-superset
+    profiles: ["apps", "bi", "all"]
     # Chỉ mật khẩu Trino của `superset` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/superset.env
@@ -862,6 +911,7 @@ services:
       context: ./superset
       dockerfile: Dockerfile
     container_name: banking-superset-init
+    profiles: ["apps", "bi", "all"]
     # Chỉ mật khẩu Trino của `superset` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/superset.env
@@ -899,6 +949,7 @@ services:
     image: ghcr.io/mlflow/mlflow:v2.16.0
     container_name: banking-mlflow
     hostname: mlflow
+    profiles: ["apps", "ml", "all"]
     ports:
       - "5000:5000"
     environment:
@@ -937,6 +988,7 @@ services:
     image: prom/prometheus:v2.51.0
     container_name: banking-prometheus
     hostname: prometheus
+    profiles: ["observability", "all"]
     ports:
       - "9095:9090"
     volumes:
@@ -955,6 +1007,7 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: banking-alertmanager
     hostname: alertmanager
+    profiles: ["observability", "all"]
     ports:
       - "9093:9093"
     volumes:
@@ -969,12 +1022,18 @@ services:
     image: grafana/grafana:10.4.0
     container_name: banking-grafana
     hostname: grafana
+    profiles: ["observability", "all"]
     ports:
       - "3000:3000"
+    env_file: .env
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/banking-platform.json
+      # Datasource Postgres-Serving tham chiếu ${POSTGRES_USER}/${POSTGRES_PASSWORD}
+      # (xem provisioniong/datasources/postgres.yml) — cần có trong env container.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -982,6 +1041,7 @@ services:
     mem_limit: 256m
     depends_on:
       - prometheus
+      - postgres
     networks:
       - lakehouse_net
 
@@ -990,6 +1050,7 @@ services:
       context: ./monitoring/exporters
       dockerfile: Dockerfile
     container_name: banking-freshness-exporter
+    profiles: ["observability", "all"]
     # Chỉ mật khẩu Trino của `freshness_exporter` (ADR-0016) — không nạp docker/.env.
     env_file:
       - ./secrets/trino/env/freshness_exporter.env

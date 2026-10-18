@@ -89,6 +89,16 @@ the previous code.
 - **Evidence manifest** regenerated and promoted `verified` (`cob_dt` 2026-09-23;
   README 24/24 bindings).
 
+### Incremental transaction facts (ADR-0018, 2026-09-30)
+
+- Bronze/Silver `txn_account`, `card_txn`, `online_transaction` load one business day per
+  `cob_dt` instead of re-reading the whole table; first load backfills (`backfill_from`).
+  Gold reads `cob_dt BETWEEN cob-N AND cob` (window models) or `<= cob` (history models).
+- Verified on the stack: 14/15 Gold tables identical to the snapshot-based run; the 15th
+  (`mart_customer_360`) differed only in `primary_channel` ties — a pre-existing
+  non-deterministic ranking, now tie-broken by `channel` (also `branch_monthly_summary`).
+- `data_generator/append_day.py` produces a second day of transactions.
+
 ### Owner decisions carried out (2026-09-30)
 
 - **RFM segment cut-offs.** They now follow the assignment's KPI dictionary

@@ -185,12 +185,19 @@ def _bronze_ingestion_workloads(manifest: dict) -> int:
     """
     Đếm ingestion workload theo SEMANTICS, không theo tên file.
     templates/source_registry.yml tự bị loại vì thiếu contract shape.
+
+    templates/ là tài liệu mẫu (vd oracle_source_reference.yml — có ĐỦ shape
+    source/target/load/sql nên rule semantics không tự loại). Loại tường minh
+    theo thư mục, cùng quy ước với DAG glob và test_bronze_source_registry:
+    templates/ không bao giờ là workload.
     """
     required = manifest["metrics"]["source"]["source_datasets"]["required_keys"]
     return sum(
         1
-        for _path, cfg in _load_yaml_files("code_etl/bronze/*/*.yml")
-        if isinstance(cfg, dict) and all(k in cfg for k in required)
+        for path, cfg in _load_yaml_files("code_etl/bronze/*/*.yml")
+        if path.parent.name != "templates"
+        and isinstance(cfg, dict)
+        and all(k in cfg for k in required)
     )
 
 

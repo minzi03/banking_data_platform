@@ -300,6 +300,9 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_online_transaction (
     is_fraud            INT,
     fraud_reason        STRING,
     status              STRING,
+    merchant_id         BIGINT,
+    payment_channel     STRING,
+    refund_flag         INT,
     transaction_date    TIMESTAMP,
     created_ts          TIMESTAMP,
     last_updated        TIMESTAMP,
@@ -468,6 +471,49 @@ CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_aml_customer_risk (
     expected_activity   STRING,
     created_at          TIMESTAMP,
     updated_at          TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 22. CORE_LOAN_PAYMENT (fact — thanh toán khoản vay, full snapshot)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_loan_payment (
+    payment_id          BIGINT,
+    loan_id             BIGINT,
+    payment_date        DATE,
+    scheduled_amount    DECIMAL(18,2),
+    amount_paid         DECIMAL(18,2),
+    principal_component DECIMAL(18,2),
+    interest_component  DECIMAL(18,2),
+    penalty             DECIMAL(18,2),
+    outstanding_after   DECIMAL(18,2),
+    days_late           INT,
+    payment_method      STRING,
+    payment_status      STRING,
+    late_payment_flag   INT,
+    last_updated        TIMESTAMP,
+    cob_dt              DATE
+)
+USING iceberg
+PARTITIONED BY (cob_dt)
+TBLPROPERTIES ('format-version' = '2');
+
+-- =============================================================================
+-- 23. CORE_STORE (dimension — điểm bán của merchant, khoá new2 §2.2)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS lakehouse.bronze.core_store (
+    store_id            BIGINT,
+    merchant_id         BIGINT,
+    store_name          STRING,
+    store_type          STRING,
+    address             STRING,
+    city                STRING,
+    district            STRING,
+    is_active           INT,
+    last_updated        TIMESTAMP,
     cob_dt              DATE
 )
 USING iceberg

@@ -1,0 +1,103 @@
+# Gold: mart_merchant_daily_summary — Merchant revenue & performance by day
+#
+# ─── Nghiệp vụ (khoá new2 — Merchant QR/POS acquiring) ───────────────────────
+# Nguồn: giao dịch thanh toán QR/POS qua merchant (silver.fact_online_transaction
+# với payment_channel ∈ {QR, POS}).
+#
+# KPI theo merchant × ngày:
+#   - doanh thu, số giao dịch, giá trị trung bình (avg txn value)
+#   - tỷ lệ hoàn tiền (refund rate) = giao dịch refund / giao dịch thành công
+#   - giờ cao điểm (peak hour) — phục vụ dashboard real-time + phân tích
+#   - xếp hạng merchant trong cùng ngành hàng (MCC) với tăng trưởng so kỳ trước
+#
+# ─── Business-date semantics (timezone) ──────────────────────────────────────
+# storage/instant = UTC | business timezone = Asia/Ho_Chi_Minh.
+# Ngày/giờ nghiệp vụ derive tường minh; KHÔNG dùng CAST(ts AS DATE) trần (lệch
+# Spark/Trino 29,2% — xem branch_monthly_summary.yml).
+job:
+  type: time_analytics
+
+source:
+  tables:
+    - silver.fact_online_transaction
+    - silver.dim_merchant
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: mart_merchant_daily_summary
+
+upstream_flags:
+  - silver.fact_online_transaction
+  - silver.dim_merchant
+
+validation:
+  require_non_empty: true
+  require_snapshots:
+    - silver.fact_online_transaction
+
+sql: |
+  WITH merchant_txn AS (
+      SELECT
+          t.merchant_id,
+          CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_date,
+          t.payment_channel,
+          t.transaction_id,
+          t.amount,
+          t.status,
+          t.refund_flag,
+          YEAR(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_year,
+          MONTH(CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)) AS txn_month,
+          HOUR(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh')) AS txn_hour
+      FROM lakehouse.silver.fact_online_transaction t
+      WHERE t.merchant_id IS NOT NULL
+        AND t.cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -1) AND DATE '{{ cob_dt }}'
+  ),
+  daily AS (
+      SELECT
+          merchant_id,
+          txn_date,
+          txn_year,
+          txn_month,
+          -- Chỉ giao dịch thành công mới tính doanh thu.
+          COUNT(CASE WHEN status = 'SUCCESS' THEN transaction_id END) AS txn_count,
+          COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN amount ELSE 0 END), 0) AS gross_amount,
+          COALESCE(AVG(CASE WHEN status = 'SUCCESS' THEN amount END), 0) AS avg_txn_amount,
+          COUNT(CASE WHEN refund_flag = 1 THEN transaction_id END) AS refund_count,
+          SUM(CASE WHEN payment_channel = 'QR' THEN 1 ELSE 0 END) AS qr_count,
+          SUM(CASE WHEN payment_channel = 'POS' THEN 1 ELSE 0 END) AS pos_count
+      FROM merchant_txn
+      GROUP BY merchant_id, txn_date, txn_year, txn_month
+  ),
+  peak AS (
+      SELECT merchant_id, txn_date, txn_hour, COUNT(*) AS h_cnt,
+             ROW_NUMBER() OVER (PARTITION BY merchant_id, txn_date ORDER BY COUNT(*) DESC, txn_hour) AS rn
+      FROM merchant_txn
+      WHERE status = 'SUCCESS'
+      GROUP BY merchant_id, txn_date, txn_hour
+  )
+  SELECT
+      d.merchant_id,
+      -- PII (khoá new2 §4.3): Gold chỉ mang tên đã che, không mang tên gốc.
+      CONCAT(SPLIT(dm.merchant_name, ' ')[0], ' **') AS merchant_name_masked,
+      dm.merchant_category,
+      dm.mcc_code,
+      dm.city,
+      dm.risk_category,
+      d.txn_date,
+      d.txn_year,
+      d.txn_month,
+      d.txn_count,
+      ROUND(d.gross_amount, 2) AS gross_amount,
+      ROUND(d.avg_txn_amount, 2) AS avg_txn_amount,
+      -- refund rate: giao dịch hoàn tiền / giao dịch thành công.
+      CASE WHEN d.txn_count > 0 THEN ROUND(d.refund_count / d.txn_count, 4) ELSE 0 END AS refund_rate,
+      d.qr_count,
+      d.pos_count,
+      p.txn_hour AS peak_hour,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM daily d
+  JOIN lakehouse.silver.dim_merchant dm
+      ON d.merchant_id = dm.merchant_id
+      AND DATE '{{ cob_dt }}' BETWEEN dm.effective_from AND dm.effective_to
+  LEFT JOIN peak p ON d.merchant_id = p.merchant_id AND d.txn_date = p.txn_date AND p.rn = 1

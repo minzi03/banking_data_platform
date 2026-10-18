@@ -1,0 +1,56 @@
+# Silver: dim_store (SCD Type 2 — full history)
+#
+# Cửa hàng/điểm bán của merchant (khoá new2 §2.2). Đề bài yêu cầu *"Lịch sử
+# thay đổi (SCD2) của merchant VÀ CỬA HÀNG"* và báo cáo theo "merchant và cửa
+# hàng" — cấp store chính là cấp mà báo cáo đó nói tới.
+#
+# Tracked (SCD2): địa chỉ, thành phố, quận, loại cửa hàng, trạng thái. Đổi địa
+# chỉ = đổi địa bàn phục vụ → phải giữ version cũ để báo cáo cùng kỳ vẫn đúng.
+#
+# Nguồn: bronze.core_store (full snapshot). Key biến mất = cửa hàng đóng/xoá
+# → close_missing_keys đóng version hiện hành.
+job:
+  type: scd_type2
+
+source:
+  tables:
+    - bronze.core_store
+
+target:
+  catalog: lakehouse
+  schema: silver
+  table: dim_store
+
+business_key:
+  - store_id
+
+scd:
+  type: 2
+  effective_from_column: effective_from
+  effective_to_column: effective_to
+  current_flag_column: is_current
+  sk_column: store_sk
+  close_missing_keys: true
+
+tracked_columns:
+  - merchant_id
+  - store_name
+  - store_type
+  - address
+  - city
+  - district
+  - is_active
+
+sql: |
+  SELECT
+      store_id,
+      merchant_id,
+      store_name,
+      store_type,
+      address,
+      city,
+      district,
+      is_active,
+      last_updated
+  FROM lakehouse.bronze.core_store
+  WHERE cob_dt = DATE '{{ cob_dt }}'

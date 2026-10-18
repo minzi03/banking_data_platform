@@ -2,6 +2,9 @@
 # Joins: dim_customer (customer_sk)
 job:
   type: fact_txn
+  # Bronze nguồn nạp theo ngày nghiệp vụ (ADR-0018): partition cob_dt = ngày ICT của
+  # giao dịch. Hằng ngày from_dt = cob_dt (một partition); nạp lịch sử: --backfill_from.
+  incremental: true
 
 source:
   tables:
@@ -38,4 +41,4 @@ sql: |
   LEFT JOIN lakehouse.silver.dim_customer c
       ON t.customer_id = c.customer_id
       AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
-  WHERE t.cob_dt = DATE '{{ cob_dt }}'
+  WHERE t.cob_dt BETWEEN DATE '{{ from_dt }}' AND DATE '{{ cob_dt }}'

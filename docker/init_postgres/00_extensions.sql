@@ -99,6 +99,34 @@ CREATE INDEX IF NOT EXISTS idx_contract_validation_dataset_cobdt
 COMMENT ON TABLE opslakehouse.contract_validation_log IS 'Data contract check results per dataset and cob_dt';
 
 -- =============================================================================
+-- Table: reconciliation_log — End-of-day streaming vs batch reconciliation
+-- =============================================================================
+-- Ghi bởi code_etl/shared/ops/eod_reconciliation.py (ops_eod_reconciliation_dag).
+-- Tiêu chí nghiệm thu nghiệp vụ ngân hàng: số liệu đường streaming (CDC → Silver
+-- Current) phải KHỚP số liệu đường batch (Silver fact) cho cùng cob_dt, trong
+-- ngưỡng tolerance. Lệch quá ngưỡng → FAIL, DAG dừng.
+CREATE TABLE IF NOT EXISTS opslakehouse.reconciliation_log (
+    id              SERIAL PRIMARY KEY,
+    metric_name     VARCHAR(200)   NOT NULL,   -- tên check (txn_count / txn_amount)
+    entity          VARCHAR(200)   NOT NULL,   -- thực thể được đối soát
+    stream_value    NUMERIC,                    -- giá trị từ đường streaming
+    batch_value     NUMERIC,                    -- giá trị từ đường batch
+    delta           NUMERIC,                    -- stream - batch
+    tolerance       NUMERIC,                    -- ngưỡng cho phép (tuyệt đối)
+    check_status    VARCHAR(20)    NOT NULL,   -- PASS / FAIL / WARN
+    details         TEXT,
+    cob_dt          DATE           NOT NULL,
+    checked_at      TIMESTAMP      NOT NULL DEFAULT NOW(),
+    --
+    CONSTRAINT chk_recon_status CHECK (check_status IN ('PASS', 'FAIL', 'WARN'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconciliation_entity_cobdt
+    ON opslakehouse.reconciliation_log (entity, cob_dt);
+
+COMMENT ON TABLE opslakehouse.reconciliation_log IS 'End-of-day streaming vs batch reconciliation results per cob_dt';
+
+-- =============================================================================
 -- Table: lineage_log — Table-level lineage edges
 -- =============================================================================
 -- Cột đúng với những gì governance/lineage.py (LineageTracker.write_to_postgres)

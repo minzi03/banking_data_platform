@@ -970,13 +970,13 @@ jobs:
         assert_rows "silver.fact_txn_account" \
           "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account WHERE cob_dt = DATE '${COB_DT}'"
 
-        # Snapshot của một ngày không được chứa giao dịch của ngày sau đó. Seed
-        # thiếu --as-of sẽ neo dữ liệu vào ngày chạy CI, tức SAU cob_dt này.
-        future=$(docker exec ci-trino trino --output-format CSV_UNQUOTED --execute \
-          "SELECT COUNT(*) FROM iceberg.silver.fact_txn_account
-           WHERE cob_dt = DATE '${COB_DT}'
-             AND CAST(txn_date AT TIME ZONE 'Asia/Ho_Chi_Minh' AS DATE) > DATE '${COB_DT}'" | tr -d ' \r')
-        echo "  silver.fact_txn_account · giao dịch sau cob_dt: ${future}"
+        # Seed thiếu --as-of neo dữ liệu vào ngày chạy CI, tức SAU cob_dt này. Từ ADR-0018
+        # Bronze chỉ lấy giao dịch tới hết cob_dt, nên kiểm trên lakehouse luôn ra 0 và
+        # không còn bắt được lỗi seed — kiểm ở NGUỒN: không giao dịch nào sau cob_dt.
+        future=$(docker exec ci-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+          "SELECT COUNT(*) FROM core_banking.txn_account
+           WHERE (timezone('Asia/Ho_Chi_Minh', timezone('UTC', txn_date)))::date > DATE '${COB_DT}'" | tr -d ' \r')
+        echo "  nguồn core_banking.txn_account · giao dịch sau cob_dt: ${future}"
         if [ "$future" != "0" ]; then
           echo "::error::${future} giao dịch sau cob_dt=${COB_DT} — seed không neo vào cob_dt (--as-of)?"
           exit 1

@@ -137,14 +137,22 @@ def generate_locations(count: int, config: dict) -> list[tuple]:
 def generate_online_transactions(count: int, config: dict, customer_ids: list[int],
                                   device_ids: list[int], location_ids: list[int],
                                   high_risk_location_ids: list[int] | None = None,
-                                  start_id: int = 1) -> list[tuple]:
+                                  start_id: int = 1,
+                                  merchant_ids: list[int] | None = None) -> list[tuple]:
     """
     Generate online transaction data with seasonal patterns and enriched fraud.
 
     Args:
         high_risk_location_ids: List of location_ids where is_high_risk_area=1
                                 for correlating fraud with high-risk areas
+        merchant_ids: List of merchant_id cho giao dịch thanh toán QR/POS. Chỉ một
+                      phần giao dịch (merchant_payment_rate) đi qua merchant; phần
+                      còn lại merchant_id/payment_channel = NULL. Nếu None → tất
+                      cả giao dịch không qua merchant (giữ hành vi cũ).
     """
+    merchant_payment_rate = config.get("merchant_payment_rate", 0.45)
+    refund_rate = config.get("refund_rate", 0.012)
+    qr_share = config.get("qr_share", 0.65)  # trong nhóm merchant payment: QR vs POS
     rows = []
     type_dist = config.get("type_distribution", {})
     channel_dist = config.get("channel_distribution", {})
@@ -209,6 +217,19 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
         # Use seasonal datetime
         txn_date = _random_datetime_seasonal(shift("2025-06-01"), shift("2026-08-01"))
 
+        # Merchant QR/POS payment: chỉ một phần giao dịch đi qua merchant. Chỉ
+        # giao dịch QR/POS mới có merchant; phần còn lại (chuyển khoản, rút tiền)
+        # merchant_id/payment_channel = NULL. Refund chỉ xảy ra trên giao dịch
+        # thành công qua merchant.
+        merchant_id = None
+        payment_channel = None
+        refund_flag = 0
+        if merchant_ids and random.random() < merchant_payment_rate:
+            merchant_id = random.choice(merchant_ids)
+            payment_channel = "QR" if random.random() < qr_share else "POS"
+            if status == "SUCCESS" and random.random() < refund_rate:
+                refund_flag = 1
+
         rows.append((
             i,
             None,  # account_id (nullable)
@@ -222,6 +243,9 @@ def generate_online_transactions(count: int, config: dict, customer_ids: list[in
             is_fraud,
             fraud_reason,
             status,
+            merchant_id,
+            payment_channel,
+            refund_flag,
             txn_date,
             txn_date,  # created_ts
             datetime.now(),
@@ -374,6 +398,73 @@ def generate_merchants(count: int, config: dict, mcc_codes: list[str],
             1 if random.random() < 0.95 else 0,  # 95% active
             datetime.now(),
         ))
+
+    return rows
+
+
+def generate_stores(count: int, config: dict, merchant_ids: list[int],
+                    cities: list[str] | None = None) -> list[tuple]:
+    """
+    Sinh danh bạ CỬA HÀNG (store) — khoá new2 §2.2.
+
+    Đề bài yêu cầu *"Lịch sử thay đổi (SCD2) của merchant VÀ CỬA HÀNG"*. Một
+    merchant (chuỗi, hộ kinh doanh) có thể có nhiều điểm bán; báo cáo "doanh thu
+    theo merchant VÀ cửa hàng" trong đề bài chính là cấp store.
+
+    Mỗi store thuộc đúng một merchant. Phần lớn merchant có 1 store; một số
+    chuỗi có 2–5. Store mang `district` — cấp địa bàn "quận" mà nguồn merchant
+    không có.
+    """
+    if cities is None:
+        cities = ["Hanoi", "HCM", "Da Nang", "Hai Phong", "Can Tho",
+                  "Bien Hoa", "Nha Trang", "Vung Tau", "Hue", "Quy Nhon"]
+
+    districts_by_city = {
+        "Hanoi": ["Ba Dinh", "Hoan Kiem", "Cau Giay", "Dong Da", "Hai Ba Trung"],
+        "HCM": ["District 1", "District 3", "District 7", "Binh Thanh", "Tan Binh"],
+        "Da Nang": ["Hai Chau", "Thanh Khe", "Son Tra", "Ngu Hanh Son"],
+        "Hai Phong": ["Hong Bang", "Le Chan", "Ngo Quyen"],
+        "Can Tho": ["Ninh Kieu", "Binh Thuy", "Cai Rang"],
+        "Bien Hoa": ["Bien Hoa Center", "Long Binh", "Tam Hiep"],
+        "Nha Trang": ["Nha Trang Center", "Vinh Hoa", "Loc Tho"],
+        "Vung Tau": ["Vung Tau Center", "Thang Tam", "Rach Dua"],
+        "Hue": ["Hue Center", "Phu Hoi", "Vinh Ninh"],
+        "Quy Nhon": ["Quy Nhon Center", "Hai Cang", "Ngo May"],
+    }
+
+    store_types = ["FLAGSHIP", "STANDARD", "KIOSK", "OUTLET"]
+    streets = ["Nguyen Trai", "Le Loi", "Tran Hung Dao", "Hai Ba Trung", "Pham Van Dong"]
+
+    rows = []
+    store_id = 0
+
+    for merchant_id in merchant_ids:
+        if len(rows) >= count:
+            break
+
+        # Phần lớn merchant 1 điểm bán; số ít chuỗi có nhiều cửa hàng.
+        n_stores = random.choices([1, 2, 3, 4, 5], weights=[0.80, 0.10, 0.05, 0.03, 0.02])[0]
+        home_city = random.choice(cities)
+
+        for seq in range(n_stores):
+            if len(rows) >= count:
+                break
+            store_id += 1
+            store_city = home_city if seq == 0 else random.choice(cities)
+            districts = districts_by_city.get(store_city, ["Central"])
+            stype = "FLAGSHIP" if (seq == 0 and n_stores >= 3) else random.choice(store_types)
+
+            rows.append((
+                store_id,
+                merchant_id,
+                f"Store #{store_id} - {store_city}",
+                stype,
+                f"{random.randint(1, 300)} {random.choice(streets)}",
+                store_city,
+                districts[seq % len(districts)],
+                1 if random.random() < 0.93 else 0,   # 93% đang hoạt động
+                datetime.now(),
+            ))
 
     return rows
 

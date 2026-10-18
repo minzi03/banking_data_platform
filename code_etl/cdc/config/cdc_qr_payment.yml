@@ -1,0 +1,71 @@
+# CDC Configuration — qr_payment (khoá new2 §3.1)
+#
+# Nguồn KHÁC Debezium: sự kiện thanh toán QR do producer Python bơm thẳng vào
+# Kafka (`scripts/qr_payment_producer.py`). Không có replication slot.
+#
+# Vì sao vẫn đọc được bằng CÙNG một streaming job: producer phát đúng envelope
+# Debezium (`payload` + `__op` + `__ts_ms`), nên `cdc_dlq.validate_and_split`
+# parse y hệt. Nhờ vậy QR event thừa hưởng nguyên DLQ, watermark và dedup —
+# không phải viết consumer thứ hai cho một schema gần giống hệt.
+#
+# Đích tách khỏi bảng CDC Postgres: `qr_payment_cdc`. Ghi chung vào
+# `online_transaction_cdc` sẽ trộn hai nguồn có vòng đời khác nhau (một bên là
+# replication slot, một bên là producer ad-hoc) và làm đối soát cuối ngày
+# không còn so sánh được nguồn nào với nguồn nào.
+kafka:
+  topic: qr.payment.events
+  starting_offsets: earliest
+  checkpoint_location: s3a://lakehouse/checkpoints/cdc/qr_payment_v1
+  trigger_interval: 10 seconds
+  max_offsets_per_trigger: 100000
+
+# Event time + chống trùng: producer có thể gửi lại khi retry (acks=all,
+# retries=3), nên dedup theo transaction_id là bắt buộc để không nhân đôi
+# doanh thu trên dashboard.
+dedup:
+  watermark_delay: "10 minutes"
+  keys:
+    - transaction_id
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: qr_payment_cdc
+  primary_key: transaction_id
+  columns:
+    - name: transaction_id
+      type: long
+    - name: account_id
+      type: long
+    - name: device_id
+      type: long
+    - name: location_id
+      type: long
+    - name: customer_id
+      type: long
+    - name: transaction_type
+      type: string
+    - name: channel
+      type: string
+    - name: amount
+      type: decimal
+    - name: currency
+      type: string
+    - name: is_fraud
+      type: string
+    - name: fraud_reason
+      type: string
+    - name: status
+      type: string
+    - name: merchant_id
+      type: long
+    - name: payment_channel
+      type: string
+    - name: refund_flag
+      type: int
+    - name: transaction_date
+      type: long
+    - name: created_ts
+      type: long
+    - name: last_updated
+      type: long

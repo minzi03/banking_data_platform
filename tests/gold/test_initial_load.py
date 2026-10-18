@@ -85,9 +85,9 @@ class TestGoldJobOrder:
                 assert "depends_on" not in job, f"Phase 1 job '{job['name']}' should not have depends_on"
 
     def test_mart360_jobs_count(self):
-        """Should have 6 mart360 jobs."""
+        """Should have 7 mart360 jobs (6 customer + merchant_360)."""
         mart360_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "mart360"]
-        assert len(mart360_jobs) == 6
+        assert len(mart360_jobs) == 7
 
     def test_segment_jobs_count(self):
         """Should have 4 segment jobs (rfm, churn, cross_sell, campaign)."""
@@ -95,9 +95,9 @@ class TestGoldJobOrder:
         assert len(segment_jobs) == 4
 
     def test_time_analytics_jobs_count(self):
-        """Should have 1 time_analytics job."""
+        """Should have 4 time_analytics jobs (branch + merchant daily/ranking + region)."""
         time_jobs = [j for j in GOLD_JOB_ORDER if j["type"] == "time_analytics"]
-        assert len(time_jobs) == 1
+        assert len(time_jobs) == 4
 
     def test_risk_jobs_count(self):
         """Should have 4 risk jobs (loan_portfolio, fraud, aml, loan_delinquency)."""

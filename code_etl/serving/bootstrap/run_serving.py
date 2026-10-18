@@ -35,6 +35,12 @@ SERVING_MODELS = [
     ("lakehouse.serving.customer_transaction_summary_current", "lakehouse.gold.customer_transaction_summary"),
     ("lakehouse.serving.customer_product_summary_current", "lakehouse.gold.customer_product_summary"),
     ("lakehouse.serving.customer_card_summary_current", "lakehouse.gold.customer_card_summary"),
+    # Merchant QR/POS acquiring (khoá new2). Đường sản xuất là dbt
+    # (dbt/models/serving/merchant_*_current.sql); giữ parity ở đây để script
+    # legacy không lệch với serving_sync.yml khi ai đó chạy đường Spark.
+    ("lakehouse.serving.merchant_360_current", "lakehouse.gold.mart_merchant_360"),
+    ("lakehouse.serving.merchant_daily_summary_current", "lakehouse.gold.mart_merchant_daily_summary"),
+    ("lakehouse.serving.merchant_ranking_current", "lakehouse.gold.mart_merchant_ranking"),
 ]
 
 

@@ -99,6 +99,30 @@ GOLD_JOB_ORDER = [
         "type": "risk",
         "config": "code_etl/gold/risk/loan_delinquency.yml",
     },
+    {
+        # Merchant 360° (advisory mart) — đọc silver.dim_merchant + fact_online_transaction.
+        "name": "mart_merchant_360",
+        "type": "mart360",
+        "config": "code_etl/gold/mart360/merchant_360.yml",
+    },
+    {
+        # Merchant acquiring: doanh thu/ngày theo merchant (QR/POS).
+        "name": "merchant_daily_summary",
+        "type": "time_analytics",
+        "config": "code_etl/gold/time_analytics/merchant_daily_summary.yml",
+    },
+    {
+        # Xếp hạng merchant theo MCC + tăng trưởng PoP theo tháng.
+        "name": "merchant_ranking",
+        "type": "time_analytics",
+        "config": "code_etl/gold/time_analytics/merchant_ranking.yml",
+    },
+    {
+        # Phân tích khu vực: doanh thu theo tỉnh/thành + MoM growth (khoá new2 §2.2).
+        "name": "region_monthly_summary",
+        "type": "time_analytics",
+        "config": "code_etl/gold/time_analytics/region_monthly_summary.yml",
+    },
     # === Phase 2: Depends on Phase 1 outputs ===
     {
         "name": "campaign_target",

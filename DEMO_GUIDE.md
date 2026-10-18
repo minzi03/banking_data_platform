@@ -41,6 +41,9 @@ AF() { docker exec banking-airflow-scheduler airflow "$@"; }
 
 # Trigger một DAG cho đúng cob_dt (mọi DAG đọc dag_run.conf["cob_dt"], xem airflow/plugins/cob_dt.py)
 TRIG() { AF dags unpause "$1" >/dev/null; AF dags trigger "$1" --conf "{\"cob_dt\": \"$2\"}"; }
+# Lần nạp ĐẦU trên stack mới: ba bảng giao dịch nạp theo ngày nghiệp vụ (ADR-0018), nên
+# phải nạp cả lịch sử một lần — thêm backfill_from (DAG chỉ gắn nó cho job incremental).
+TRIG_FIRST() { AF dags unpause "$1" >/dev/null; AF dags trigger "$1" --conf "{\"cob_dt\": \"$2\", \"backfill_from\": \"1900-01-01\"}"; }
 
 # Trạng thái các lần chạy gần nhất của một DAG
 RUNS() { AF dags list-runs -d "$1" -o plain | head -5; }
@@ -134,8 +137,10 @@ PQ "SELECT (SELECT COUNT(*) FROM core_banking.customer) customers,
 ```bash
 AF dags list-import-errors                 # mong đợi: No data found
 AF variables set pii_hash_salt "$(openssl rand -hex 32)"   # một lần; PII masking cần salt
+# Lần đầu trên stack mới (Bronze/Silver nạp lịch sử giao dịch vào partition từng ngày):
 for d in bronze_core_banking_dag bronze_card_crm_dag bronze_digital_banking_dag \
-         silver_all_dag gold_all_dag dbt_serving_publish; do TRIG $d $COB; done
+         silver_all_dag gold_all_dag dbt_serving_publish; do TRIG_FIRST $d $COB; done
+# Các ngày sau: TRIG $d <ngày> — chỉ nạp giao dịch của đúng ngày đó.
 ```
 Silver chờ đủ 3 cờ Bronze, Gold chờ Silver, dbt chờ `GOLD_COMPLETE` — lần đầu chạy một `cob_dt` thì trigger cùng lúc là đúng. Sensor coi upstream xong khi **dòng cờ mới nhất** của (job, `cob_dt`) là `S` (`etl_flag.upstream_success_sql`); Gold/dbt ghi `R` cho `GOLD_COMPLETE`/`SERVING_COMPLETE` ngay khi bắt đầu. **Chạy lại một `cob_dt` đã có cờ `S`:** trigger upstream trước (vài giây) rồi mới tới downstream, để `R` của lượt mới kịp che `S` cũ.
 
@@ -159,7 +164,7 @@ Có dòng `S` cho 3 Bronze, `silver_all_dag`, `gold_all_dag`, `GOLD_COMPLETE`, `
 
 ## 5. Bronze
 
-**What.** 22 bảng full snapshot mỗi `cob_dt`, **mọi bảng partition theo `cob_dt`**.
+**What.** 19 bảng full snapshot mỗi `cob_dt`; 3 bảng giao dịch nạp **một ngày nghiệp vụ** mỗi `cob_dt` (ADR-0018). **Mọi bảng partition theo `cob_dt`**.
 
 **Why.** `overwritePartitions()` chỉ an toàn trên bảng có partition: ghi đè đúng ngày của nó, chạy lại cùng ngày cho cùng kết quả. Trên bảng không partition, nó thay **toàn bộ** bảng.
 
@@ -198,7 +203,7 @@ TQ "SELECT COUNT(*) FROM silver.fact_txn_account f
 
 **Expected.** `current_rows = keys_`; không có key nào có hai version hiện hành; fact `rows_ = txns` = 1.200.000; `customer_sk` NULL = 0.
 
-**Talking points.** Fact là full snapshot mỗi `cob_dt` (nên đếm giao dịch phải giới hạn trong một snapshot). Fact gắn SK của version dim **hiệu lực tại cob_dt**, không phải `is_current`.
+**Talking points.** Ba fact giao dịch: partition = ngày nghiệp vụ (ADR-0018) — lượt hằng ngày chỉ đọc/ghi giao dịch của ngày đó; Gold đọc khoảng `cob_dt BETWEEN cob-N AND cob`. Kiểm tương đương trên stack: 14/15 bảng Gold giống hệt bản snapshot, bảng còn lại chỉ lệch ở hoà `primary_channel` (đã thêm khoá phá hoà). Fact gắn SK của version dim **hiệu lực tại cob_dt**, không phải `is_current`.
 
 ---
 

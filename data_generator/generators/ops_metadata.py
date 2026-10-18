@@ -63,6 +63,9 @@ def generate_source_registry() -> list[tuple]:
          "lakehouse.bronze.core_mcc_code", None, 1),
         ("digital_banking", "merchant", "postgresql", "postgres-banking",
          "lakehouse.bronze.core_merchant", None, 1),
+        # Điểm bán của merchant (khoá new2 §2.2) → dim_store SCD2.
+        ("digital_banking", "store", "postgresql", "postgres-banking",
+         "lakehouse.bronze.core_store", "lakehouse.silver.dim_store", 1),
     ]
 
     rows = []

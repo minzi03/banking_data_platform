@@ -126,12 +126,16 @@ class TestContractValidation:
 class TestRepoCollectors:
     def test_source_datasets_excludes_template_by_semantics(self, contract):
         """
-        Glob thô ra 23 file; đúng phải là 22 workload.
-        templates/source_registry.yml bị loại vì thiếu contract shape
-        (source+target+load+sql), KHÔNG phải vì blacklist tên file.
+        Glob thô ra 25 file; đúng phải là 22 workload.
+        Bị loại:
+          - templates/source_registry.yml — thiếu contract shape.
+          - templates/oracle_source_reference.yml — CÓ đủ shape nhưng là tài liệu
+            mẫu (khoá new2 C2), nên loại theo thư mục templates/.
+          - file_sources/pos_settlement.yml (nguồn SFTP) — thiếu contract shape.
+        KHÔNG phải blacklist tên file.
         """
-        assert gen._bronze_ingestion_workloads(contract) == 22
-        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 23
+        assert gen._bronze_ingestion_workloads(contract) == 23
+        assert len(list((PROJECT_ROOT / "code_etl/bronze").glob("*/*.yml"))) == 26
 
     def test_debezium_topics_reads_config_not_docstring(self, contract):
         """Docstring đầu register_connectors.py ghi 8/3/5 — sai. Config là 6/3/3."""
@@ -139,10 +143,11 @@ class TestRepoCollectors:
         assert gen._debezium_connectors(contract) == 3
 
     def test_silver_dimension_split(self):
-        assert gen._silver_dims(None) == 10
-        # dim_product / dim_branch là SCD2 (đề bài: lưu lịch sử customer/account/product/branch)
+        assert gen._silver_dims(None) == 12
+        # dim_product / dim_branch / dim_merchant là SCD2 (lưu lịch sử;
+        # merchant thêm 2026-10-16 cho nghiệp vụ QR/POS — khoá new2).
         assert gen._silver_dims("scd_type1") == 6
-        assert gen._silver_dims("scd_type2") == 4
+        assert gen._silver_dims("scd_type2") == 6
 
     def test_dq_check_types(self, contract):
         assert gen._dq_check_types(contract) == 9
@@ -154,20 +159,20 @@ class TestRepoCollectors:
         Neu con so nay nhay ve ~18 kem theo object `*_current`, nghia la co ai
         do them lai CTAS vao DDL → dual ownership quay lai.
         """
-        assert gen._gold_ddl_tables(contract) == 15
+        assert gen._gold_ddl_tables(contract) == 19
 
     def test_docker_services_three_way_split(self, contract):
-        """29 = 25 long-running + 4 one-shot."""
+        """30 = 26 long-running + 4 one-shot (thêm sftp landing zone, khoá new2)."""
         defined, long_running, one_shot = gen._compose_services(contract)
-        assert defined == 29
+        assert defined == 30
         assert one_shot == 4
-        assert long_running == defined - one_shot == 25
+        assert long_running == defined - one_shot == 26
 
     def test_airflow_files_vs_objects_differ(self, contract):
         """cdc_streaming_dag.py định nghĩa 2 DAG — hai metric khác nhau.
-        18 / 19 sau khi xoá dbt_seed và regulatory_reporting (TD-20, 2026-09-30)."""
-        assert gen._airflow_dag_files(contract) == 18
-        assert gen._airflow_dag_objects(contract) == 19
+        21 / 22 sau khi thêm bronze_sftp_files_dag (khoá new2, file source)."""
+        assert gen._airflow_dag_files(contract) == 21
+        assert gen._airflow_dag_objects(contract) == 22
 
     def test_collect_repo_metrics_fills_every_static_node(self, contract):
         collected = gen.collect_repo_metrics(contract)
@@ -574,11 +579,11 @@ class TestVerificationScope:
 class TestServingVisibility:
     def test_gold_ddl_declares_no_current_objects(self, contract):
         """
-        Sau retirement: 15 CREATE TABLE lich su, 0 CREATE VIEW.
+        Sau retirement: 19 CREATE TABLE lich su, 0 CREATE VIEW.
         Gold DDL khong con khai bao bat ky serving object nao.
         """
-        assert gen._gold_ddl_objects(contract) == 15
-        assert gen._gold_ddl_tables(contract) == 15
+        assert gen._gold_ddl_objects(contract) == 19
+        assert gen._gold_ddl_tables(contract) == 19
 
         ddl = (PROJECT_ROOT / "docker" / "init_iceberg" / "03_ddl_gold.sql").read_text(encoding="utf-8")
         created = re.findall(r"CREATE (?:TABLE IF NOT EXISTS|OR REPLACE VIEW)\s+[\w.]*\.(\w+)", ddl)

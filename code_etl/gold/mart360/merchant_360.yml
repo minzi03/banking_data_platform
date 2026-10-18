@@ -1,0 +1,119 @@
+# Gold: mart_merchant_360 — Merchant 360° daily snapshot (advisory mart)
+#
+# ─── Nghiệp vụ (khoá new2) ───────────────────────────────────────────────────
+# Mart tư vấn sản phẩm cho merchant: quy mô (doanh thu), tăng trưởng (PoP),
+# độ ổn định dòng tiền (độ biến động doanh thu ngày), và tín hiệu gợi ý sản phẩm
+# (vay vốn lưu động / tiết kiệm / POS bổ sung).
+#
+# Grain: 1 dòng / merchant / cob_dt (daily snapshot, partition theo cob_dt).
+# Consumer: serving → app tư vấn, dashboard quan hệ khách hàng doanh nghiệp.
+job:
+  type: mart360
+
+source:
+  tables:
+    - silver.dim_merchant
+    - silver.fact_online_transaction
+
+target:
+  catalog: lakehouse
+  schema: gold
+  table: mart_merchant_360
+
+upstream_flags:
+  - silver.dim_merchant
+  - silver.fact_online_transaction
+
+validation:
+  require_non_empty: true
+  require_snapshots:
+    - silver.fact_online_transaction
+
+sql: |
+  WITH base AS (
+      -- Merchant hiện hành (1 dòng/merchant).
+      SELECT merchant_id, merchant_sk, merchant_name, merchant_category, mcc_code,
+             city, state, risk_category
+      FROM lakehouse.silver.dim_merchant
+      WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
+  ),
+  daily_rev AS (
+      -- Doanh thu thành công theo ngày nghiệp vụ, cửa sổ 90 ngày.
+      -- fact_online_transaction nạp TĂNG DẦN (ADR-0018): partition cob_dt là ngày
+      -- nghiệp vụ của giao dịch. Chốt khoảng partition có cận trên cob_dt (không
+      -- pin một ngày) để chỉ quét đúng lịch sử trong cửa sổ, không full-scan.
+      SELECT
+          t.merchant_id,
+          CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS d_date,
+          SUM(CASE WHEN t.status = 'SUCCESS' THEN t.amount ELSE 0 END) AS day_revenue,
+          COUNT(CASE WHEN t.status = 'SUCCESS' THEN t.transaction_id END) AS day_txn
+      FROM lakehouse.silver.fact_online_transaction t
+      WHERE t.merchant_id IS NOT NULL
+        AND t.cob_dt BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -90) AND DATE '{{ cob_dt }}'
+        AND CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
+            BETWEEN DATE_ADD(DATE '{{ cob_dt }}', -90) AND DATE '{{ cob_dt }}'
+      GROUP BY t.merchant_id,
+               CAST(from_utc_timestamp(t.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
+  ),
+  agg AS (
+      SELECT
+          merchant_id,
+          -- Quy mô: 90 ngày.
+          SUM(day_revenue) AS revenue_90d,
+          SUM(day_txn) AS txn_count_90d,
+          AVG(day_revenue) AS avg_daily_revenue,
+          COUNT(DISTINCT d_date) AS active_days_90d,
+          -- Độ ổn định dòng tiền: độ lệch chuẩn doanh thu ngày (chuẩn hoá theo mean).
+          STDDEV(day_revenue) AS stddev_daily_revenue,
+          -- Tăng trưởng 30 ngày gần nhất so với 30 ngày trước đó.
+          SUM(CASE WHEN d_date > DATE_ADD(DATE '{{ cob_dt }}', -30) THEN day_revenue ELSE 0 END) AS revenue_last30,
+          SUM(CASE WHEN d_date <= DATE_ADD(DATE '{{ cob_dt }}', -30)
+                     AND d_date > DATE_ADD(DATE '{{ cob_dt }}', -60) THEN day_revenue ELSE 0 END) AS revenue_prev30
+      FROM daily_rev
+      GROUP BY merchant_id
+  )
+  SELECT
+      b.merchant_id,
+      b.merchant_sk,
+      -- PII (khoá new2 §4.3): tên chủ merchant/hộ kinh doanh là dữ liệu cá nhân
+      -- → Gold CHỈ mang bản che, không mang tên gốc (cùng pattern
+      -- full_name_masked của dim_customer). Giữ ký tự đầu + ' **' để vẫn nhận
+      -- diện được giữa các merchant mà không lộ danh tính đầy đủ.
+      CONCAT(SPLIT(b.merchant_name, ' ')[0], ' **') AS merchant_name_masked,
+      b.merchant_category,
+      b.mcc_code,
+      b.city,
+      b.state,
+      b.risk_category,
+      ROUND(COALESCE(a.revenue_90d, 0), 2) AS revenue_90d,
+      COALESCE(a.txn_count_90d, 0) AS txn_count_90d,
+      ROUND(COALESCE(a.avg_daily_revenue, 0), 2) AS avg_daily_revenue,
+      COALESCE(a.active_days_90d, 0) AS active_days_90d,
+      -- Độ ổn định dòng tiền: hệ số biến thiên (CV) = stddev / mean. Nhỏ = ổn định.
+      CASE
+          WHEN COALESCE(a.avg_daily_revenue, 0) > 0
+          THEN ROUND(COALESCE(a.stddev_daily_revenue, 0) / a.avg_daily_revenue, 4)
+          ELSE NULL
+      END AS cash_flow_cv,
+      ROUND(COALESCE(a.revenue_last30, 0), 2) AS revenue_last30,
+      ROUND(COALESCE(a.revenue_prev30, 0), 2) AS revenue_prev30,
+      CASE
+          WHEN COALESCE(a.revenue_prev30, 0) = 0 THEN NULL
+          ELSE ROUND((a.revenue_last30 - a.revenue_prev30) / a.revenue_prev30, 4)
+      END AS revenue_growth_30d,
+      -- Tín hiệu tư vấn sản phẩm (rule-based, minh bạch — không phải ML):
+      --   doanh thu cao + tăng trưởng dương  → gợi ý vay vốn lưu động
+      --   dòng tiền ổn định (CV thấp)        → gợi ý tiết kiệm / đầu tư
+      --   chưa dùng POS (không có giao dịch POS) → gợi ý bổ sung POS
+      CASE
+          WHEN COALESCE(a.revenue_last30, 0) > 0
+               AND COALESCE(a.revenue_last30, 0) > COALESCE(a.revenue_prev30, 0)
+          THEN 'WORKING_CAPITAL_LOAN'
+          WHEN COALESCE(a.stddev_daily_revenue, 0) / NULLIF(a.avg_daily_revenue, 0) < 0.5
+               AND COALESCE(a.revenue_90d, 0) > 0
+          THEN 'SAVINGS'
+          ELSE 'EXTRA_POS'
+      END AS advisory_product_hint,
+      DATE '{{ cob_dt }}' AS cob_dt
+  FROM base b
+  LEFT JOIN agg a ON b.merchant_id = a.merchant_id

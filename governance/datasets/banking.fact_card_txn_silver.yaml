@@ -38,7 +38,8 @@ quality_rules:
     - customer_id
     - txn_date
     - txn_amount
-  min_row_count: 10000
+  # Một partition = MỘT ngày nghiệp vụ (ADR-0018). ×1 đo 2026-09-29: ~1.400 dòng/ngày.
+  min_row_count: 500
   unique_check:
     - txn_id
   freshness_sla_hours: 24

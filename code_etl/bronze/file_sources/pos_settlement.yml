@@ -1,0 +1,27 @@
+# Bronze Ingestion: pos_settlement (file SFTP — settlement files, khoá new2)
+#
+# Pipeline đối soát cuối ngày của ngân hàng thả file settlement (đối soát doanh
+# thu merchant) vào SFTP landing zone; DE nạp vào Bronze để đối chiếu với doanh
+# thu từ giao dịch QR/POS.
+source:
+  type: sftp
+  remote_dir: /upload
+  file_pattern: "pos_settlement_*.csv"
+  header: true
+  delimiter: ","
+  infer_schema: true
+  # Credential đọc từ env (không hardcode). Container sftp dùng sftp_user/sftp_pass,
+  # khai trong docker-compose; worker đọc qua SFTP_USER / SFTP_PASSWORD.
+  host_env: SFTP_HOST
+  user_env: SFTP_USER
+  password_env: SFTP_PASSWORD
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: pos_settlement
+
+load:
+  strategy: full_snapshot
+  # Ngày nghiệp vụ lấy từ cột settlement_date của file (không phải now()).
+  business_date_column: settlement_date

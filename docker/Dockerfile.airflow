@@ -31,4 +31,6 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/bin/docker
 
 USER airflow
 
-RUN pip install --no-cache-dir requests
+# requests: các lệnh kiểm tra HTTP trong DAG. apache-airflow-providers-sftp +
+# ssh: cho SFTPSensor (DAG bronze SFTP chờ file settlement xuất hiện — khoá new2).
+RUN pip install --no-cache-dir requests apache-airflow-providers-sftp apache-airflow-providers-ssh

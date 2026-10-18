@@ -1,0 +1,28 @@
+apiVersion: 1
+
+# =============================================================================
+# PostgreSQL datasource — tầng serving real-time (ADR-0019)
+# =============================================================================
+# Dashboard nghiệp vụ (merchant revenue, refund rate, peak hours) đọc từ bảng
+# `serving.*` do sync_postgres.py đồng bộ. Đây là backend real-time; analytics
+# lịch sử vẫn đi Trino/Iceberg.
+#
+# Credential lấy từ biến môi trường container (GF_*) — KHÔNG hardcode. Xem
+# docker/docker-compose.yml service grafana: POSTGRES_USER/PASSWORD truyền vào
+# dưới dạng GF_DB_* và tham chiếu bằng ${...}.
+datasources:
+  - name: Postgres-Serving
+    type: postgres
+    uid: postgres-serving
+    access: proxy
+    url: postgres:5432
+    database: banking_db
+    user: ${POSTGRES_USER}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    isDefault: false
+    editable: true

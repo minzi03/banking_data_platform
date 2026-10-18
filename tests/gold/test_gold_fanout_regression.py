@@ -128,15 +128,15 @@ def silver_tables(spark):
     # customer 1: 10 txn × 100.00 = 1000.00
     # customer 2:  4 txn × 250.00 = 1000.00
     acct_rows = []
-    txn_id = 0
     for cob in (PREV_COB_DT, COB_DT):
         cob_date = date.fromisoformat(cob)
+        # Full snapshots repeat the same business transactions and IDs; only
+        # cob_dt changes. This is what exposes snapshot double counting.
         for i in range(10):
-            txn_id += 1
-            acct_rows.append((txn_id, 1, ts(20 + i % 10), Decimal("100.00"), "D", "MOBILE", cob_date))
+            acct_rows.append((i + 1, 1, ts(20 + i % 10), Decimal("100.00"), "D", "MOBILE", cob_date))
         for i in range(4):
-            txn_id += 1
-            acct_rows.append((txn_id, 2, ts(20 + i), Decimal("250.00"), "C", "ATM", cob_date))
+            acct_rows.append((11 + i, 2, ts(20 + i), Decimal("250.00"), "C", "ATM", cob_date))
+
     spark.createDataFrame(
         acct_rows,
         "txn_id long, customer_id long, txn_date timestamp, txn_amount decimal(18,2), "
@@ -148,14 +148,12 @@ def silver_tables(spark):
     # customer 3: 2 txn × 300.00 = 600.00
     # + 1 txn FAILED và 1 txn REFUND của customer 1 → phải bị loại khỏi amount
     card_rows = []
-    ctxn_id = 0
     for cob in (PREV_COB_DT, COB_DT):
         cob_date = date.fromisoformat(cob)
         for i in range(5):
-            ctxn_id += 1
             card_rows.append(
                 (
-                    ctxn_id,
+                    i + 1,
                     101 + (i % 2),
                     1,
                     ts(22 + i % 8),
@@ -167,21 +165,20 @@ def silver_tables(spark):
                 )
             )
         for i in range(2):
-            ctxn_id += 1
-            card_rows.append(
-                (ctxn_id, 301, 3, ts(25 + i), Decimal("300.00"), "PURCHASE", "SUCCESS", "TRAVEL", cob_date)
-            )
-        ctxn_id += 1
-        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("999.00"), "PURCHASE", "FAILED", "GROCERY", cob_date))
-        ctxn_id += 1
-        card_rows.append((ctxn_id, 101, 1, ts(26), Decimal("777.00"), "REFUND", "SUCCESS", "GROCERY", cob_date))
+            card_rows.append((6 + i, 301, 3, ts(25 + i), Decimal("300.00"), "PURCHASE", "SUCCESS", "TRAVEL", cob_date))
+        card_rows.append((8, 101, 1, ts(26), Decimal("999.00"), "PURCHASE", "FAILED", "GROCERY", cob_date))
+        card_rows.append((9, 101, 1, ts(26), Decimal("777.00"), "REFUND", "SUCCESS", "GROCERY", cob_date))
+
+    # The two snapshots intentionally contain identical transaction IDs; a
+    # correct Gold query must select one latest row per ID, not sum both copies.
+    assert len({row[0] for row in card_rows}) == 9
+    assert len(card_rows) == 18
     spark.createDataFrame(
         card_rows,
         "txn_id long, card_id long, customer_id long, txn_date timestamp, "
         "txn_amount decimal(18,2), txn_type string, status string, "
         "merchant_category string, cob_dt date",
     ).createOrReplaceTempView("fact_card_txn")
-
     # --- dim_card (customer 1 giữ 2 thẻ → nhân đôi nếu join sai grain) ------
     spark.createDataFrame(
         [

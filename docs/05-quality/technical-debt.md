@@ -1887,3 +1887,42 @@ same change. Also removed: `tests/governance/test_terraform_secrets.py` (tested 
 - `docs/evidence/0*-*.png` — screenshots from earlier runs; replace after the next demo.
 - `docker/conf/*.der` — mounted by OpenMetadata in compose.
 - `docker/init_postgres/08_ddl_data_vault_example.sql` — illustrates ADR-0014 and `DATA_VAULT_MAPPING.md`.
+
+---
+
+## TD-21 — Ruff format gate failed on feature-branch files
+
+**Status:** fixed on this branch (2026-10-18).
+
+CI runs `ruff check` and `ruff format --check` over `governance/ code_etl/ tests/`.
+The lint check originally found two issues in older tests (an unused `pytest` import,
+F401, and equivalent `if` branches, SIM114); both were fixed.
+
+The format check then identified 13 files on this feature branch. A previous local
+investigation incorrectly reported that clean `origin/main` had nine failures: the
+parser used to read Windows Ruff output used a POSIX-only path pattern. Rechecking
+both trees in a Linux container with CI's Ruff 0.17.1 showed that `origin/main` was
+clean and the 13 findings belonged to this branch.
+
+Those 13 files have now been formatted with Ruff 0.17.1. The diff is formatting-only
+(60 insertions, 83 deletions). Verification:
+
+```text
+ruff check governance/ code_etl/ tests/              All checks passed
+ruff format --check governance/ code_etl/ tests/      188 files already formatted
+affected tests                                     224 passed, 6 skipped
+tests/governance                                   1469 passed, 1 skipped
+```
+
+CI installs Ruff without a version pin. Pinning 0.17.1 is a reproducibility improvement
+that can be handled separately; the current branch passes the exact lint and format
+gates under that version.
+
+### Acceptance
+
+```text
+[x] all CI-scanned files pass `ruff check`
+[x] all CI-scanned files pass `ruff format --check` under Ruff 0.17.1
+[x] affected tests and full governance suite pass
+[ ] pin Ruff in CI to make future formatter upgrades deliberate
+```

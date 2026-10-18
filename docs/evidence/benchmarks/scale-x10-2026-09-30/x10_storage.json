@@ -1,0 +1,277 @@
+{
+ "bronze.core_account": {
+  "bytes": 4232714,
+  "files": 1,
+  "rows": 300000
+ },
+ "bronze.core_aml_alert": {
+  "bytes": 42732,
+  "files": 1,
+  "rows": 500
+ },
+ "bronze.core_aml_customer_risk": {
+  "bytes": 9576,
+  "files": 1,
+  "rows": 200
+ },
+ "bronze.core_aml_rule": {
+  "bytes": 5928,
+  "files": 1,
+  "rows": 14
+ },
+ "bronze.core_branch": {
+  "bytes": 22671,
+  "files": 1,
+  "rows": 1000
+ },
+ "bronze.core_card": {
+  "bytes": 1116126,
+  "files": 1,
+  "rows": 60000
+ },
+ "bronze.core_card_txn": {
+  "bytes": 156021810,
+  "files": 1,
+  "rows": 6000000
+ },
+ "bronze.core_crm_interaction": {
+  "bytes": 10542058,
+  "files": 1,
+  "rows": 500000
+ },
+ "bronze.core_customer": {
+  "bytes": 3275775,
+  "files": 1,
+  "rows": 100000
+ },
+ "bronze.core_deposit": {
+  "bytes": 2369978,
+  "files": 1,
+  "rows": 150000
+ },
+ "bronze.core_device": {
+  "bytes": 17422668,
+  "files": 1,
+  "rows": 500000
+ },
+ "bronze.core_employee": {
+  "bytes": 270225,
+  "files": 1,
+  "rows": 18000
+ },
+ "bronze.core_loan": {
+  "bytes": 1196348,
+  "files": 1,
+  "rows": 50000
+ },
+ "bronze.core_loan_payment": {
+  "bytes": 28764541,
+  "files": 1,
+  "rows": 1533218
+ },
+ "bronze.core_location": {
+  "bytes": 617358,
+  "files": 1,
+  "rows": 50000
+ },
+ "bronze.core_mcc_code": {
+  "bytes": 3997,
+  "files": 1,
+  "rows": 84
+ },
+ "bronze.core_merchant": {
+  "bytes": 226650,
+  "files": 1,
+  "rows": 20000
+ },
+ "bronze.core_online_transaction": {
+  "bytes": 144056746,
+  "files": 1,
+  "rows": 5000000
+ },
+ "bronze.core_product": {
+  "bytes": 3104,
+  "files": 1,
+  "rows": 13
+ },
+ "bronze.core_standing_order": {
+  "bytes": 3346479,
+  "files": 1,
+  "rows": 150000
+ },
+ "bronze.core_support_ticket": {
+  "bytes": 5083555,
+  "files": 1,
+  "rows": 250000
+ },
+ "bronze.core_txn_account": {
+  "bytes": 391600322,
+  "files": 1,
+  "rows": 12000000
+ },
+ "gold.aml_monitoring": {
+  "bytes": 216864195,
+  "files": 1,
+  "rows": 12000000
+ },
+ "gold.campaign_target": {
+  "bytes": 5227572,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.churn_prediction": {
+  "bytes": 4922259,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.cross_sell_segment": {
+  "bytes": 3699830,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.customer_balance_summary": {
+  "bytes": 5252159,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.customer_card_summary": {
+  "bytes": 4655702,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.customer_loan_summary": {
+  "bytes": 4953442,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.customer_product_summary": {
+  "bytes": 3845192,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.customer_transaction_summary": {
+  "bytes": 5781666,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.fraud_risk_txn": {
+  "bytes": 269970152,
+  "files": 1,
+  "rows": 12000000
+ },
+ "gold.loan_delinquency": {
+  "bytes": 1177855,
+  "files": 1,
+  "rows": 50000
+ },
+ "gold.loan_portfolio_risk": {
+  "bytes": 131066,
+  "files": 1,
+  "rows": 4000
+ },
+ "gold.mart_branch_monthly_summary": {
+  "bytes": 428758,
+  "files": 1,
+  "rows": 15000
+ },
+ "gold.mart_customer_360": {
+  "bytes": 8369329,
+  "files": 1,
+  "rows": 100000
+ },
+ "gold.rfm_segment": {
+  "bytes": 4445109,
+  "files": 1,
+  "rows": 100000
+ },
+ "silver.dim_account": {
+  "bytes": 16130837,
+  "files": 1,
+  "rows": 300000
+ },
+ "silver.dim_account_current": {
+  "bytes": 0,
+  "files": 0,
+  "rows": 0
+ },
+ "silver.dim_branch": {
+  "bytes": 228353,
+  "files": 32,
+  "rows": 1000
+ },
+ "silver.dim_card": {
+  "bytes": 1250072,
+  "files": 3,
+  "rows": 60000
+ },
+ "silver.dim_customer": {
+  "bytes": 7051279,
+  "files": 1,
+  "rows": 100000
+ },
+ "silver.dim_customer_current": {
+  "bytes": 0,
+  "files": 0,
+  "rows": 0
+ },
+ "silver.dim_deposit": {
+  "bytes": 2649079,
+  "files": 4,
+  "rows": 150000
+ },
+ "silver.dim_device": {
+  "bytes": 18005044,
+  "files": 4,
+  "rows": 500000
+ },
+ "silver.dim_employee": {
+  "bytes": 288266,
+  "files": 1,
+  "rows": 18000
+ },
+ "silver.dim_loan": {
+  "bytes": 1294356,
+  "files": 2,
+  "rows": 50000
+ },
+ "silver.dim_location": {
+  "bytes": 703882,
+  "files": 2,
+  "rows": 50000
+ },
+ "silver.dim_product": {
+  "bytes": 41880,
+  "files": 11,
+  "rows": 13
+ },
+ "silver.fact_card_txn": {
+  "bytes": 324078287,
+  "files": 2,
+  "rows": 6000000
+ },
+ "silver.fact_crm_interaction": {
+  "bytes": 26668366,
+  "files": 1,
+  "rows": 500000
+ },
+ "silver.fact_loan_payment": {
+  "bytes": 29356987,
+  "files": 1,
+  "rows": 1533218
+ },
+ "silver.fact_online_transaction": {
+  "bytes": 305420636,
+  "files": 1,
+  "rows": 5000000
+ },
+ "silver.fact_support_ticket": {
+  "bytes": 13136928,
+  "files": 1,
+  "rows": 250000
+ },
+ "silver.fact_txn_account": {
+  "bytes": 1188658112,
+  "files": 3,
+  "rows": 12000000
+ }
+}

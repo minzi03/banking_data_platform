@@ -42,3 +42,16 @@ target:
       type: string
     - name: last_updated
       type: long
+
+# ─── Static dimension join (khoá new2 §4.3) ──────────────────────────────────
+# Sau khi event hợp lệ vào Bronze (raw), join thêm thuộc tính dimension từ Silver
+# và ghi vào bảng enriched RIÊNG. Dimension đọc lại mỗi micro-batch (refresh).
+# Bronze KHÔNG đổi — bảng enriched chỉ để phục vụ đọc gần thời gian thực.
+enrichment:
+  target_table: lakehouse.silver.stream_enriched_account
+  joins:
+    - dim_table: lakehouse.silver.dim_branch
+      on:
+        - [branch_code, branch_code]
+      columns: [branch_name, region, city]
+      prefix: br_

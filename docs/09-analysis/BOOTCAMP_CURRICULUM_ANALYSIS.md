@@ -1,7 +1,7 @@
 # Phân Tích Giáo Trình Bootcamp — Đối Chiếu Với Thị Trường & Dự Án
 
-> **Ngày đo**: 2026-09-21
-> **Nguồn**: 15 file trong `thamkhao/bootcamp_class/` — 5 giáo trình + 1 community feed
+> **Ngày đo**: 2026-09-21 (bổ sung `new2/` ngày 2026-10-15)
+> **Nguồn**: 15 file trong `thamkhao/bootcamp_class/` — 5 giáo trình + 1 community feed; **+ `new2/` — bản mở rộng của khoá #1 (Merchant QR/POS)**
 > **Mục đích**: Xác định phần nào của giáo trình đáng áp dụng vào Banking Data Platform, dựa trên **đối chiếu với corpus JD đã đo**, không dựa trên uy tín của khoá học
 > **Tài liệu liên quan**: [`JD_MARKET_ANALYSIS.md`](JD_MARKET_ANALYSIS.md) — nguồn của mọi con số thị trường trích dẫn ở đây
 
@@ -46,6 +46,7 @@ Tổng: 48.256.202 bytes. Bản `.xlsx` và `.pdf` là phiên bản có cấu tr
 | # | Giáo trình | Thời lượng | Mentor | Nền tảng cược vào |
 |---|---|---|---|---|
 | 1 | **Data Engineering for Modern Banking: From Batch to Real-Time** | 12 buổi + capstone | **Hồ Đức Huy** — Sr Big Data Engineer, VietinBank (+ LPBank, MB Bank, FPT Software) | On-prem OSS: Spark · Iceberg · MinIO · Trino · Airflow · Kafka |
+| 1b | **Master Class Lakehouse & Event-Driven Data Platform for Banking/Finance** (`new2/`) | 13 buổi + capstone | **Hồ Đức Huy** — Sr Big Data Engineer, VietinBank | On-prem OSS — **bản mở rộng của #1**: thêm nghiệp vụ **Merchant QR/POS acquiring**, Grafana real-time, yêu cầu đối soát streaming=batch |
 | 2 | **DataOps for Data Platforms: From Pipeline to Production** | 11 buổi + capstone | **Nguyễn Hoàng Quốc Anh** — Sr Data/DataOps Engineer, Techcombank | Stack-agnostic (DWH *hoặc* Lakehouse) |
 | 3 | **Data Engineer Financial Data Platform: Ingestion → Lakehouse → Production** | 13 buổi / 5 phase | **Trần Sỹ Hùng** — DE, Grasshopper Asia (Singapore) | Snowflake + dbt |
 | 4 | **SERIES BOOTCAMP BIGDATA PLATFORM** (3 khoá) | 5–6 buổi/khoá | Hùng (Snowflake) · **Nguyễn Đình Tương** — Rightship, ex-BIDV/MB Bank (Databricks) · **Lê Phong Vũ** — Lead DE MoMo (MS Fabric) | Vendor platform |
@@ -258,6 +259,54 @@ Top-3 K22 (Cường)        + Superset: Portfolio · Churn Watchlist
 
 **Dự án có 14 Gold model / 4 domain**, vượt `mart_customer_360` đơn lẻ của giáo trình. Thiếu: CLV, Finance, Operations mart.
 
+### 5.2 Nghiệp vụ Merchant QR/POS (`new2/`, mentor Huy — bản mở rộng)
+
+`new2/` không thêm tech stack (vẫn Spark · Iceberg · MinIO · Trino · Airflow · Kafka · Debezium), nhưng **cụ thể hoá bài toán nghiệp vụ** thành **Merchant Acquiring (thanh toán QR/POS)** — mảng retail banking có khối lượng giao dịch lớn và là nguồn cross-sell:
+
+```text
+Phase 1 (Batch)   Postgres (merchant/store/account/txn) · Oracle (khu vực/branch/MCC/sản phẩm) · SFTP (POS + settlement)
+                  → SCD2 merchant/store · báo cáo ngày/tuần/tháng (doanh thu, số GD, giá trị TB, refund rate)
+                  → xếp hạng merchant theo MCC · tăng trưởng kỳ trước · phân tích khu vực
+                  → Merchant 360 mart (quy mô, tăng trưởng, độ ổn định dòng tiền, sản phẩm)
+                     → tư vấn vay vốn lưu động / tiết kiệm / POS bổ sung
+
+Phase 2 (Streaming) Debezium CDC + QR producer → Kafka → Spark Structured Streaming
+                  → thông báo tiền về (vài giây) · doanh thu theo cửa hàng theo phút · giờ cao điểm
+                  → Grafana real-time dashboard
+```
+
+Yêu cầu đúng đắn đặc thù (new2 nhấn mạnh, dự án đối chiếu):
+
+| Yêu cầu new2 | Repo hiện tại | Bằng chứng / gap |
+|---|---|---|
+| Batch idempotent (re-run không trùng) | ✅ Implemented | `overwritePartitions` theo `cob_dt` (ADR-0007) |
+| Streaming event time + watermark + dedup | ✅ Implemented + tested | `code_etl/cdc/base_job/stream_dedup.py`, `tests/cdc/test_stream_dedup.py` |
+| Restart checkpoint, không mất / không lặp khóa trong watermark | ✅ Runtime-verified | `scripts/verify_checkpoint_restart.py`; 12 event ban đầu + 8 event mới, replay bị dedup, restart offset 12; bounded watermark, không claim exactly-once ngoài window |
+| PostgreSQL serving `ON CONFLICT` | ✅ Implemented + runtime-verified | `code_etl/serving/sync_postgres.py`, `airflow/dags/ops/ops_serving_sync_dag.py`, ADR-0019; đã kiểm chứng merchant tables upsert idempotent |
+| EOD reconciliation streaming = batch cho Merchant QR/POS | ⚠️ Framework có, coverage merchant chưa có bằng chứng | `code_etl/shared/ops/eod_reconciliation.py` + DAG đối soát customer/account và account-balance; chưa có spec/assertions merchant revenue, transaction count, refund với `cob_dt`, cũng chưa thấy runtime evidence cho các chỉ số đó |
+| Static dimension join, refresh mỗi micro-batch | ✅ Implemented + unit-tested | `code_etl/cdc/base_job/stream_enrichment.py`, `tests/cdc/test_stream_enrichment.py`; cần runtime evidence merchant-specific nếu muốn claim đã nghiệm thu cho Merchant QR/POS |
+| PII merchant mask trước Gold | ✅ Implemented + runtime-verified | `ops_pii_masking_daily_dag`, `tests/governance/test_gold_pii_masking.py`, evidence kiểm tra Trino analytics vs admin |
+| Iceberg maintenance | ✅ Implemented | `ops_maintenance_weekly_dag` |
+
+**Kết luận 5.2 (cập nhật 2026-10-18):** Các năng lực kỹ thuật chính của `new2` đã được đưa vào repo; có implementation và runtime evidence cho QR producer/checkpoint restart, Merchant Gold/serving, Postgres upsert, PII masking và một số batch E2E. Không nên ghi “đã hoàn thiện 8/8” nếu tiêu chí là nghiệm thu nghiệp vụ merchant: gap xác nhận được là **EOD reconciliation cho doanh thu/số giao dịch/refund Merchant QR/POS giữa streaming và batch**. SFTP có ingestion/config nhưng chưa xác minh file settlement merchant được đối soát end-to-end; Oracle hiện là driver map/mock/reference, không phải Oracle instance thật. Store có dim SCD2 nhưng transaction chưa có mapping store, vì vậy chưa claim báo cáo giao dịch theo store. Xem thêm [ADR-0019](../02-architecture/adr/0019-postgres-serving-for-realtime.md), [EOD reconciliation](../../code_etl/shared/ops/eod_reconciliation.py) và [Runbook checkpoint smoke test](../../RUNBOOK.md#checkpoint-restart-smoke-test).
+
+### 5.2.1 Gap cần đóng để claim nghiệm thu Merchant Acquiring
+
+EOD reconciliation hiện có framework và DAG, nhưng các specs chỉ đối soát customer/account
+(count giữa source↔Bronze CDC↔Silver) và account balance (control total source↔Silver).
+Chưa có spec merchant theo `cob_dt` cho revenue, transaction count, refund/net amount;
+do đó chưa chứng minh streaming QR/POS khớp batch Gold cho nghiệp vụ merchant.
+
+- **SFTP settlement:** có service, `ingestion_sftp.py`, config `code_etl/bronze/file_sources/pos_settlement.yml`
+  và contract tests. Chưa thấy evidence chạy file settlement qua Bronze rồi đối soát với giao dịch.
+- **Oracle:** có driver map, mock/reference config và guide; chưa chạy Oracle instance thật.
+- **Store grain:** `dim_store` SCD2 đã có, nhưng transaction chưa có `store_id`/mapping merchant→store.
+  Chưa thể claim báo cáo giao dịch theo store.
+
+Vì vậy, áp dụng kỹ thuật `new2` đã rộng; phần chưa hoàn tất là nghiệm thu nghiệp vụ
+Merchant QR/POS cuối ngày và bằng chứng settlement. Oracle runtime và transaction-to-store
+mapping là scope/capability riêng, không nên trình bày là đã chạy thật.
+
 ---
 
 ## 6. Repo so với 3 final project
@@ -318,6 +367,16 @@ Khoảng trống **tài liệu hoá**, không phải năng lực. Dùng đúng t
 Đóng gói `ml/pipeline/*` + Gold mart thành feature view có versioning. Giáo trình chỉ nhắc như "nền tảng để học tiếp", nhưng đây là khái niệm **được JD nhắc nhiều nhất** trong nhóm dự án chưa có.
 
 *Thị trường*: 81 lần (2,6/100k).
+
+**4. (từ `new2/`) Đối soát cuối ngày Merchant QR/POS**
+
+Gold→Postgres serving đã được triển khai trong ADR-0019; đây không còn là gap. Gap còn lại là mở rộng `code_etl/shared/ops/eod_reconciliation.py` và DAG để đối soát doanh thu, số giao dịch, refund/net amount của Merchant QR/POS giữa streaming và batch Gold cho cùng `cob_dt`, với tolerance rõ ràng và kết quả làm gate. Hiện module chỉ đối soát customer/account counts và account-balance control total; chưa có merchant transaction specs.
+
+Ngoài ra, SFTP settlement có ingestion/config nhưng thiếu bằng chứng end-to-end đối soát file với giao dịch merchant; Oracle hiện là source-driver reference/mock, chưa chạy Oracle instance thật. Đây là các giới hạn nghiệm thu/runtime, không phải các capability đã verified.
+
+**Definition of done cho phần new2:** merchant EOD reconciliation được runtime-verify trên cùng business date; SFTP settlement fixture được nạp và reconcile hoặc được ghi rõ ngoài phạm vi; Oracle không được mô tả là runtime-implemented nếu chưa có instance/test thật.
+
+*Thị trường*: `reconciliation` được corpus JD nhắc như tiêu chí production; khớp ADR-0003 (serving là table).
 
 ### P2
 

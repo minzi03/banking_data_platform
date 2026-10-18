@@ -28,10 +28,15 @@ from pathlib import Path
 
 # Nhóm theo thời điểm file được đưa vào corpus. jd14 được thay bằng bản scrape lớn
 # hơn (76k → 266k byte) sau lần đo 2026-09-21, nên chuyển sang nhóm C cùng jd15–16.
+#
+# Nhóm D (2026-10-01): 5 file scrape mới, mỗi file là một BUNDLE nhiều JD (jd17 gộp
+# 66 bài). Bốn nhóm vẫn là bốn MẪU ĐỘC LẬP cùng khung Aug–Sep 2026, không phải chuỗi
+# thời gian — "bội số" chỉ là mật độ cao hơn ở mẫu đó, có thể do thành phần mẫu.
 GROUPS: dict[str, list[str]] = {
     "A": [f"jd{i}.md" for i in range(1, 8)] + ["jd8_bank.md"],
     "B": [f"jd{i}.md" for i in range(9, 14)],
     "C": ["jd14.md", "jd15.md", "jd16.md"],
+    "D": ["jd17.md", "jd18_DS.md", "jd19_DA.md", "jd20_AE.md", "jd21.md"],
 }
 
 IC = re.IGNORECASE
@@ -221,14 +226,13 @@ def main() -> int:
         print(f"| {g} | {out['groups'][g]['chars']:,} | {out['groups'][g]['chars_dedup']:,} |")
     print()
     head = " | ".join(f"{g}" for g in gs)
-    print(f"| Term (/100k, raw) | {head} | C dedup | ALL count | ALL count dedup |")
-    print("|---|" + "---:|" * (len(gs) + 3))
+    print(f"| Term (/100k, raw) | {head} | ALL count | ALL count dedup |")
+    print("|---|" + "---:|" * (len(gs) + 2))
     for label, _, _ in TERMS:
         cells = " | ".join(str(out["groups"][g]["raw"][label]["per_100k"]) for g in gs)
-        cd = out["groups"]["C"]["dedup"][label]["per_100k"]
         cnt = out["groups"]["ALL"]["raw"][label]["count"]
         cntd = out["groups"]["ALL"]["dedup"][label]["count"]
-        print(f"| {label} | {cells} | {cd} | {cnt} | {cntd} |")
+        print(f"| {label} | {cells} | {cnt} | {cntd} |")
     return 0
 
 

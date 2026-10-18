@@ -152,6 +152,17 @@ def _column_masks(table_path: str, masks: dict[str, str]) -> list[Permission]:
     ]
 
 
+# Merchant (khoá new2 §4.3): với hộ kinh doanh, merchant_name chính là tên chủ
+# cửa hàng — cùng loại PII như full_name của khách. Silver vẫn LƯU tên gốc
+# (Gold cần nó để tạo merchant_name_masked), nên che lúc đọc qua Trino, đúng
+# mô hình đang dùng cho dim_customer.
+# Chỉ `dim_merchant` (có DDL trong 02_ddl_silver.sql). Không khai
+# `dim_merchant_current`: bảng đó không có DDL trong repo (nếu dbt sinh ra) nên
+# mask sẽ trỏ tới cột không tồn tại — test_rbac_matrix bắt đúng điều này.
+_MERCHANT_NAME_MASK = "concat(substr(%s, 1, 1), '**')"
+_SILVER_MERCHANT_MASKS = _column_masks("iceberg.silver.dim_merchant", {"merchant_name": _MERCHANT_NAME_MASK})
+
+
 _BRONZE_AML_MASKS = _column_masks("iceberg.bronze.core_aml_alert", _AML_ALERT_MASKED) + _column_masks(
     "iceberg.bronze.core_aml_customer_risk", _AML_CUSTOMER_RISK_MASKED
 )
@@ -207,6 +218,7 @@ ROLES = {
             Permission(ResourceType.CATALOG, "iceberg", AccessLevel.READ),
             *_read("gold", "silver", "sandbox", "serving"),
             *_SILVER_CUSTOMER_MASKS,
+            *_SILVER_MERCHANT_MASKS,
         ],
     ),
     "readonly": Role(
@@ -230,10 +242,25 @@ ROLES = {
     # ── Service roles: một role cho mỗi loại client thật của Trino ──────────
     "serving_builder": Role(
         name="serving_builder",
-        description="dbt: đọc Gold, tạo/thay bảng trong serving",
+        description="dbt: đọc Gold (+ một Silver fact cho serving real-time), tạo/thay bảng trong serving",
         permissions=[
             Permission(ResourceType.CATALOG, "iceberg", AccessLevel.WRITE),
             *_read("gold"),
+            # Silver (khoá new2 §3.2): ba serving aggregate real-time cần grain
+            # theo GIAO DỊCH; Gold marts chỉ có aggregate ngày/tháng nên không
+            # dựng được doanh thu theo phút hay giờ cao điểm.
+            #
+            # Grant theo SCHEMA, không theo từng bảng: mô hình quyền hiện tại chỉ
+            # biểu diễn `iceberg.<schema>.*` (xem generate_trino_access_control —
+            # nó CHỦ ĐỘNG từ chối grant từng bảng). Đổi mô hình đó là thay đổi
+            # lớn hơn phạm vi tính năng này.
+            #
+            # Bù lại, PII trên Silver vẫn bị che với dbt: gắn cùng mask mà role
+            # analytics đang dùng cho dim_customer/dim_merchant.
+            Permission(ResourceType.SCHEMA, "iceberg.silver", AccessLevel.READ),
+            Permission(ResourceType.TABLE, "iceberg.silver.*", AccessLevel.READ),
+            *_SILVER_CUSTOMER_MASKS,
+            *_SILVER_MERCHANT_MASKS,
             Permission(ResourceType.SCHEMA, "iceberg.serving", AccessLevel.WRITE),
             Permission(ResourceType.TABLE, "iceberg.serving.*", AccessLevel.WRITE),
         ],
@@ -255,6 +282,7 @@ ROLES = {
             *_BRONZE_CUSTOMER_MASKS,
             *_BRONZE_AML_MASKS,
             *_SILVER_CUSTOMER_MASKS,
+            *_SILVER_MERCHANT_MASKS,
         ],
     ),
 }

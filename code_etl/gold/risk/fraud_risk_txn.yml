@@ -22,7 +22,7 @@ sql: |
     FROM lakehouse.silver.fact_txn_account t
     LEFT JOIN lakehouse.silver.dim_customer c
       ON t.customer_id=c.customer_id AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
-    WHERE t.cob_dt = DATE '{{ cob_dt }}'
+    WHERE t.cob_dt <= DATE '{{ cob_dt }}'
   ),
   stats AS (
     SELECT customer_id, AVG(txn_amount) AS avg_amt, STDDEV(txn_amount) AS std_amt
@@ -38,7 +38,7 @@ sql: |
       CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) AS txn_day,
       MAX(is_fraud) AS is_fraud_flag
     FROM lakehouse.silver.fact_online_transaction
-    WHERE cob_dt = DATE '{{ cob_dt }}'
+    WHERE cob_dt <= DATE '{{ cob_dt }}'
       AND status = 'SUCCESS'
     GROUP BY customer_id,
       CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)

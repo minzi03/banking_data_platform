@@ -5,3 +5,11 @@ jinja2>=3.1
 # ops_contract_validation_dag không chạy được trên worker (TD-10).
 # Cùng mức sàn với pyproject.toml; chặn v3 vì model viết theo API v2.
 pydantic>=2.9,<3
+
+# SFTP ingestion (khoá new2 — file POS/settlement). Worker dùng paramiko tải file
+# từ SFTP landing zone về local rồi Spark đọc CSV.
+paramiko>=3.4
+
+# QR payment producer (khoá new2 §3.1) — scripts/qr_payment_producer.py bơm sự
+# kiện thanh toán QR thẳng vào Kafka. Thuần Python nên không cần build trong image.
+kafka-python>=2.0

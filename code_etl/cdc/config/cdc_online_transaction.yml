@@ -9,6 +9,17 @@ kafka:
   trigger_interval: 30 seconds
   max_offsets_per_trigger: 100000
 
+# Event time + chống trùng (khoá new2 §4.3).
+# Debezium bảo đảm at-least-once: một giao dịch phát lại (rebalance, restart từ
+# offset cũ, producer retry) sẽ vào Bronze hai lần nếu không dedup. Bronze là
+# append-only nên dòng trùng sai vĩnh viễn và làm lệch đối soát cuối ngày.
+# Watermark 10 phút: chấp nhận event đến trễ tới 10 phút; quá ngưỡng đó event
+# bị coi là quá cũ (không dedup, không còn tính là đúng giờ).
+dedup:
+  watermark_delay: "10 minutes"
+  keys:
+    - transaction_id
+
 target:
   catalog: lakehouse
   schema: bronze
@@ -40,6 +51,15 @@ target:
       type: string
     - name: status
       type: string
+    # Merchant QR/POS (khoá new2) — thiếu 3 cột này thì giao dịch QR/POS chảy
+    # qua CDC sẽ mất merchant_id/payment_channel, và mọi aggregate real-time
+    # theo merchant (doanh thu/phút, giờ cao điểm) không thể tính.
+    - name: merchant_id
+      type: long
+    - name: payment_channel
+      type: string
+    - name: refund_flag
+      type: int
     - name: transaction_date
       type: long
     - name: created_ts

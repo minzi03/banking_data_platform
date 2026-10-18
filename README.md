@@ -47,7 +47,7 @@ Operational banking data is ingested from PostgreSQL through both a batch and a 
 
 The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Spark owns history: **15 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **16 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+Spark owns history: **18 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **19 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
 
 Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
@@ -91,6 +91,20 @@ Silver SCD1/SCD2
 Silver Current
 = latest CDC-derived representation
 ```
+
+### Business scenario
+
+The platform is modeled on **retail banking** workloads — the same shape as a bank acquiring QR/POS payments for merchants (merchant onboarding, account/transaction facts, card & digital channels). The mapping below shows how the technical components answer real business questions:
+
+| Business question | Platform answer |
+|---|---|
+| Who is the customer, and what is their current profile? | `mart_customer_360`, SCD2 dimensions |
+| Which segments should we target for campaigns? | RFM, churn-risk, cross-sell, campaign-target marts |
+| Is the loan book healthy? | Loan portfolio risk, delinquency, roll-rate, vintage marts |
+| Is there suspicious activity? | AML monitoring + fraud-risk transaction marts |
+| How fresh is the near-real-time view? | CDC consolidation → Silver Current + freshness exporter |
+
+This mirrors the **Merchant Acquiring** use case (payment notifications, revenue per store, merchant advisory) analyzed from the course material in [`docs/09-analysis/BOOTCAMP_CURRICULUM_ANALYSIS.md`](docs/09-analysis/BOOTCAMP_CURRICULUM_ANALYSIS.md) §5.2.
 
 ---
 
@@ -153,7 +167,9 @@ dead-letter queue instead of failing the micro-batch.
 ### 3. Lakehouse transformation
 
 Persistent state begins here. Bronze holds a full snapshot per close-of-business
-date; Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
+date for reference and dimension data, and loads the three transaction tables
+incrementally by business date ([ADR-0018](docs/02-architecture/adr/0018-incremental-transaction-facts.md));
+Silver builds SCD Type 1 and Type 2 dimensions and fact tables; historical
 Gold holds the business marts. Every layer is partitioned by an explicit
 `cob_dt`, and business dates are derived explicitly from UTC storage rather than
 inherited from a session timezone.
@@ -241,31 +257,31 @@ counts are ambiguous without them.
 | Source workloads           |             22 | Executable Bronze ingestion configurations; templates and registries excluded   |
 | Bronze batch tables        |             22 | One per ingestion workload                                                      |
 | Bronze CDC tables          |              6 | Append-only change-history tables                                               |
-| Silver SCD Type 2 dims     |              4 | `dim_customer`, `dim_account`, `dim_product`, `dim_branch`                      |
+| Silver SCD Type 2 dims     |              5 | `dim_customer`, `dim_account`, `dim_product`, `dim_branch`, `dim_merchant`      |
 | Silver SCD Type 1 dims     |              6 | Card, employee, device, location, deposit, loan                                 |
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
-| Historical Gold tables     |             15 | Spark-managed Gold history, partitioned by `cob_dt`                             |
-| Current-serving tables     |             16 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Historical Gold tables     |             18 | Spark-managed Gold history, partitioned by `cob_dt`                             |
+| Current-serving tables     |             19 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
 | Data contracts             |             34 | Governance contract YAMLs                                                       |
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
-| Airflow DAG files          |             18 | Files defining at least one DAG (19 DAG objects — one file defines two)         |
-| Airflow DAGs loaded        |             19 | `airflow dags list` — zero import errors                                        |
-| dbt models                 |             17 | `dbt build --target docker`: 16 serving + 1 MetricFlow time spine (2026-09-30) |
+| Airflow DAG files          |             21 | Files defining at least one DAG (22 DAG objects — one file defines two)         |
+| Airflow DAGs loaded        |             22 | `airflow dags list` — zero import errors                                        |
+| dbt models                 |             20 | `dbt build --target docker`: 19 serving + 1 MetricFlow time spine (2026-10-16) |
 | dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
-| Automated tests            |          1,068 | Python `def test_*` functions                                                   |
+| Automated tests            |          1,142 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
-| Docker Compose services    |             29 | 25 long-running + 4 one-shot initialization/migration jobs                      |
+| Docker Compose services    |             30 | 26 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
 
 > **Measured 2026-09-30 after the audit remediation and a reseed** (`cob_dt` 2026-09-29; the
 > manifest's `git_commit` names the exact commit). Compared with the previous promotion
 > (2026-09-29): Silver SCD2 dimensions **2 → 4** (product and branch now keep history),
 > SCD1 **8 → 6**, Airflow DAG files / DAGs **20 / 21 → 18 / 19** (two dead DAGs removed),
-> `def test_*` functions **972 → 1,068**. The dbt rows come from
+> `def test_*` functions **972 → 1,142**. The dbt rows come from
 > `dbt build --vars '{"cob_dt": …}'` and are not bound to the manifest. See
 > [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
 
@@ -470,7 +486,9 @@ Batch ingestion is driven by reusable YAML configuration and Spark ETL jobs.
 ## Bronze Batch
 
 The Bronze Batch layer stores source-aligned data ingested through PostgreSQL JDBC:
-one full snapshot per `cob_dt`, and **every** Bronze table is partitioned by `cob_dt`.
+one full snapshot per `cob_dt` for 19 reference/dimension tables, and one **business day** per
+`cob_dt` for the three transaction tables (ADR-0018: a daily run reads only that day's
+transactions; a new stack backfills history once). **Every** Bronze table is partitioned by `cob_dt`.
 `overwritePartitions()` on an unpartitioned table replaces the whole table — 18 of the
 22 tables used to be unpartitioned, so each load erased the previous snapshots.
 `write_to_iceberg()` now refuses to write a snapshot into a table not partitioned by
@@ -590,7 +608,7 @@ Gold is produced from the **batch Silver analytical model**.
 Current portfolio baseline:
 
 ```text
-15 historical Gold tables   (Spark, partitioned by cob_dt)
+18 historical Gold tables   (Spark, partitioned by cob_dt)
 16 current-serving tables   (dbt via Trino, iceberg.serving.*)
 ```
 
@@ -1070,8 +1088,8 @@ Unknown __op = x
 
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
-| Historical Gold tables |    15 | Spark-managed marts, partitioned by `cob_dt`       |
-| Current-serving tables |    16 | dbt-managed, in `serving` schema, served via Trino |
+| Historical Gold tables |    18 | Spark-managed marts, partitioned by `cob_dt`       |
+| Current-serving tables |    19 | dbt-managed, in `serving` schema, served via Trino |
 
 ---
 
@@ -1182,7 +1200,7 @@ Spark
 │
 ├── Bronze
 ├── Silver
-└── Historical Gold (15 tables, partitioned by cob_dt)
+└── Historical Gold (18 tables, partitioned by cob_dt)
           │
           ▼
       dbt via Trino
@@ -1218,7 +1236,7 @@ Historical analytical transformations remain in Spark Gold, while dbt
 materializes 16 current-serving tables through Trino for a requested `cob_dt`.
 
 ```text
-16 dbt serving models  →  iceberg.serving.*
+19 dbt serving models  →  iceberg.serving.*
 ```
 
 Serving models are `materialized: table`, not views: the Trino Iceberg REST
@@ -1340,7 +1358,7 @@ Apache Airflow coordinates scheduled and job-oriented workflows.
 
 ```text
 Apache Airflow
-19 DAGs loaded (zero import errors)
+22 DAGs loaded (zero import errors)
 ```
 
 Representative responsibilities:
@@ -1551,7 +1569,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-1,068 automated tests
+1,142 automated tests
 ```
 
 covering areas such as:
@@ -1716,6 +1734,33 @@ docker/.env
 ```
 
 Development defaults should not be reused in a real production environment.
+
+---
+
+# Production Readiness Checklist
+
+A portfolio project is judged on whether it behaves like production, not on whether it runs. This table maps each production concern to **where it is enforced in this repo** — every row is verifiable, not aspirational.
+
+| Concern | How it is enforced | Where |
+|---|---|---|
+| Batch idempotency | `overwritePartitions` by `cob_dt`; re-run produces no duplicates | `code_etl/{bronze,silver,gold}/`, ADR-0007 |
+| Incremental loading | Partition-range reads; three transaction facts load incrementally | ADR-0018 |
+| CDC event ordering | Order by `(timestamp_ms, batch_id)`; late events handled | ADR-0010 |
+| Streaming dedup | Dedup by key within the consolidation window | `code_etl/cdc/` |
+| Restart without loss/dup | State rebuilt from Bronze + watermarks, not from in-memory state | README §Watermark & Restart Recovery |
+| Data quality gates | Contract validation + DQ tasks as DAG gates; Gold does not publish on failure | `airflow/dags/ops/ops_data_quality_dag.py`, `ops_contract_validation_dag.py` |
+| Schema drift | Additive vs breaking classification, checked in the pipeline | `airflow/dags/ops/ops_schema_drift_dag.py` |
+| Reconciliation (source ↔ topic ↔ Bronze) | Read-only gate; exits non-zero on invariant violation | `code_etl/cdc/reconcile_cdc.py` |
+| End-of-day reconciliation (streaming vs batch + balance control total) | Counts and balance tie-out per `cob_dt`; FAIL stops the DAG | `code_etl/shared/ops/eod_reconciliation.py` |
+| Real-time serving sync (Iceberg → PostgreSQL) | Idempotent upsert (`ON CONFLICT`); target table auto-created from Iceberg schema | `code_etl/serving/sync_postgres.py`, ADR-0019 |
+| PII masking | Merchant/customer name & phone masked before Gold; daily DAG | `airflow/dags/ops/ops_pii_masking_daily_dag.py` |
+| Lineage & catalogue | OpenMetadata lineage + glossary; evidence manifest | `openmetadata/`, `code_etl/shared/ops/lineage_tracker.py` |
+| Iceberg maintenance | Weekly `compact` + `expire_snapshots` + `remove_orphan_files` | `airflow/dags/ops/ops_maintenance_weekly_dag.py` |
+| Failure isolation | Dead Letter Queue for malformed CDC events | README §Dead Letter Queue, ADR-0010 |
+| Observability | Freshness exporter + Prometheus + Grafana + Alertmanager | `docker/monitoring/`, README §Observability |
+| CI/CD | Lint, unit tests, security scan, Trino integration test | `.github/workflows/`, `scripts/lint.sh` |
+
+**Two gaps deliberately not yet closed** (documented, not hidden): end-of-day **streaming = batch** revenue reconciliation, and a **Gold → PostgreSQL serving** path for sub-second real-time consumers. Both are sized in [ADR-0019](docs/02-architecture/adr/0019-postgres-serving-for-realtime.md).
 
 ---
 

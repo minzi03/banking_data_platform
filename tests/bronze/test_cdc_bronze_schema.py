@@ -66,7 +66,8 @@ def _expected(config: dict) -> list[str]:
 
 
 def test_configs_and_ddl_are_found():
-    assert len(CONFIGS) == 6
+    # 6 topic Debezium + qr_payment (producer, khoá new2 §3.1).
+    assert len(CONFIGS) == 7
     assert all(len(tables) >= 6 for tables in DDL.values()), {k: sorted(v) for k, v in DDL.items()}
 
 

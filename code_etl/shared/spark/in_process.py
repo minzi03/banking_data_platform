@@ -49,6 +49,7 @@ def run_job_in_process(
     logger,
     *,
     check_session: Callable | None = None,
+    runner_kwargs: dict | None = None,
 ) -> bool:
     """Chạy MỘT job trên session con của `spark`. True nếu xong, False nếu job raise."""
     if check_session is None:
@@ -58,7 +59,7 @@ def run_job_in_process(
         check_session(session)
         config = module.load_config(config_path)
         module.validate_config(config)
-        getattr(module, runner_name)(session, config, cob_dt, logger)
+        getattr(module, runner_name)(session, config, cob_dt, logger, **(runner_kwargs or {}))
         return True
     except Exception:  # noqa: BLE001 — bootstrap quyết định dừng hay chạy tiếp, như exit code của subprocess
         logger.exception(f"  ✗ {config_path} FAILED (in-process)")

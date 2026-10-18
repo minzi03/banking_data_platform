@@ -43,6 +43,11 @@ def _query_block() -> str:
 def _config_targets() -> set[str]:
     targets = set()
     for path in (REPO_ROOT / "code_etl" / "bronze").glob("*/*.yml"):
+        # file_sources/ là nguồn FILE (SFTP) — không thuộc alignment query JDBC.
+        # templates/ là tài liệu mẫu (vd oracle_source_reference.yml) — không DAG nào nạp,
+        # nên không phải workload và không thuộc alignment query.
+        if path.parent.name in {"file_sources", "templates"}:
+            continue
         config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if isinstance(config, dict) and "target" in config:
             targets.add(config["target"]["table"])

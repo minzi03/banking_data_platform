@@ -33,7 +33,7 @@ sql: |
     FROM lakehouse.silver.fact_txn_account t
     LEFT JOIN lakehouse.silver.dim_customer c ON t.customer_id=c.customer_id AND DATE '{{ cob_dt }}' BETWEEN c.effective_from AND c.effective_to
     LEFT JOIN lakehouse.silver.dim_account a ON t.account_id=a.account_id AND DATE '{{ cob_dt }}' BETWEEN a.effective_from AND a.effective_to
-    WHERE t.cob_dt = DATE '{{ cob_dt }}'
+    WHERE t.cob_dt <= DATE '{{ cob_dt }}'
   ),
   -- Từng có CTE `customer_stats` ở đây, tính total_credit / total_debit / txn_count
   -- theo khách trên toàn partition. Không cột nào của nó ra tới SELECT cuối, và
@@ -73,7 +73,7 @@ sql: |
       COUNT(DISTINCT CASE WHEN l.is_high_risk_area = 1 THEN l.location_id END) AS high_risk_locations
     FROM lakehouse.silver.fact_online_transaction ot
     JOIN lakehouse.silver.dim_location l ON ot.location_id = l.location_id
-    WHERE ot.cob_dt = DATE '{{ cob_dt }}'
+    WHERE ot.cob_dt <= DATE '{{ cob_dt }}'
       AND ot.status = 'SUCCESS'
     GROUP BY ot.customer_id,
       CAST(from_utc_timestamp(ot.transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)
@@ -129,7 +129,7 @@ sql: |
       MAX(is_fraud) AS is_fraud_flag,
       MAX(CASE WHEN is_fraud = 1 THEN fraud_reason ELSE NULL END) AS fraud_reason
     FROM lakehouse.silver.fact_online_transaction
-    WHERE cob_dt = DATE '{{ cob_dt }}'
+    WHERE cob_dt <= DATE '{{ cob_dt }}'
       AND status = 'SUCCESS'
     GROUP BY customer_id,
       CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)

@@ -65,28 +65,39 @@ sql: |
       FROM lakehouse.silver.dim_customer
       WHERE DATE '{{ cob_dt }}' BETWEEN effective_from AND effective_to
   ),
-  -- Account transactions — aggregate về grain customer_id trước khi join
+  -- Fact tables are full snapshots. Pick the latest copy of each transaction
+  -- as of cob_dt before applying the business-date lookback; otherwise a txn
+  -- present in two snapshots is counted twice.
+  acct_snapshot AS (
+      SELECT f.*, ROW_NUMBER() OVER (PARTITION BY txn_id ORDER BY cob_dt DESC) AS snapshot_rn
+      FROM lakehouse.silver.fact_txn_account f
+      WHERE cob_dt <= DATE '{{ cob_dt }}'
+  ),
   acct_txn AS (
       SELECT
           customer_id,
           COUNT(DISTINCT txn_id) AS acct_txn_count,
           COALESCE(SUM(ABS(txn_amount)), 0) AS acct_txn_amount,
           MAX(txn_date) AS acct_last_txn_date
-      FROM lakehouse.silver.fact_txn_account
-      WHERE cob_dt = DATE '{{ cob_dt }}'
+      FROM acct_snapshot
+      WHERE snapshot_rn = 1
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'
       GROUP BY customer_id
   ),
-  -- Card transactions — aggregate về grain customer_id trước khi join
+  card_snapshot AS (
+      SELECT f.*, ROW_NUMBER() OVER (PARTITION BY txn_id ORDER BY cob_dt DESC) AS snapshot_rn
+      FROM lakehouse.silver.fact_card_txn f
+      WHERE cob_dt <= DATE '{{ cob_dt }}'
+  ),
   card_txn AS (
       SELECT
           customer_id,
           COUNT(DISTINCT txn_id) AS card_txn_count,
           COALESCE(SUM(CASE WHEN txn_type NOT IN ('REFUND','REVERSAL') THEN txn_amount ELSE 0 END), 0) AS card_txn_amount,
           MAX(txn_date) AS card_last_txn_date
-      FROM lakehouse.silver.fact_card_txn
-      WHERE cob_dt = DATE '{{ cob_dt }}'
+      FROM card_snapshot
+      WHERE snapshot_rn = 1
         AND status = 'SUCCESS'
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) >= DATE_ADD(DATE '{{ cob_dt }}', -90)
         AND CAST(from_utc_timestamp(txn_date, 'Asia/Ho_Chi_Minh') AS DATE) <= DATE '{{ cob_dt }}'

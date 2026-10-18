@@ -353,13 +353,21 @@ class TestCdcStreamingFitsTheWorker:
         assert caps, "cdc_streaming_dag không đặt --conf spark.cores.max cho query streaming"
 
     def test_all_queries_leave_room_for_consolidation(self):
+        """
+        Bất biến thật là BẤT ĐẲNG THỨC, không phải con số 6 cố định: số query
+        nhân core mỗi query phải chừa chỗ cho consolidation. Khi thêm nguồn
+        streaming mới (vd qr_payment) điều cần kiểm tra là tổng vẫn < worker
+        cores, không phải đếm file bằng đúng một hằng số.
+        """
         cap = int(re.findall(r"spark\.cores\.max=(\d+)", self.STREAMING_DAG.read_text(encoding="utf-8"))[0])
         worker_cores = int(re.search(r"^SPARK_WORKER_CORES=(\d+)", self.ENV_EXAMPLE.read_text(), re.M).group(1))
         used = cap * len(self.CDC_CONFIGS)
-        assert len(self.CDC_CONFIGS) == 6
         assert used < worker_cores, (
-            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker"
+            f"{len(self.CDC_CONFIGS)} query x {cap} core = {used} >= {worker_cores} core của worker — "
+            "consolidation sẽ WAITING vô hạn"
         )
+        # Chừa ít nhất 1 core cho consolidation + các job batch.
+        assert worker_cores - used >= 1, f"chỉ còn {worker_cores - used} core cho consolidation — cần ít nhất 1"
 
 
 SCHEDULED_DAGS = [p for p in DAG_FILES if re.search(r'schedule_interval\s*=\s*"[^"]+"', p.read_text(encoding="utf-8"))]
@@ -401,3 +409,25 @@ def test_derived_completion_flag_is_reset_at_start(relative, flag):
     ngay đầu, nếu không S cũ vẫn là dòng mới nhất và consumer chạy trên dữ liệu đang ghi."""
     text = (DAGS_DIR / relative).read_text(encoding="utf-8")
     assert re.search(rf"make_start_flag_task\(\s*\"\w+_reset\", {flag}", text), f"{relative}: thiếu R cho {flag}"
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "bronze/bronze_core_banking_dag.py",
+        "bronze/bronze_card_crm_dag.py",
+        "bronze/bronze_digital_banking_dag.py",
+        "silver/silver_all_dag.py",
+    ],
+)
+def test_backfill_arg_is_only_added_to_incremental_jobs(relative):
+    """
+    ADR-0018: lần nạp đầu truyền conf backfill_from. Job full_snapshot từ chối --backfill_from,
+    nên DAG phải gắn tham số CÓ ĐIỀU KIỆN theo config, không gắn cho mọi task.
+    """
+    text = (DAGS_DIR / relative).read_text(encoding="utf-8")
+    assert "BACKFILL_FROM_ARG" in text, f"{relative}: không truyền backfill_from"
+    guarded = re.search(r'if\s+\(?config\["load"\]\["strategy"\]\s*==\s*"incremental"', text) or re.search(
+        r'\.get\("incremental"\)', text
+    )
+    assert guarded, f"{relative}: BACKFILL_FROM_ARG gắn vô điều kiện"
