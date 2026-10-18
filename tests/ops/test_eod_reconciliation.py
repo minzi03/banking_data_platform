@@ -47,8 +47,43 @@ finally:
 RECONCILIATIONS = _imod.RECONCILIATIONS
 COUNT_RECONCILIATIONS = _imod.COUNT_RECONCILIATIONS
 CONTROL_TOTAL_RECONCILIATIONS = _imod.CONTROL_TOTAL_RECONCILIATIONS
+MERCHANT_METRICS = _imod.MERCHANT_METRICS
+_metric_map = _imod._metric_map
 reconcile_one = _imod.reconcile_one
 parse_args = _imod.parse_args
+reconcile_merchant_transactions = _imod.reconcile_merchant_transactions
+merchant_source_query = _imod._merchant_source_query
+merchant_metric_sql = _imod._merchant_metric_sql
+
+
+def test_merchant_source_query_pins_ict_date_and_cohort():
+    query = merchant_source_query("2025-12-31")
+    assert "payment_channel IN ('QR', 'POS')" in query
+    assert "merchant_id IS NOT NULL" in query
+    assert "DATE '2025-12-31'" in query
+    assert "status = 'SUCCESS'" in query
+
+
+def test_merchant_metric_sql_uses_same_cohort():
+    query = merchant_metric_sql("lakehouse.silver.fact_online_transaction", "2025-12-31")
+    assert "payment_channel IN ('QR', 'POS')" in query
+    assert "DATE '2025-12-31'" in query
+    assert "refund_flag = 1" in query
+
+
+def test_metric_map_preserves_merchant_channel_currency_and_defaults():
+    rows = [
+        {
+            "merchant_id": 1,
+            "payment_channel": "QR",
+            "currency": "VND",
+            "success_count": 2,
+            "gross_amount": 100.0,
+            "refund_count": None,
+        }
+    ]
+    assert _metric_map(rows)[(1, "QR", "VND")] == {"success_count": 2.0, "gross_amount": 100.0, "refund_count": 0.0}
+    assert set(MERCHANT_METRICS) == {"success_count", "gross_amount", "refund_count"}
 
 
 class TestSpec:
@@ -86,6 +121,40 @@ class TestSpec:
                     continue
                 parts = spec[key].split(".")
                 assert len(parts) == 3 and parts[0] == "lakehouse", spec[key]
+
+
+class TestMerchantReconciliationHelpers:
+    def test_source_query_has_shared_cohort(self):
+        query = merchant_source_query("2025-12-31")
+        assert "merchant_id IS NOT NULL" in query
+        assert "payment_channel IN ('QR', 'POS')" in query
+        assert "DATE '2025-12-31'" in query
+        assert "status = 'SUCCESS'" in query
+
+    def test_metric_sql_has_same_cohort(self):
+        query = merchant_metric_sql("lakehouse.silver.fact_online_transaction", "2025-12-31")
+        assert "merchant_id IS NOT NULL" in query
+        assert "payment_channel IN ('QR', 'POS')" in query
+        assert "refund_flag = 1" in query
+
+    def test_metric_map_normalizes_currency_and_nulls(self):
+        rows = [
+            {
+                "merchant_id": 1,
+                "payment_channel": "QR",
+                "currency": " VND ",
+                "success_count": 2,
+                "gross_amount": 100.0,
+                "refund_count": None,
+            }
+        ]
+        assert _metric_map(rows) == {
+            (1, "QR", "VND"): {
+                "success_count": 2.0,
+                "gross_amount": 100.0,
+                "refund_count": 0.0,
+            }
+        }
 
 
 class TestReconcileOne:

@@ -117,6 +117,115 @@ CONTROL_TOTAL_RECONCILIATIONS: list[dict[str, str]] = [
 
 RECONCILIATIONS: list[dict[str, str]] = COUNT_RECONCILIATIONS + CONTROL_TOTAL_RECONCILIATIONS
 
+MERCHANT_COHORT = "merchant_qr_pos"
+MERCHANT_METRICS = ("success_count", "gross_amount", "refund_count")
+
+
+def _merchant_source_query(cob_dt: str) -> str:
+    """Postgres source-of-truth aggregate for the shared Merchant cohort."""
+    return f"""
+        SELECT merchant_id, payment_channel, currency,
+               COUNT(*) FILTER (WHERE status = 'SUCCESS') AS success_count,
+               COALESCE(SUM(amount) FILTER (WHERE status = 'SUCCESS'), 0) AS gross_amount,
+               COUNT(*) FILTER (WHERE status = 'SUCCESS' AND refund_flag = 1) AS refund_count
+        FROM digital_banking.online_transaction
+        WHERE merchant_id IS NOT NULL
+          AND payment_channel IN ('QR', 'POS')
+          AND (timezone('Asia/Ho_Chi_Minh', timezone('UTC', transaction_date)))::date = DATE '{cob_dt}'
+        GROUP BY merchant_id, payment_channel, currency
+    """
+
+
+def _merchant_metric_sql(table: str, cob_dt: str, *, epoch_timestamp: bool = False) -> str:
+    """Aggregate batch/current CDC at the exact source cohort and metric grain."""
+    date_expr = (
+        "CAST(from_utc_timestamp(timestamp_micros(CAST(transaction_date AS BIGINT)), 'Asia/Ho_Chi_Minh') AS DATE)"
+        if epoch_timestamp
+        else "CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE)"
+    )
+    return f"""
+        SELECT merchant_id, payment_channel, currency,
+               COUNT(CASE WHEN status = 'SUCCESS' THEN transaction_id END) AS success_count,
+               COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN amount ELSE 0 END), 0) AS gross_amount,
+               COUNT(CASE WHEN status = 'SUCCESS' AND refund_flag = 1 THEN transaction_id END) AS refund_count
+        FROM {table}
+        WHERE merchant_id IS NOT NULL
+          AND payment_channel IN ('QR', 'POS')
+          AND {date_expr} = DATE '{cob_dt}'
+        GROUP BY merchant_id, payment_channel, currency
+    """
+
+
+def _metric_map(rows) -> dict[tuple, dict[str, float]]:
+    """Convert Spark/JDBC rows to a comparable, stable metric map."""
+    result = {}
+    for row in rows:
+        values = row.asDict() if hasattr(row, "asDict") else dict(row)
+        key = (int(values["merchant_id"]), values["payment_channel"], values["currency"].strip())
+        result[key] = {metric: float(values[metric] or 0) for metric in MERCHANT_METRICS}
+    return result
+
+
+def reconcile_merchant_transactions(spark, cob_dt: str, tolerance: float = 0.0) -> list[dict[str, Any]]:
+    """Compare source, batch fact and CDC current state for one ICT business date."""
+    source = _read_source_rows(spark, _merchant_source_query(cob_dt))
+    batch_rows = spark.sql(_merchant_metric_sql("lakehouse.silver.fact_online_transaction", cob_dt)).collect()
+    stream_rows = spark.sql(
+        _merchant_metric_sql("lakehouse.silver.fact_online_transaction_current", cob_dt, epoch_timestamp=True)
+    ).collect()
+    source_map = _metric_map(source)
+    batch_map = _metric_map(batch_rows)
+    stream_map = _metric_map(stream_rows)
+    results = []
+    for key in sorted(set(source_map) | set(batch_map) | set(stream_map)):
+        source_values = source_map.get(key, {metric: 0.0 for metric in MERCHANT_METRICS})
+        batch_values = batch_map.get(key, {metric: 0.0 for metric in MERCHANT_METRICS})
+        stream_values = stream_map.get(key, {metric: 0.0 for metric in MERCHANT_METRICS})
+        merchant_id, channel, currency = key
+        for metric in MERCHANT_METRICS:
+            source_value = source_values[metric]
+            batch_value = batch_values[metric]
+            stream_value = stream_values[metric]
+            status = (
+                "PASS"
+                if max(abs(source_value - batch_value), abs(source_value - stream_value)) <= tolerance
+                else "FAIL"
+            )
+            results.append(
+                {
+                    "metric_name": f"{MERCHANT_COHORT}.{metric}",
+                    "entity": f"merchant:{merchant_id}:{channel}:{currency}",
+                    "stream_value": stream_value,
+                    "batch_value": batch_value,
+                    "delta": stream_value - batch_value,
+                    "tolerance": tolerance,
+                    "check_status": status,
+                    "details": (
+                        f"source={source_value} batch={batch_value} stream={stream_value} "
+                        f"merchant_id={merchant_id} channel={channel} currency={currency}"
+                    ),
+                    "cob_dt": cob_dt,
+                }
+            )
+    return results
+
+
+def _read_source_rows(spark, query: str):
+    """Read grouped source rows from Postgres with the platform credentials."""
+    missing = [name for name in ("POSTGRES_USER", "POSTGRES_PASSWORD") if not os.environ.get(name)]
+    if missing:
+        raise OSError(f"Thiếu biến môi trường {missing} để đọc nguồn PostgreSQL.")
+    return (
+        spark.read.format("jdbc")
+        .option("url", JDBC_URL)
+        .option("dbtable", f"({query}) s")
+        .option("user", os.environ["POSTGRES_USER"])
+        .option("password", os.environ["POSTGRES_PASSWORD"])
+        .option("driver", "org.postgresql.Driver")
+        .load()
+        .collect()
+    )
+
 
 def _read_source_count(spark, query: str) -> int:
     """Đọc một con số từ Postgres core qua JDBC."""
@@ -339,6 +448,11 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Ngưỡng lệch tuyệt đối cho phép (mặc định 0 — phải khớp tuyệt đối)",
     )
+    parser.add_argument(
+        "--merchant-eod",
+        action="store_true",
+        help="Đối soát cohort Merchant QR/POS source ↔ batch ↔ CDC current",
+    )
     return parser.parse_args()
 
 
@@ -352,7 +466,17 @@ def main() -> int:
 
     all_results: list[dict[str, Any]] = []
     failures: list[str] = []
+    if args.merchant_eod:
+        try:
+            all_results.extend(reconcile_merchant_transactions(spark, cob_dt, tolerance))
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{MERCHANT_COHORT}: {exc}")
+            log.error(f"Đối soát {MERCHANT_COHORT} lỗi: {exc}")
     for spec in RECONCILIATIONS:
+        if args.merchant_eod:
+            break
+        # Legacy dimension/account reconciliation remains the default path.
+
         try:
             results = reconcile_one(spark, spec, cob_dt, tolerance)
             all_results.extend(results)

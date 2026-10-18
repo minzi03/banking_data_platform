@@ -74,6 +74,18 @@ class TestDedupConfigContract:
         for col in ("merchant_id", "payment_channel", "refund_flag"):
             assert col in block, f"{col} thiếu trong DDL online_transaction_cdc"
 
+    def test_online_transaction_current_state_consolidation_is_separate_from_qr_producer(self):
+        """Merchant EOD uses current-state Debezium CDC, not the synthetic QR topic."""
+        path = (
+            PROJECT_ROOT / "code_etl" / "cdc" / "consolidation" / "config" / "cdc_consolidation_online_transaction.yml"
+        )
+        cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert cfg["source_table"] == "lakehouse.bronze.online_transaction_cdc"
+        assert cfg["target_table"] == "lakehouse.silver.fact_online_transaction_current"
+        assert cfg["business_key"] == "transaction_id"
+        assert "merchant_id" in cfg["columns"]
+        assert "qr_payment_cdc" not in cfg["source_table"]
+
     def test_missing_watermark_delay_is_reported(self):
         mod = _load_dedup_module()
         assert any("watermark_delay" in p for p in mod.dedup_config_problems({"keys": ["x"]}))

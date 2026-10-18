@@ -67,6 +67,24 @@ wait_silver = SqlSensor(
     dag=dag,
 )
 
+# Merchant EOD needs the CDC current-state projection as well as batch Silver.
+# The consolidation DAG records its completion in the same ops flags table.
+wait_cdc_online_transaction = SqlSensor(
+    task_id="wait_cdc_online_transaction_consolidation",
+    conn_id=POSTGRES_ETL_CONN_ID,
+    sql=upstream_success_sql("cdc_consolidation_pipeline", COB_DT),
+    poke_interval=120,
+    timeout=7200,
+    mode="reschedule",
+    dag=dag,
+)
+
+merchant_reconcile = BashOperator(
+    task_id="reconcile_merchant_qr_pos",
+    bash_command=f"{SPARK_SUBMIT} {APPLICATION_PATH} --cob_dt {COB_DT} --merchant-eod",
+    dag=dag,
+)
+
 # ---------------------------------------------------------------------------
 # Flag tasks
 # ---------------------------------------------------------------------------
@@ -85,4 +103,4 @@ reconcile = BashOperator(
 # ---------------------------------------------------------------------------
 # Task Flow
 # ---------------------------------------------------------------------------
-wait_silver >> start >> reconcile >> end
+[wait_silver, wait_cdc_online_transaction] >> start >> [reconcile, merchant_reconcile] >> end
