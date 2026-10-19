@@ -1751,7 +1751,7 @@ A portfolio project is judged on whether it behaves like production, not on whet
 | Data quality gates | Contract validation + DQ tasks as DAG gates; Gold does not publish on failure | `airflow/dags/ops/ops_data_quality_dag.py`, `ops_contract_validation_dag.py` |
 | Schema drift | Additive vs breaking classification, checked in the pipeline | `airflow/dags/ops/ops_schema_drift_dag.py` |
 | Reconciliation (source ↔ topic ↔ Bronze) | Read-only gate; exits non-zero on invariant violation | `code_etl/cdc/reconcile_cdc.py` |
-| End-of-day reconciliation (streaming vs batch + balance control total) | Counts and balance tie-out per `cob_dt`; FAIL stops the DAG | `code_etl/shared/ops/eod_reconciliation.py` |
+| End-of-day reconciliation (streaming vs batch + balance control total) | Customer/account counts and balance tie-out are gated per `cob_dt`; Merchant QR/POS has a separate implementation and read-only verifier, but no completed three-way runtime PASS | `code_etl/shared/ops/eod_reconciliation.py`, `scripts/verify_merchant_eod_reconciliation.py`, TD-22 |
 | Real-time serving sync (Iceberg → PostgreSQL) | Idempotent upsert (`ON CONFLICT`); target table auto-created from Iceberg schema | `code_etl/serving/sync_postgres.py`, ADR-0019 |
 | PII masking | Merchant/customer name & phone masked before Gold; daily DAG | `airflow/dags/ops/ops_pii_masking_daily_dag.py` |
 | Lineage & catalogue | OpenMetadata lineage + glossary; evidence manifest | `openmetadata/`, `code_etl/shared/ops/lineage_tracker.py` |
@@ -1760,7 +1760,9 @@ A portfolio project is judged on whether it behaves like production, not on whet
 | Observability | Freshness exporter + Prometheus + Grafana + Alertmanager | `docker/monitoring/`, README §Observability |
 | CI/CD | Lint, unit tests, security scan, Trino integration test | `.github/workflows/`, `scripts/lint.sh` |
 
-**Two gaps deliberately not yet closed** (documented, not hidden): end-of-day **streaming = batch** revenue reconciliation, and a **Gold → PostgreSQL serving** path for sub-second real-time consumers. Both are sized in [ADR-0019](docs/02-architecture/adr/0019-postgres-serving-for-realtime.md).
+**Merchant EOD status is deliberately stated precisely** (documented, not hidden): the QR/POS reconciliation implementation, current-state CDC path, and read-only verifier exist, but a synchronized three-way runtime PASS (PostgreSQL source = batch Silver = CDC current) still belongs to TD-22. The independent synthetic QR producer and uncontracted SFTP settlement are not included in that claim. Gold → PostgreSQL serving for real-time consumers is implemented; see ADR-0019.
+
+The remaining gap is an isolated E2E verification stack, not another shared-stack overwrite. See TD-22 in `docs/05-quality/technical-debt.md`.
 
 ---
 
@@ -1773,7 +1775,7 @@ Current boundaries include:
 - Spark runs as a small local cluster rather than a large distributed deployment.
 - Kafka is not deployed as a production HA multi-broker cluster.
 - Airflow uses a local production-like configuration rather than distributed HA.
-- CDC consolidation currently targets only **customer** and **account**.
+- CDC consolidation targets customer/account and now has a Merchant online-transaction current-state path; the Merchant path still needs an isolated three-way E2E proof (TD-22).
 - Other CDC datasets remain append-only Bronze history.
 - Gold analytics remain batch-derived.
 - Churn-risk logic is rule-based rather than an ML prediction model.
