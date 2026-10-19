@@ -24,7 +24,7 @@ groups:
           severity: warning
         annotations:
           summary: Data quality check failed on {{ $labels.table_name }}
-          description: Check {{ $labels.check_name }} failed: {{ $value }}
+          description: 'Check {{ $labels.check_name }} failed: {{ $value }}'
       - alert: RowCountAnomaly
         expr: abs(delta(table_row_count[1h])) / table_row_count > 0.5
         for: 15m
@@ -33,3 +33,43 @@ groups:
         annotations:
           summary: Row count anomaly detected
           description: Table {{ $labels.table_name }} row count changed by {{ $value | humanizePercentage }}
+      - alert: SparkStreamingQueryInactive
+        expr: spark_streaming_query_active == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Spark streaming query is inactive
+          description: Query {{ $labels.query }} has reported inactive for 5 minutes.
+      - alert: SparkStreamingHeartbeatStale
+        expr: time() - spark_streaming_last_heartbeat_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Spark streaming heartbeat is stale
+          description: Query {{ $labels.query }} has not reported a heartbeat for 5 minutes.
+      - alert: SparkStreamingKafkaLagHigh
+        expr: spark_streaming_kafka_offsets_behind_latest > 10000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Spark streaming Kafka lag is high
+          description: Query {{ $labels.query }} is {{ $value }} offsets behind latest.
+      - alert: CDCDeadLetterGrowth
+        expr: increase(cdc_dead_letter_rows_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: CDC dead-letter rows are increasing
+          description: CDC DLQ received new invalid events in the last 15 minutes.
+      - alert: MerchantEODReconciliationFailed
+        expr: increase(merchant_eod_reconciliation_failures_total[15m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Merchant EOD reconciliation failed
+          description: Merchant streaming/batch reconciliation reported a failure.
