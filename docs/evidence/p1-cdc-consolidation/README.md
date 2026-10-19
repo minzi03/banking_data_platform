@@ -68,6 +68,26 @@ state, so the append-only Bronze test table ended with 20 rows and 20 distinct
 business keys. This proves checkpoint recovery and bounded watermark
 deduplication; it is not an unbounded exactly-once claim.
 
+### Merchant EOD three-way status (2026-10-19)
+
+The implementation and read-only verifier are present, but a Docker-backed
+`source = batch = CDC current` PASS has **not** been claimed. An isolated CDC
+fixture proved Postgres UPDATE → Debezium → Kafka → Spark → Bronze (1 valid event,
+0 DLQ), while the existing Silver batch partition represented a different source
+snapshot. The verifier therefore correctly returned `FAIL` rather than publishing
+misleading evidence. The independent synthetic QR producer and SFTP settlement
+file are separate populations and are not included in this claim.
+
+The remaining work is TD-22: a fully isolated Postgres + Kafka + Debezium + Spark +
+Iceberg stack with one deterministic cohort, an injected mismatch case, and
+verified cleanup. Until that exists, Merchant EOD is **implemented and unit-tested,
+but not runtime-verified end-to-end**.
+
+Evidence verifier: `scripts/verify_merchant_eod_reconciliation.py`.
+
+### Latency (P1.4)
+5 local trials, no manual intervention:
+
 Evidence script: `scripts/verify_checkpoint_restart.py`.
 Raw logs:
 - `logs/restart_stream_1792253768.log` (phase A)

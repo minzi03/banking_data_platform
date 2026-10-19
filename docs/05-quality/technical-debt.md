@@ -1890,6 +1890,57 @@ same change. Also removed: `tests/governance/test_terraform_secrets.py` (tested 
 
 ---
 
+## TD-22 — Isolated Merchant EOD three-way runtime verification
+
+**Status:** open (recorded 2026-10-19). The reconciliation implementation is present, but
+there is no valid Docker-backed PASS proving one shared transaction cohort agrees across
+Postgres source, batch Silver and CDC current-state.
+
+### What is proven
+
+- `scripts/verify_merchant_eod_reconciliation.py` compares the same merchant/QR-POS/ICT-date/
+currency cohort at grain `merchant_id × payment_channel × currency`, for SUCCESS count, gross
+amount and refund count.
+- An isolated CDC run proved a Postgres UPDATE reaches a dedicated Debezium topic and Bronze
+CDC table (one valid event, zero DLQ).
+- The verifier was run against the shared stack and returned **FAIL**: source had zero groups
+for the selected date, batch Silver had eight groups, and CDC current-state had zero groups.
+This is evidence of mismatched source/batch snapshots and absent current-state fixture, not a
+successful reconciliation.
+- The independent QR producer has no corresponding Postgres transaction row; SFTP settlement
+has no formal business-key/gross-net/refund contract. Neither is included in the proof.
+
+### Why the proof is not complete
+
+The existing local stack contains mutable/shared source, Bronze and Silver state. Updating a
+source fixture and running a day-level Bronze/Silver overwrite can affect more than that one
+transaction. The prior isolated CDC setup also showed that connector/topic/checkpoint/table
+lifecycle must be independent; otherwise retries encounter leftover offsets or stale state.
+
+### Acceptance
+
+```text
+[ ] E2E stack uses isolated Postgres database/volume, Kafka topic, connector/slot,
+    Iceberg warehouse/catalog or isolated namespaces, and unique checkpoint prefix
+[ ] deterministic fixture has identical transaction IDs and business attributes across
+    source, batch and CDC input for one fixed ICT cob_dt
+[ ] CDC consolidates UPDATE/DELETE semantics to one current row per transaction key
+[ ] source, batch and current CDC aggregates match for count, gross and refund-count,
+    grouped by merchant_id × payment_channel × currency
+[ ] missing row and amount mismatch both make the EOD command exit non-zero
+[ ] rerun is idempotent and cleanup is verified for every isolated resource
+[ ] evidence is recorded only after the complete three-way PASS
+```
+
+Do not claim this as a PASS until the isolated E2E acceptance is met. Keep the current
+shared-stack FAIL as diagnostic evidence only; it must not be represented as data-quality
+failure for production, because the selected partitions were not a synchronized fixture.
+
+**Follow-up:** design a separate compose profile/project for this test; do not run a
+full-date overwrite against the shared user stack as a shortcut.
+
+---
+
 ## TD-21 — Ruff format gate failed on feature-branch files
 
 **Status:** fixed on this branch (2026-10-18).
