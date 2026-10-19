@@ -1,0 +1,99 @@
+# Isolated TD-22 Merchant EOD verification stack.
+# Never use the shared project name/volumes/topics for this file.
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: merchant-e2e-postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: merchant_e2e
+      POSTGRES_PASSWORD: merchant_e2e_only
+      POSTGRES_DB: merchant_e2e
+    volumes:
+      - merchant_e2e_postgres:/var/lib/postgresql/data
+      - ./init_postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U merchant_e2e -d merchant_e2e"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [merchant_e2e_net]
+
+  minio:
+    image: ghcr.io/minzi03/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: merchant-e2e-minio
+    hostname: minio
+    environment:
+      MINIO_ROOT_USER: merchant_e2e
+      MINIO_ROOT_PASSWORD: merchant_e2e_only_secret
+    command: server /data --console-address ":9001"
+    volumes:
+      - merchant_e2e_minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [merchant_e2e_net]
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: merchant-e2e-zookeeper
+    hostname: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks: [merchant_e2e_net]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: merchant-e2e-kafka
+    hostname: kafka
+    depends_on:
+      zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [merchant_e2e_net]
+
+  debezium:
+    image: debezium/connect:2.6
+    container_name: merchant-e2e-debezium
+    hostname: debezium
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      GROUP_ID: merchant-e2e
+      CONFIG_STORAGE_TOPIC: merchant-e2e-connect-configs
+      OFFSET_STORAGE_TOPIC: merchant-e2e-connect-offsets
+      STATUS_STORAGE_TOPIC: merchant-e2e-connect-status
+      BOOTSTRAP_SERVERS: kafka:9092
+      HEAP_OPTS: "-Xms128m -Xmx512m"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [merchant_e2e_net]
+
+volumes:
+  merchant_e2e_postgres:
+  merchant_e2e_minio:
+
+networks:
+  merchant_e2e_net:
+    name: merchant_e2e_net
