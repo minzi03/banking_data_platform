@@ -1,0 +1,109 @@
+# Semantic query contract for merchant business consumers.
+# Queries target the existing serving and monitoring surfaces; they do not create
+# a second metric definition. KPI meaning and thresholds live in
+# merchant_kpi_contract.yml.
+version: "1.0"
+domain: merchant_qr_pos
+business_timezone: Asia/Ho_Chi_Minh
+kpi_contract: docs/04-operations/merchant_kpi_contract.yml
+personas:
+  - id: merchant_operations
+    owner: Merchant Operations
+    purpose: Monitor payment performance, refunds, and active merchants.
+    queries:
+      - id: merchant_operations_daily_kpis
+        engine: postgres
+        source_tables: [serving.merchant_daily_summary_current]
+        metric_refs: [merchant_success_rate, merchant_refund_rate]
+        sql: |
+          SELECT txn_date,
+                 COUNT(DISTINCT merchant_id) AS active_merchants,
+                 SUM(txn_count) AS successful_transactions,
+                 SUM(gross_amount) AS gross_amount,
+                 CASE WHEN SUM(txn_count) > 0
+                      THEN SUM(refund_rate * txn_count) / SUM(txn_count)
+                      ELSE 0 END AS refund_rate
+          FROM serving.merchant_daily_summary_current
+          GROUP BY txn_date
+          ORDER BY txn_date DESC;
+      - id: merchant_operations_top_refunds
+        engine: postgres
+        source_tables: [serving.merchant_daily_summary_current]
+        metric_refs: [merchant_refund_rate]
+        sql: |
+          SELECT merchant_id, txn_date, txn_count, refund_rate, gross_amount
+          FROM serving.merchant_daily_summary_current
+          WHERE refund_rate >= 0.03
+          ORDER BY refund_rate DESC, gross_amount DESC
+          LIMIT 50;
+
+  - id: finance
+    owner: Finance
+    purpose: Review gross payment value and merchant ranking before close.
+    queries:
+      - id: finance_daily_gross_amount
+        engine: postgres
+        source_tables: [serving.merchant_daily_summary_current]
+        metric_refs: [merchant_gross_amount, merchant_eod_reconciliation_mismatch]
+        sql: |
+          SELECT txn_date,
+                 SUM(gross_amount) AS gross_amount,
+                 SUM(txn_count) AS successful_transactions
+          FROM serving.merchant_daily_summary_current
+          GROUP BY txn_date
+          ORDER BY txn_date DESC;
+      - id: finance_top_merchants
+        engine: postgres
+        source_tables: [serving.merchant_ranking_current]
+        metric_refs: [merchant_gross_amount]
+        sql: |
+          SELECT merchant_name, mcc_code, revenue, rank_in_mcc, pop_growth_rate
+          FROM serving.merchant_ranking_current
+          ORDER BY revenue DESC
+          LIMIT 20;
+
+  - id: sales_commercial
+    owner: Sales/Commercial
+    purpose: Identify high-value merchants and commercial product opportunities.
+    queries:
+      - id: sales_merchant_performance
+        engine: postgres
+        source_tables: [serving.merchant_ranking_current]
+        metric_refs: [merchant_gross_amount]
+        sql: |
+          SELECT merchant_name, mcc_code, revenue, rank_in_mcc, pop_growth_rate
+          FROM serving.merchant_ranking_current
+          ORDER BY revenue DESC, pop_growth_rate DESC
+          LIMIT 100;
+      - id: sales_advisory_distribution
+        engine: postgres
+        source_tables: [serving.merchant_360_current]
+        metric_refs: []
+        sql: |
+          SELECT advisory_product_hint,
+                 COUNT(*) AS merchants,
+                 SUM(revenue_90d) AS revenue_90d
+          FROM serving.merchant_360_current
+          GROUP BY advisory_product_hint
+          ORDER BY revenue_90d DESC;
+
+  - id: data_platform
+    owner: Data Platform
+    purpose: Monitor CDC freshness, dead-letter rows, and EOD control status.
+    queries:
+      - id: data_platform_cdc_freshness
+        engine: prometheus
+        source_tables: []
+        metric_refs: [cdc_freshness_seconds]
+        expression: cdc_freshness_seconds{job="cdc-freshness"}
+      - id: data_platform_cdc_dlq
+        engine: prometheus
+        source_tables: []
+        metric_refs: [cdc_dead_letter_rows]
+        expression: cdc_dead_letter_rows{job="cdc-freshness"}
+      - id: data_platform_eod_gate
+        engine: airflow
+        source_tables: []
+        metric_refs: [merchant_eod_reconciliation_mismatch]
+        dag: ops_eod_reconciliation_dag
+        task: merchant_eod_reconciliation
