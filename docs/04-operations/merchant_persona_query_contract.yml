@@ -57,7 +57,7 @@ personas:
         source_tables: [serving.merchant_ranking_current]
         metric_refs: [merchant_gross_amount]
         sql: |
-          SELECT merchant_name, mcc_code, revenue, rank_in_mcc, pop_growth_rate
+          SELECT merchant_name_masked, mcc_code, revenue, rank_in_mcc, pop_growth_rate
           FROM serving.merchant_ranking_current
           ORDER BY revenue DESC
           LIMIT 20;
@@ -71,7 +71,7 @@ personas:
         source_tables: [serving.merchant_ranking_current]
         metric_refs: [merchant_gross_amount]
         sql: |
-          SELECT merchant_name, mcc_code, revenue, rank_in_mcc, pop_growth_rate
+          SELECT merchant_name_masked, mcc_code, revenue, rank_in_mcc, pop_growth_rate
           FROM serving.merchant_ranking_current
           ORDER BY revenue DESC, pop_growth_rate DESC
           LIMIT 100;
