@@ -26,7 +26,6 @@ def test_td22_stack_uses_isolated_names_and_resources():
     }
     assert all(name.startswith("merchant_e2e_") for name in volume_names)
 
-
     assert config["networks"]["merchant_e2e_net"]["name"] == "merchant_e2e_net"
 
 
