@@ -1,13 +1,26 @@
 # Phân Tích Thị Trường Data Engineer Việt Nam — Toàn Bộ Corpus JD
 
 > **Ngày đo**: 2026-10-01 (thay bản 2026-09-29)
-> **Nguồn**: 21 file JD + 1 file benchmark repo + 2 sơ đồ kiến trúc đối thủ (`thamkhao/JD/`)
-> **Quy mô**: 4.010.665 ký tự (2.282.284 sau khi bỏ dòng lặp) · Aug–Sep 2026
-> **Công cụ đo**: [`scripts/measure_jd_corpus.py`](../../scripts/measure_jd_corpus.py) — mọi con số ở đây sinh lại được bằng một lệnh
+> **Nguồn chính**: 21 file JD Data/Engineering/Analytics (`jd1–jd21`) + 1 file benchmark repo + 2 sơ đồ kiến trúc đối thủ (`thamkhao/JD/`)
+> **Nguồn bổ sung**: `jd22_BA.md` — 1 JD Business Analyst/Commercial Operations, được đọc và đo riêng, không trộn vào baseline Data Engineering A–D
+> **Quy mô baseline cũ**: 4.010.665 ký tự (2.282.284 sau khi bỏ dòng lặp) · Aug–Sep 2026
+> **Công cụ đo**: [`scripts/measure_jd_corpus.py`](../../scripts/measure_jd_corpus.py) — script hiện nhận diện `jd22_BA.md` như nhóm supplemental `BA`; các số A–D/ALL vẫn giữ ý nghĩa baseline cũ
 > **Mục đích**: Xác định khoảng cách giữa Banking Data Platform và nhu cầu thị trường **bằng số đo, không bằng ước lượng**
 > **Thay thế**: bản 2026-09-29 (16 file), `JD_FINAL_MARKET_ANALYSIS.md`, `JD_MARKET_ANALYSIS_REPORT.md`
-> **Bổ sung 2026-10-01**: nhóm mẫu **D** (5 file scrape mới, 166 bài đăng); `jd16.md` được thay bằng bản scrape lớn hơn (113k → 260k byte) nên **nhóm C cũng tăng** từ 603k lên 735k ký tự. Xem §10 để biết điều gì đổi so với bản trước.
-> **Kiểm chứng 2026-11 (đợt #2)**: chạy lại script (22/22 MD5 khớp) + kiểm chứng từng trích dẫn bằng grep. Sửa **5 lỗi** (§1.3, §2.2, §4, §5.1, §0) và **cập nhật trạng thái dự án** — nhiều mục P1/P2 của bản 2026-10-01 đã được implement trong 72 commit sau đó. Chi tiết ở **§11 — Đính chính và trạng thái** ở cuối tài liệu.
+> **Bổ sung 2026-10-01**: nhóm mẫu **D** (5 file scrape mới, 166 bài đăng); `jd16.md` được thay bằng bản scrape lớn hơn (113k → 260k byte). Tên file hiện tại của bài AE/BI là `jd20_AE_BI.md`; các trích dẫn cũ dùng `jd20_AE.md` là tên trước đó.
+> **Kiểm chứng**: baseline A–D là phân tích định lượng chính; `jd22_BA.md` được bổ sung như một góc nhìn consumer/business, không dùng để suy ra mật độ nhu cầu Data Engineer.
+
+### Phạm vi bổ sung — `jd22_BA.md`
+
+`jd22_BA.md` là JD **Commercial Business Analyst (Việc Làm Tốt), Chợ Tốt**, không phải JD Data Engineer. Nội dung bổ sung tín hiệu thị trường về lớp tiêu thụ dữ liệu:
+
+- SQL, BigQuery và Data Studio/BI cho sales dashboard, CRM, call-center và performance reporting.
+- Theo dõi performance của sales team và commercial customers, cảnh báo supervisor, payment compliance và add-on service delivery.
+- Năng lực được yêu cầu là chuyển dữ liệu thành business insight, visualization và phối hợp liên phòng ban.
+
+Ứng dụng vào project: giữ Trino + Iceberg + dbt làm analytics layer thay cho việc thêm BigQuery; dùng Grafana/Superset/Streamlit theo persona; bổ sung metric owner, threshold, severity và action vào KPI/alert contract. Không coi một JD BA đơn lẻ là bằng chứng cho nhu cầu Data Engineering.
+
+> **Lưu ý tái lập**: corpus hiện có `jd22_BA.md` và `jd20_AE_BI.md`; khi chạy trên Windows dùng `PYTHONIOENCODING=utf-8` hoặc `python -X utf8` để tránh lỗi console encoding.
 
 ---
 
@@ -50,7 +63,7 @@ Mọi con số là **số lần regex khớp trên văn bản đã decode UTF-8*
 | `jd17.md` | 275.296 | `190564d9d20e2d436e93bc5073f58ce7` | D |
 | `jd18_DS.md` | 59.932 | `6253883601437258a96c17fc7e61e901` | D |
 | `jd19_DA.md` | 190.683 | `b48d3f98b42303f4ee04968e5090fd13` | D |
-| `jd20_AE.md` | 42.960 | `1b1f077b32e41f581a7b48c3e9965ada` | D |
+| `jd20_AE_BI.md` | 42.960 | `1b1f077b32e41f581a7b48c3e9965ada` | D |
 | `jd21.md` | 52.675 | `ee3ccf690661f6ba31127327dee0d43b` | D |
 | `repo.md` | 21.361 | `2d90698282e15b3c3020c9bafc516436` | benchmark |
 
