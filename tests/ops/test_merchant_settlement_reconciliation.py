@@ -2,7 +2,10 @@
 
 from decimal import Decimal
 
-from code_etl.shared.ops.merchant_settlement_reconciliation import reconcile
+from code_etl.shared.ops.merchant_settlement_reconciliation import (
+    reconcile,
+    to_reconciliation_log_rows,
+)
 
 BASE_TXN = {
     "merchant_id": 900001,
@@ -52,3 +55,11 @@ def test_count_tolerance_is_explicit():
         count_tolerance=1,
     )
     assert result[0]["outcome"] == "PASS"
+
+
+def test_result_maps_to_existing_reconciliation_log_schema():
+    result = reconcile([BASE_TXN], [settlement(gross_amount="9999.00")])
+    rows = to_reconciliation_log_rows(result, "2026-10-18", Decimal("0.00"))
+    assert rows[0]["check_status"] == "FAIL"
+    assert rows[0]["metric_name"] == "merchant_settlement.gross_amount_mismatch"
+    assert rows[0]["cob_dt"] == "2026-10-18"
