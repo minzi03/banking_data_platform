@@ -1,5 +1,6 @@
 """Static checks for the settlement reconciliation verifier."""
 
+import sys
 from pathlib import Path
 
 import yaml
@@ -43,3 +44,21 @@ def test_isolated_fixture_uses_td22_aggregate_totals():
     assert "5000.00" in text
     assert "txn_count, currency, txn_count" not in text
     assert "2026-10-18" in text
+
+
+def test_compare_fails_closed_on_every_mismatch():
+    from decimal import Decimal
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import verify_merchant_settlement_reconciliation as verifier
+
+    key = (900001, "VND", "VND")
+    ok = {key: {"gross_amount": Decimal("35000.00"), "txn_count": Decimal("2")}}
+    amount_bad = {key: {"gross_amount": Decimal("35000.01"), "txn_count": Decimal("2")}}
+    count_bad = {key: {"gross_amount": Decimal("35000.00"), "txn_count": Decimal("3")}}
+
+    assert verifier.compare(ok, ok)[0]["outcome"] == "PASS"
+    assert verifier.compare(ok, amount_bad)[0]["outcome"] == "GROSS_AMOUNT_MISMATCH"
+    assert verifier.compare(ok, count_bad)[0]["outcome"] == "TXN_COUNT_MISMATCH"
+    assert verifier.compare(ok, {})[0]["outcome"] == "MISSING_SETTLEMENT"
+    assert verifier.compare({}, ok)[0]["outcome"] == "MISSING_TRANSACTION"

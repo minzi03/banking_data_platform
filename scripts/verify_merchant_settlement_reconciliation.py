@@ -86,12 +86,12 @@ def parse_keyed_aggregate(output: str) -> dict[tuple[int, str, str], dict[str, D
     return result
 
 
-def transaction_query(cob_dt: str) -> str:
+def transaction_query(cob_dt: str, table: str | None = None) -> str:
     return f"""
 SELECT merchant_id, currency,
        COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN amount ELSE 0 END), 0),
        COUNT(CASE WHEN status = 'SUCCESS' THEN transaction_id END)
-FROM {TRANSACTION_TABLE}
+FROM {table or TRANSACTION_TABLE}
 WHERE merchant_id IS NOT NULL
   AND payment_channel IN ('QR', 'POS')
   AND CAST(from_utc_timestamp(transaction_date, 'Asia/Ho_Chi_Minh') AS DATE) = DATE '{cob_dt}'
@@ -100,10 +100,10 @@ ORDER BY merchant_id, currency
 """
 
 
-def settlement_query(cob_dt: str) -> str:
+def settlement_query(cob_dt: str, table: str | None = None) -> str:
     return f"""
 SELECT merchant_id, currency, gross_amount, txn_count
-FROM {SETTLEMENT_TABLE}
+FROM {table or SETTLEMENT_TABLE}
 WHERE CAST(settlement_date AS DATE) = DATE '{cob_dt}'
   AND status = 'SETTLED'
 ORDER BY merchant_id, currency
@@ -148,12 +148,22 @@ def main() -> int:
     parser.add_argument("--postgres-user", default=POSTGRES_USER)
     parser.add_argument("--postgres-db", default=POSTGRES_DB)
     parser.add_argument("--spark-container", default=SPARK_CONTAINER)
+    parser.add_argument("--transaction-table", default=TRANSACTION_TABLE)
+    parser.add_argument("--settlement-table", default=SETTLEMENT_TABLE)
     parser.add_argument("--cob-dt", required=True)
     args = parser.parse_args()
     configure_containers(args.postgres_container, args.spark_container)
 
     try:
-        source = parse_keyed_aggregate(spark_sql(transaction_query(args.cob_dt)))
+        source = parse_keyed_aggregate(spark_sql(transaction_query(args.cob_dt, args.transaction_table)))
+        settlement = parse_keyed_aggregate(
+            postgres_sql(
+                settlement_query(args.cob_dt, args.settlement_table),
+                args.postgres_container,
+                args.postgres_user,
+                args.postgres_db,
+            )
+        )
         settlement = parse_keyed_aggregate(
             postgres_sql(
                 settlement_query(args.cob_dt),
