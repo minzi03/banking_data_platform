@@ -1,0 +1,29 @@
+source_table: lakehouse.bronze.online_transaction_cdc_e2e
+target_table: lakehouse.silver.fact_online_transaction_current_e2e
+business_key: transaction_id
+
+columns:
+  - transaction_id
+  - customer_id
+  - amount
+  - currency
+  - status
+  - merchant_id
+  - payment_channel
+  - refund_flag
+  - transaction_date
+
+conversions:
+  amount: decimal_nullable
+
+ordering:
+  - column: __cdc_timestamp_ms
+    direction: desc
+  - column: __spark_batch_id
+    direction: desc
+
+metadata:
+  operation_column: __cdc_operation
+  event_timestamp_column: __cdc_timestamp
+  event_timestamp_ms_column: __cdc_timestamp_ms
+  batch_id_column: __spark_batch_id

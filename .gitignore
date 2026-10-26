@@ -78,6 +78,9 @@ docs/session-report-*.md
 # đã được chốt nằm trong docs/evidence/metrics-manifest.yaml (kèm build.git_commit
 # và kết quả invariant); các file dưới đây tái tạo được nên không commit.
 docs/evidence/generated/
+# Output JSON thô của verifier (TD-22). Kết quả đã chốt nằm trong
+# docs/evidence/td22-merchant-eod-three-way.md; file này tái tạo được.
+td22_*.json
 
 # Terraform: tfvars chứa secret, state lưu secret dạng rõ. Chỉ commit bản .example.
 

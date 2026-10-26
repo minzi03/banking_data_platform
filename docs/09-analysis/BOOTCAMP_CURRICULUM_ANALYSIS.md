@@ -283,19 +283,19 @@ Yêu cầu đúng đắn đặc thù (new2 nhấn mạnh, dự án đối chiế
 | Streaming event time + watermark + dedup | ✅ Implemented + tested | `code_etl/cdc/base_job/stream_dedup.py`, `tests/cdc/test_stream_dedup.py` |
 | Restart checkpoint, không mất / không lặp khóa trong watermark | ✅ Runtime-verified | `scripts/verify_checkpoint_restart.py`; 12 event ban đầu + 8 event mới, replay bị dedup, restart offset 12; bounded watermark, không claim exactly-once ngoài window |
 | PostgreSQL serving `ON CONFLICT` | ✅ Implemented + runtime-verified | `code_etl/serving/sync_postgres.py`, `airflow/dags/ops/ops_serving_sync_dag.py`, ADR-0019; đã kiểm chứng merchant tables upsert idempotent |
-| EOD reconciliation streaming = batch cho Merchant QR/POS | ⚠️ Framework có, coverage merchant chưa có bằng chứng | `code_etl/shared/ops/eod_reconciliation.py` + DAG đối soát customer/account và account-balance; chưa có spec/assertions merchant revenue, transaction count, refund với `cob_dt`, cũng chưa thấy runtime evidence cho các chỉ số đó |
+| EOD reconciliation streaming = batch cho Merchant QR/POS | ✅ Implemented + runtime-verified (fixture cô lập) | `reconcile_merchant_transactions()` trong `code_etl/shared/ops/eod_reconciliation.py` so Postgres source ↔ `silver.fact_online_transaction` ↔ `silver.fact_online_transaction_current` cho `success_count`/`gross_amount`/`refund_count`; DAG `ops_eod_reconciliation_dag` gọi `--merchant-eod` và exit 1 = gate; runtime PASS 9/9 trên stack cô lập, xem [TD-22](../05-quality/technical-debt.md#td-22--isolated-merchant-eod-three-way-runtime-verification). Chưa chứng minh cho census production / shared stack |
 | Static dimension join, refresh mỗi micro-batch | ✅ Implemented + unit-tested | `code_etl/cdc/base_job/stream_enrichment.py`, `tests/cdc/test_stream_enrichment.py`; cần runtime evidence merchant-specific nếu muốn claim đã nghiệm thu cho Merchant QR/POS |
 | PII merchant mask trước Gold | ✅ Implemented + runtime-verified | `ops_pii_masking_daily_dag`, `tests/governance/test_gold_pii_masking.py`, evidence kiểm tra Trino analytics vs admin |
 | Iceberg maintenance | ✅ Implemented | `ops_maintenance_weekly_dag` |
 
-**Kết luận 5.2 (cập nhật 2026-10-18):** Các năng lực kỹ thuật chính của `new2` đã được đưa vào repo; có implementation và runtime evidence cho QR producer/checkpoint restart, Merchant Gold/serving, Postgres upsert, PII masking và một số batch E2E. Không nên ghi “đã hoàn thiện 8/8” nếu tiêu chí là nghiệm thu nghiệp vụ merchant: gap xác nhận được là **EOD reconciliation cho doanh thu/số giao dịch/refund Merchant QR/POS giữa streaming và batch**. SFTP có ingestion/config nhưng chưa xác minh file settlement merchant được đối soát end-to-end; Oracle hiện là driver map/mock/reference, không phải Oracle instance thật. Store có dim SCD2 nhưng transaction chưa có mapping store, vì vậy chưa claim báo cáo giao dịch theo store. Xem thêm [ADR-0019](../02-architecture/adr/0019-postgres-serving-for-realtime.md), [EOD reconciliation](../../code_etl/shared/ops/eod_reconciliation.py) và [Runbook checkpoint smoke test](../../RUNBOOK.md#checkpoint-restart-smoke-test).
+**Kết luận 5.2 (cập nhật 2026-10-26):** Các năng lực kỹ thuật chính của `new2` đã được đưa vào repo; có implementation và runtime evidence cho QR producer/checkpoint restart, Merchant Gold/serving, Postgres upsert, PII masking và một số batch E2E. **EOD reconciliation Merchant QR/POS đã từng là gap lớn nhất và nay đã được đóng** ở mức fixture cô lập (TD-22, 9/9 PASS). Vẫn không nên ghi “đã hoàn thiện 8/8” nếu tiêu chí là nghiệm thu nghiệp vụ diện rộng: SFTP có ingestion/config nhưng chưa xác minh file settlement merchant được đối soát end-to-end; Oracle hiện là driver map/mock/reference, không phải Oracle instance thật. Store có dim SCD2 nhưng transaction chưa có mapping store, vì vậy chưa claim báo cáo giao dịch theo store. Xem thêm [ADR-0019](../02-architecture/adr/0019-postgres-serving-for-realtime.md), [EOD reconciliation](../../code_etl/shared/ops/eod_reconciliation.py) và [Runbook checkpoint smoke test](../../RUNBOOK.md#checkpoint-restart-smoke-test).
 
-### 5.2.1 Gap cần đóng để claim nghiệm thu Merchant Acquiring
+### 5.2.1 Gap còn lại để claim nghiệm thu Merchant Acquiring diện rộng
 
-EOD reconciliation hiện có framework và DAG, nhưng các specs chỉ đối soát customer/account
-(count giữa source↔Bronze CDC↔Silver) và account balance (control total source↔Silver).
-Chưa có spec merchant theo `cob_dt` cho revenue, transaction count, refund/net amount;
-do đó chưa chứng minh streaming QR/POS khớp batch Gold cho nghiệp vụ merchant.
+EOD reconciliation **đã có spec merchant** (`merchant_qr_pos`: `success_count`, `gross_amount`,
+`refund_count` theo `merchant_id × payment_channel × currency` trong ngày ICT) và đã runtime-verify
+trên fixture cô lập. Điều **chưa** chứng minh là coverage trên dữ liệu production/shared stack
+một ngày lịch thật, cùng mức tolerance nghiệp vụ do đơn vị tài chính đặt ra.
 
 - **SFTP settlement:** có service, `ingestion_sftp.py`, config `code_etl/bronze/file_sources/pos_settlement.yml`
   và contract tests. Chưa thấy evidence chạy file settlement qua Bronze rồi đối soát với giao dịch.
@@ -303,9 +303,10 @@ do đó chưa chứng minh streaming QR/POS khớp batch Gold cho nghiệp vụ 
 - **Store grain:** `dim_store` SCD2 đã có, nhưng transaction chưa có `store_id`/mapping merchant→store.
   Chưa thể claim báo cáo giao dịch theo store.
 
-Vì vậy, áp dụng kỹ thuật `new2` đã rộng; phần chưa hoàn tất là nghiệm thu nghiệp vụ
-Merchant QR/POS cuối ngày và bằng chứng settlement. Oracle runtime và transaction-to-store
-mapping là scope/capability riêng, không nên trình bày là đã chạy thật.
+Vì vậy, áp dụng kỹ thuật `new2` đã rộng và nghiệm thu EOD Merchant QR/POS đã có bằng chứng
+runtime ở mức fixture cô lập. Phần chưa hoàn tất còn lại là **bằng chứng settlement** và
+**coverage production**, cộng hai giới hạn capability (Oracle runtime, transaction-to-store
+mapping) là scope riêng, không nên trình bày là đã chạy thật.
 
 ---
 

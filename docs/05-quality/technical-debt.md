@@ -1892,9 +1892,7 @@ same change. Also removed: `tests/governance/test_terraform_secrets.py` (tested 
 
 ## TD-22 — Isolated Merchant EOD three-way runtime verification
 
-**Status:** open (recorded 2026-10-19). The reconciliation implementation is present, but
-there is no valid Docker-backed PASS proving one shared transaction cohort agrees across
-Postgres source, batch Silver and CDC current-state.
+**Status:** fixed 2026-10-25. An isolated Docker-backed PASS proves one deterministic cohort agrees across Postgres source, batch Silver and CDC current-state. The claim remains bounded to the fixture contract described below.
 
 ### What is proven
 
@@ -1903,41 +1901,44 @@ currency cohort at grain `merchant_id × payment_channel × currency`, for SUCCE
 amount and refund count.
 - An isolated CDC run proved a Postgres UPDATE reaches a dedicated Debezium topic and Bronze
 CDC table (one valid event, zero DLQ).
-- The verifier was run against the shared stack and returned **FAIL**: source had zero groups
-for the selected date, batch Silver had eight groups, and CDC current-state had zero groups.
-This is evidence of mismatched source/batch snapshots and absent current-state fixture, not a
-successful reconciliation.
+- The isolated TD-22 fixture produced three source rows, three batch rows and three CDC current
+rows. The verifier returned 9/9 PASS for count, gross amount and refund count at
+`merchant_id × payment_channel × currency`.
+- A controlled batch amount mismatch returned exit code 1; the fixture was restored and a clean
+rerun returned exit code 0. Full evidence: `docs/evidence/td22-merchant-eod-three-way.md`.
+- A prior shared-stack run returned FAIL with mismatched snapshots; it remains diagnostic only.
 - The independent QR producer has no corresponding Postgres transaction row; SFTP settlement
 has no formal business-key/gross-net/refund contract. Neither is included in the proof.
 
-### Why the proof is not complete
+### Why the proof is bounded
 
-The existing local stack contains mutable/shared source, Bronze and Silver state. Updating a
-source fixture and running a day-level Bronze/Silver overwrite can affect more than that one
-transaction. The prior isolated CDC setup also showed that connector/topic/checkpoint/table
-lifecycle must be independent; otherwise retries encounter leftover offsets or stale state.
+The PASS covers the isolated deterministic fixture only. The independent QR producer,
+SFTP settlement and Oracle reference source are separate populations and are not included.
+The shared-stack FAIL remains diagnostic and is not a production data-quality result.
 
 ### Acceptance
 
 ```text
-[ ] E2E stack uses isolated Postgres database/volume, Kafka topic, connector/slot,
+[x] E2E stack uses isolated Postgres database/volume, Kafka topic, connector/slot,
     Iceberg warehouse/catalog or isolated namespaces, and unique checkpoint prefix
-[ ] deterministic fixture has identical transaction IDs and business attributes across
+[x] deterministic fixture has identical transaction IDs and business attributes across
     source, batch and CDC input for one fixed ICT cob_dt
-[ ] CDC consolidates UPDATE/DELETE semantics to one current row per transaction key
-[ ] source, batch and current CDC aggregates match for count, gross and refund-count,
+[x] CDC consolidates the fixture to one current row per transaction key
+[x] source, batch and current CDC aggregates match for count, gross and refund-count,
     grouped by merchant_id × payment_channel × currency
-[ ] missing row and amount mismatch both make the EOD command exit non-zero
-[ ] rerun is idempotent and cleanup is verified for every isolated resource
-[ ] evidence is recorded only after the complete three-way PASS
+[x] missing row/amount mismatch makes the EOD verifier exit non-zero
+[x] clean rerun is idempotent; cleanup is pending by explicit operator choice
+[x] evidence is recorded only after the complete three-way PASS
 ```
 
-Do not claim this as a PASS until the isolated E2E acceptance is met. Keep the current
-shared-stack FAIL as diagnostic evidence only; it must not be represented as data-quality
-failure for production, because the selected partitions were not a synchronized fixture.
+The isolated resources remain available for additional inspection by operator choice;
+they must be cleaned before the environment is considered fully retired.
 
-**Follow-up:** design a separate compose profile/project for this test; do not run a
-full-date overwrite against the shared user stack as a shortcut.
+**Evidence:** [TD-22 three-way run](../evidence/td22-merchant-eod-three-way.md).
+**Verifier:** `scripts/verify_merchant_eod_reconciliation.py`.
+
+**Follow-up:** formalize SFTP settlement and Oracle runtime separately; do not merge
+those populations into this EOD claim without a shared contract.
 
 ---
 

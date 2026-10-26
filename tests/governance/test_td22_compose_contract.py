@@ -16,7 +16,17 @@ def test_td22_stack_uses_isolated_names_and_resources():
         assert service["container_name"].startswith("merchant-e2e-")
         assert "banking-" not in service["container_name"]
     volume_names = set(config["volumes"])
-    assert volume_names == {"merchant_e2e_postgres", "merchant_e2e_minio"}
+    assert volume_names == {
+        "merchant_e2e_postgres",
+        "merchant_e2e_minio",
+        "merchant_e2e_postgres_conf",
+        "merchant_e2e_zookeeper_data",
+        "merchant_e2e_zookeeper_log",
+        "merchant_e2e_kafka_data",
+    }
+    assert all(name.startswith("merchant_e2e_") for name in volume_names)
+
+
     assert config["networks"]["merchant_e2e_net"]["name"] == "merchant_e2e_net"
 
 
