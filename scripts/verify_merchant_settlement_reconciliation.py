@@ -28,7 +28,7 @@ POSTGRES_USER = "merchant_e2e"
 POSTGRES_DB = "merchant_e2e"
 SPARK_CONTAINER = "merchant-e2e-spark-worker"
 TRANSACTION_TABLE = "lakehouse.silver.fact_online_transaction"
-SETTLEMENT_TABLE = "lakehouse.bronze.pos_settlement"
+SETTLEMENT_TABLE = "digital_banking.pos_settlement"
 
 
 class VerificationError(RuntimeError):

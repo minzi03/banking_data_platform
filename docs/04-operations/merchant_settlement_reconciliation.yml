@@ -7,6 +7,8 @@ business_timezone: Asia/Ho_Chi_Minh
 source:
   transaction_table: lakehouse.silver.fact_online_transaction
   settlement_table: lakehouse.bronze.pos_settlement
+  isolated_fixture_table: digital_banking.pos_settlement
+  isolated_fixture_note: "E2E-only source fixture; production path is SFTP -> Bronze."
   settlement_feed: SFTP pos_settlement_*.csv
 key: [merchant_id, settlement_date, currency]
 filters:

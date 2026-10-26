@@ -17,7 +17,7 @@ def test_verifier_is_aligned_with_isolated_stack():
     text = load_verifier()
     assert "merchant-e2e-postgres" in text
     assert "merchant-e2e-spark-worker" in text
-    assert "lakehouse.bronze.pos_settlement" in text
+    assert "digital_banking.pos_settlement" in text
     assert "lakehouse.silver.fact_online_transaction" in text
 
 
