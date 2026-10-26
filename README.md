@@ -228,6 +228,7 @@ time semantics — see
 | Trino + dbt serving layer              | ✅ Implemented |
 | Prometheus + Grafana monitoring        | ✅ Implemented |
 | Merchant QR/POS EOD three-way reconciliation | ✅ Runtime-verified (isolated fixture) |
+| Merchant settlement-to-transaction reconciliation | ✅ Implemented (aggregate grain) |
 | GitHub Actions CI/CD                   | ✅ Implemented |
 
 ### Operational capabilities
@@ -1252,15 +1253,36 @@ development and for evidence collection.
 | A controlled batch amount mismatch makes the verifier exit non-zero | ✅ exit 1, then restored to exit 0 |
 | CDC consolidates the fixture to one current row per transaction key | ✅ |
 | Cohort-wide agreement on a real production-sized business date | ❌ not claimed |
-| SFTP settlement file reconciled against transactions | ❌ not implemented |
+| Settlement aggregate agrees with the transaction aggregate (`merchant_id × currency`) | ✅ Isolated PASS, exit 0 |
+| Settlement mismatch fails closed | ✅ `GROSS_AMOUNT_MISMATCH` etc. covered by tests; verifier exits 1 |
+| Settlement over real SFTP transport | ❌ fixture seeded directly in isolated Postgres |
+| Refund and fee allocation reconciled per transaction | ❌ settlement feed carries no such key |
 | Oracle as a live reference source | ❌ mock/reference config only |
 | Reporting at **store** grain | ❌ transactions carry `merchant_id`, not `store_id` |
 
 The isolated run uses [`docker/docker-compose.e2e-merchant.yml`](docker/docker-compose.e2e-merchant.yml):
 its own Postgres, topic, connector, sink, warehouse, catalog and checkpoint prefix, so a
 fixture edit cannot contaminate the shared stack. Full evidence:
-[`td22-merchant-eod-three-way.md`](docs/evidence/td22-merchant-eod-three-way.md),
+[`td22-merchant-eod-three-way.md`](docs/evidence/td22-merchant-eod-three-way.md) and
+[`td22-merchant-settlement-reconciliation.md`](docs/evidence/td22-merchant-settlement-reconciliation.md),
 decision record: [TD-22](docs/05-quality/technical-debt.md#td-22--isolated-merchant-eod-three-way-runtime-verification).
+
+### Settlement reconciliation
+
+The settlement population is reconciled separately, at
+`merchant_id × settlement_date × currency` — the feed is aggregate and carries no
+transaction key, so transaction-level matching is deliberately not claimed.
+
+```text
+contract:  docs/04-operations/merchant_settlement_reconciliation.yml
+engine:    code_etl/shared/ops/merchant_settlement_reconciliation.py
+EOD flag:  eod_reconciliation.py --merchant-settlement
+DAG task:  reconcile_merchant_settlement (after bronze_sftp_files_dag)
+verifier:  scripts/verify_merchant_settlement_reconciliation.py
+```
+
+Outcomes are fail-closed: `MISSING_SETTLEMENT`, `MISSING_TRANSACTION`,
+`GROSS_AMOUNT_MISMATCH`, `TXN_COUNT_MISMATCH`, `DUPLICATE_SETTLEMENT_KEY`.
 
 > An earlier run against the shared stack returned **FAIL** with three mismatched snapshots.
 > It is kept as diagnostic evidence, not presented as a data-quality failure of the platform.
@@ -1869,7 +1891,7 @@ Current boundaries include:
 - Enterprise mTLS, KMS, Kubernetes, multi-region DR, and production on-call/SLO systems are outside the current portfolio scope.
 - Merchant EOD reconciliation is proven on a deterministic isolated fixture, not on a production-sized business date (TD-22).
 - Transactions carry `merchant_id` but no `store_id`, so merchant reports are not (yet) broken down by store.
-- SFTP settlement ingestion exists, but settlement-to-transaction reconciliation is not implemented.
+- SFTP settlement ingestion exists, and settlement-to-transaction reconciliation is implemented at aggregate grain (`merchant_id × settlement_date × currency`). The isolated proof seeds settlement directly in Postgres instead of exercising SFTP transport, and refund/fee allocation are not reconciled (TD-22).
 - Oracle is wired as a JDBC driver and reference configuration only; no Oracle instance runs in this environment.
 - Merchant EOD failures currently fail the Airflow reconciliation gate; a Prometheus metric/alert for that gate is not yet implemented.
 

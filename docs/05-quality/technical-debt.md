@@ -1937,8 +1937,13 @@ they must be cleaned before the environment is considered fully retired.
 **Evidence:** [TD-22 three-way run](../evidence/td22-merchant-eod-three-way.md).
 **Verifier:** `scripts/verify_merchant_eod_reconciliation.py`.
 
-**Follow-up:** formalize SFTP settlement and Oracle runtime separately; do not merge
-those populations into this EOD claim without a shared contract.
+**Settlement follow-up (2026-10-26):** the SFTP settlement population now has its own
+contract, engine, EOD flag and DAG task, plus an isolated runtime PASS at grain
+`merchant_id × currency`. Evidence: [TD-22 settlement reconciliation](../evidence/td22-merchant-settlement-reconciliation.md).
+Still open: the isolated proof seeds settlement directly in Postgres instead of
+exercising SFTP transport, and it does not reconcile refund or fee allocation.
+
+**Oracle follow-up:** still reference-only; not part of this EOD claim.
 
 ---
 
