@@ -48,6 +48,11 @@ def docker_exec(container: str, args: list[str], *, timeout: int = 300) -> str:
     return result.stdout
 
 
+def configure_containers(postgres_container: str, spark_container: str) -> None:
+    globals()["POSTGRES_CONTAINER"] = postgres_container
+    globals()["SPARK_CONTAINER"] = spark_container
+
+
 def spark_sql(sql: str) -> str:
     return docker_exec(
         SPARK_CONTAINER,
@@ -145,6 +150,7 @@ def main() -> int:
     parser.add_argument("--spark-container", default=SPARK_CONTAINER)
     parser.add_argument("--cob-dt", required=True)
     args = parser.parse_args()
+    configure_containers(args.postgres_container, args.spark_container)
 
     try:
         source = parse_keyed_aggregate(spark_sql(transaction_query(args.cob_dt)))

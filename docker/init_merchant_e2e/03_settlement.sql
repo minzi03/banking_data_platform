@@ -27,5 +27,7 @@ CREATE TABLE IF NOT EXISTS digital_banking.pos_settlement (
 INSERT INTO digital_banking.pos_settlement
     (settlement_id, merchant_id, settlement_date, acquirer_ref, gross_amount, fee_amount, net_amount, currency, txn_count, status)
 VALUES
-    (900001, 900001, DATE '2026-10-18', 'ACQ-E2E-000001', 10000.00, 50.00, 9950.00, 'VND', 1, 'SETTLED'),
-    (900002, 900002, DATE '2026-10-18', 'ACQ-E2E-000002', 30000.00, 150.00, 29850.00, 'VND', 2, 'SETTLED');
+    -- 900001: QR 10,000 + POS 25,000 = 35,000 across 2 settled transactions.
+    (900001, 900001, DATE '2026-10-18', 'ACQ-E2E-000001', 35000.00, 175.00, 34825.00, 'VND', 2, 'SETTLED'),
+    -- 900002: QR 5,000 across 1 settled transaction (refund counted in txn_count).
+    (900002, 900002, DATE '2026-10-18', 'ACQ-E2E-000002', 5000.00, 25.00, 4975.00, 'VND', 1, 'SETTLED');

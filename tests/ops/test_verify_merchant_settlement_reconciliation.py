@@ -35,3 +35,11 @@ def test_verifier_eod_key_matches_contract():
         assert field in text
     for metric in contract["metrics"]:
         assert metric in text
+
+
+def test_isolated_fixture_uses_td22_aggregate_totals():
+    text = (ROOT / "docker" / "init_merchant_e2e" / "03_settlement.sql").read_text(encoding="utf-8")
+    assert "35000.00" in text
+    assert "5000.00" in text
+    assert "txn_count, currency, txn_count" not in text
+    assert "2026-10-18" in text
