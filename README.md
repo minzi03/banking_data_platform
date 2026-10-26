@@ -1871,7 +1871,7 @@ Current boundaries include:
 - Transactions carry `merchant_id` but no `store_id`, so merchant reports are not (yet) broken down by store.
 - SFTP settlement ingestion exists, but settlement-to-transaction reconciliation is not implemented.
 - Oracle is wired as a JDBC driver and reference configuration only; no Oracle instance runs in this environment.
-- The `MerchantEODReconciliationFailed` alert rule is defined but nothing emits `merchant_eod_reconciliation_failures_total` yet, so that alert cannot fire.
+- Merchant EOD failures currently fail the Airflow reconciliation gate; a Prometheus metric/alert for that gate is not yet implemented.
 
 ---
 
