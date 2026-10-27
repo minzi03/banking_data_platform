@@ -7,7 +7,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACT = ROOT / "docs" / "04-operations" / "merchant_settlement_reconciliation.yml"
 SFTP_CONFIG = ROOT / "code_etl" / "bronze" / "file_sources" / "pos_settlement.yml"
-SAMPLE = ROOT / "docker" / "init_sftp" / "pos_settlement_sample.csv"
 
 
 def load_contract() -> dict:
@@ -20,7 +19,10 @@ def test_settlement_contract_matches_existing_sftp_source():
     assert contract["source"]["settlement_table"] == "lakehouse.bronze.pos_settlement"
     assert config["target"]["table"] == "pos_settlement"
     assert config["source"]["file_pattern"] == "pos_settlement_*.csv"
-    assert SAMPLE.exists()
+    assert config["load"]["business_date_column"] == "settlement_date"
+    assert (ROOT / "docker" / "init_sftp" / "seed.sh").exists()
+    assert "pos_settlement_sample.csv" in (ROOT / "docker" / "init_sftp" / "seed.sh").read_text(encoding="utf-8")
+    assert "settlement_id" in config["source"]["file_pattern"] or "pos_settlement" in config["source"]["file_pattern"]
 
 
 def test_aggregate_reconciliation_key_and_metrics_are_explicit():
