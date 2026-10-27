@@ -1,0 +1,85 @@
+# Merchant analytics KPI and alert contract.
+#
+# This is a business-consumer contract: it defines who owns a metric, how it is
+# computed, when it becomes actionable, and which layer is authoritative. It
+# deliberately does not emit Prometheus metrics or replace the Airflow EOD gate.
+version: "1.0"
+domain: merchant_qr_pos
+business_timezone: Asia/Ho_Chi_Minh
+source:
+  table: lakehouse.gold.mart_merchant_daily_summary
+  grain: merchant_id x txn_date
+  eod_gate: lakehouse.shared.merchant_eod_reconciliation
+
+metrics:
+  - id: merchant_success_rate
+    owner: Merchant Operations
+    definition: successful_transactions / eligible_transactions
+    unit: ratio
+    source_column: txn_count
+    dimensions: [merchant_id, txn_date, payment_channel]
+    thresholds:
+      warning_below: 0.98
+      critical_below: 0.95
+    severity: warning
+    action: Check payment channel health and failed transaction reasons.
+
+  - id: merchant_gross_amount
+    owner: Finance
+    definition: sum of successful transaction amount
+    unit: VND
+    source_column: gross_amount
+    dimensions: [merchant_id, txn_date, payment_channel]
+    thresholds:
+      warning_below: null
+      critical_below: null
+    severity: info
+    action: Compare with settlement and ledger totals before financial close.
+
+  - id: merchant_refund_rate
+    owner: Merchant Operations
+    definition: refunded_transactions / successful_transactions
+    unit: ratio
+    source_column: refund_rate
+    dimensions: [merchant_id, txn_date, payment_channel]
+    thresholds:
+      warning_above: 0.03
+      critical_above: 0.10
+    severity: warning
+    action: Review refund reasons and merchant dispute activity.
+
+  - id: merchant_eod_reconciliation_mismatch
+    owner: Finance
+    definition: count of merchant cohorts whose source, batch, and CDC metrics differ
+    unit: count
+    source_column: reconciliation_status
+    dimensions: [merchant_id, payment_channel, currency, cob_dt]
+    thresholds:
+      warning_above: 0
+      critical_above: 0
+    severity: critical
+    action: Block EOD close and investigate source, Silver, and CDC current-state data.
+
+  - id: cdc_freshness_seconds
+    owner: Data Platform
+    definition: seconds between CDC event time and current-state consolidation observation
+    unit: seconds
+    source_column: cdc_freshness_seconds
+    dimensions: [topic, table]
+    thresholds:
+      warning_above: 120
+      critical_above: 600
+    severity: warning
+    action: Inspect Kafka lag, Spark streaming heartbeat, and consolidation checkpoint.
+
+  - id: cdc_dead_letter_rows
+    owner: Data Platform
+    definition: count of CDC events quarantined because validation or parsing failed
+    unit: count
+    source_column: dlq_row_count
+    dimensions: [topic, table, cob_dt]
+    thresholds:
+      warning_above: 0
+      critical_above: 0
+    severity: critical
+    action: Inspect the DLQ before publishing current-state or downstream metrics.

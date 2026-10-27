@@ -65,11 +65,3 @@ groups:
         annotations:
           summary: CDC dead-letter rows are increasing
           description: CDC DLQ received new invalid events in the last 15 minutes.
-      - alert: MerchantEODReconciliationFailed
-        expr: increase(merchant_eod_reconciliation_failures_total[15m]) > 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: Merchant EOD reconciliation failed
-          description: Merchant streaming/batch reconciliation reported a failure.

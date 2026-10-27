@@ -227,6 +227,8 @@ time semantics — see
 | OpenMetadata catalog and lineage       | ✅ Implemented |
 | Trino + dbt serving layer              | ✅ Implemented |
 | Prometheus + Grafana monitoring        | ✅ Implemented |
+| Merchant QR/POS EOD three-way reconciliation | ✅ Runtime-verified (isolated fixture) |
+| Merchant settlement-to-transaction reconciliation | ✅ Implemented (aggregate grain) |
 | GitHub Actions CI/CD                   | ✅ Implemented |
 
 ### Operational capabilities
@@ -240,6 +242,7 @@ time semantics — see
 | Traceability from published number back to its source     | ✅ Implemented | evidence manifest, ADRs, lineage |
 | Incident response runbook with a verification step        | ✅ Implemented | [INCIDENT_RUNBOOK.md](docs/04-operations/INCIDENT_RUNBOOK.md), 8 scenarios |
 | Operations runbook                                        | ✅ Implemented | [RUNBOOK.md](RUNBOOK.md) |
+| Merchant EOD gate blocks publication on mismatch          | ✅ Runtime-verified | `ops_eod_reconciliation_dag --merchant-eod`, exit 1 = FAIL |
 | Blast-radius limitation stated rather than implied        | ✅ Documented  | [Current Limitations](#current-limitations) |
 
 ---
@@ -1187,6 +1190,106 @@ Supports analytics such as:
 
 ---
 
+## Merchant QR/POS Analytics
+
+The platform also answers the merchant-acquiring question a bank faces: *which merchants
+are growing, which are at risk, and who qualifies for a working-capital offer?*
+
+Gold models under [`code_etl/gold/`](code_etl/gold):
+
+| Model | Grain | Answers |
+| ----- | ----- | ------- |
+| `merchant_daily_summary` | merchant × channel × currency × `cob_dt` | revenue, success count, average value, refund rate, peak hour |
+| `merchant_ranking` | merchant × MCC × month | rank inside MCC, revenue, period-over-period growth |
+| `region_monthly_summary` / `branch_monthly_summary` | region / branch × month | where revenue concentrates, which area grows fastest |
+| `merchant_360` | merchant | scale, 30-day growth, cash-flow stability (`cash_flow_cv`), and rule-based `WORKING_CAPITAL_LOAN` / `SAVINGS` / `EXTRA_POS` hints |
+
+The advisory column is **rule-based**, not a credit-scoring model — it is a candidate list
+for a human relationship manager, not an approval decision.
+
+The matching real-time surface is the Grafana dashboard
+[`merchant-business.json`](docker/monitoring/grafana/dashboards/merchant-business.json),
+which reads the PostgreSQL serving layer directly so a merchant sees money arrive in seconds
+rather than waiting for the batch cycle.
+
+---
+
+## End-of-Day Reconciliation: Streaming must equal Batch
+
+A dashboard is only trustworthy if the streaming number and the batch number agree. The
+platform treats that equality as a **gate**, not a report.
+
+```text
+Postgres source  ──┐
+batch Silver     ──┼──► reconcile_merchant_transactions()
+CDC current      ──┘         │
+                             ├── PASS ──► task succeeds
+                             └── FAIL ──► exit 1 ──► Airflow gate ──► alert
+```
+
+The cohort is explicit and is never widened silently:
+
+```text
+grain:    merchant_id × payment_channel × currency
+channels: QR, POS only
+rows:     status = 'SUCCESS'
+date:     one ICT business date (cob_dt)
+metrics:  success_count, gross_amount, refund_count
+```
+
+Implementation: [`reconcile_merchant_transactions()`](code_etl/shared/ops/eod_reconciliation.py)
+compares three representations of the same cohort, invoked by
+[`ops_eod_reconciliation_dag`](airflow/dags/ops/ops_eod_reconciliation_dag.py) with
+`--merchant-eod`. Default tolerance is `0.0`, so any difference fails.
+
+`scripts/verify_merchant_eod_reconciliation.py` is the read-only verifier used during
+development and for evidence collection.
+
+### What the runtime evidence proves — and what it does not
+
+| Claim | Status |
+| ----- | ------ |
+| Three representations of one deterministic cohort agree (count, gross, refund) | ✅ 9/9 PASS on an isolated stack |
+| A controlled batch amount mismatch makes the verifier exit non-zero | ✅ exit 1, then restored to exit 0 |
+| CDC consolidates the fixture to one current row per transaction key | ✅ |
+| Cohort-wide agreement on a real production-sized business date | ❌ not claimed |
+| Settlement aggregate agrees with the transaction aggregate (`merchant_id × currency`) | ✅ Isolated PASS, exit 0 |
+| Settlement mismatch fails closed | ✅ `GROSS_AMOUNT_MISMATCH` etc. covered by tests; verifier exits 1 |
+| Settlement over real SFTP transport | ❌ fixture seeded directly in isolated Postgres |
+| Refund and fee allocation reconciled per transaction | ❌ settlement feed carries no such key |
+| Oracle as a live reference source | ❌ mock/reference config only |
+| Reporting at **store** grain | ❌ transactions carry `merchant_id`, not `store_id` |
+
+The isolated run uses [`docker/docker-compose.e2e-merchant.yml`](docker/docker-compose.e2e-merchant.yml):
+its own Postgres, topic, connector, sink, warehouse, catalog and checkpoint prefix, so a
+fixture edit cannot contaminate the shared stack. Full evidence:
+[`td22-merchant-eod-three-way.md`](docs/evidence/td22-merchant-eod-three-way.md) and
+[`td22-merchant-settlement-reconciliation.md`](docs/evidence/td22-merchant-settlement-reconciliation.md),
+decision record: [TD-22](docs/05-quality/technical-debt.md#td-22--isolated-merchant-eod-three-way-runtime-verification).
+
+### Settlement reconciliation
+
+The settlement population is reconciled separately, at
+`merchant_id × settlement_date × currency` — the feed is aggregate and carries no
+transaction key, so transaction-level matching is deliberately not claimed.
+
+```text
+contract:  docs/04-operations/merchant_settlement_reconciliation.yml
+engine:    code_etl/shared/ops/merchant_settlement_reconciliation.py
+EOD flag:  eod_reconciliation.py --merchant-settlement
+DAG task:  reconcile_merchant_settlement (after bronze_sftp_files_dag)
+verifier:  scripts/verify_merchant_settlement_reconciliation.py
+```
+
+Outcomes are fail-closed: `MISSING_SETTLEMENT`, `MISSING_TRANSACTION`,
+`GROSS_AMOUNT_MISMATCH`, `TXN_COUNT_MISMATCH`, `DUPLICATE_SETTLEMENT_KEY`.
+
+> An earlier run against the shared stack returned **FAIL** with three mismatched snapshots.
+> It is kept as diagnostic evidence, not presented as a data-quality failure of the platform.
+> Publishing only the passing run would be the exact over-claiming this project is trying to avoid.
+
+---
+
 # Serving & Analytics
 
 ## Ownership boundary
@@ -1786,6 +1889,11 @@ Current boundaries include:
 - The 2026-09-30 fixes were run on the local Docker stack along the upgrade path (existing data) and, from a fresh stack, by the CI Trino Integration job. OpenMetadata, Superset/Streamlit and the ML DAG were not run (TD-20).
 - `ops_ml_churn_dag` is manual and needs `ml/requirements.txt` on the Spark worker. The non-functional `regulatory_reporting` and `dbt_seed` DAGs were removed (TD-20).
 - Enterprise mTLS, KMS, Kubernetes, multi-region DR, and production on-call/SLO systems are outside the current portfolio scope.
+- Merchant EOD reconciliation is proven on a deterministic isolated fixture, not on a production-sized business date (TD-22).
+- Transactions carry `merchant_id` but no `store_id`, so merchant reports are not (yet) broken down by store.
+- SFTP settlement ingestion exists, and settlement-to-transaction reconciliation is implemented at aggregate grain (`merchant_id × settlement_date × currency`). The isolated proof seeds settlement directly in Postgres instead of exercising SFTP transport, and refund/fee allocation are not reconciled (TD-22).
+- Oracle is wired as a JDBC driver and reference configuration only; no Oracle instance runs in this environment.
+- Merchant EOD failures currently fail the Airflow reconciliation gate; a Prometheus metric/alert for that gate is not yet implemented.
 
 ---
 

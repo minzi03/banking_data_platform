@@ -42,17 +42,24 @@ Usage:
     spark-submit ... --cob_dt 2025-12-31 --tolerance 5
 """
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from decimal import Decimal
 from logging import INFO, basicConfig, getLogger
 from typing import Any
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
+from ops.merchant_settlement_reconciliation import (  # noqa: E402, PLC0415
+    reconcile_spark as reconcile_merchant_settlement,
+)
+from ops.merchant_settlement_reconciliation import to_reconciliation_log_rows  # noqa: E402, PLC0415
 from spark.spark_session import get_spark_session  # noqa: E402
 
 basicConfig(
@@ -453,6 +460,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Đối soát cohort Merchant QR/POS source ↔ batch ↔ CDC current",
     )
+    parser.add_argument(
+        "--merchant-settlement",
+        action="store_true",
+        help="Đối soát transaction aggregate ↔ SFTP settlement aggregate",
+    )
+    parser.add_argument(
+        "--settlement-amount-tolerance",
+        type=float,
+        default=0.0,
+        help="Ngưỡng lệch gross amount settlement (mặc định 0)",
+    )
+    parser.add_argument(
+        "--settlement-count-tolerance",
+        type=int,
+        default=0,
+        help="Ngưỡng lệch txn_count settlement (mặc định 0)",
+    )
     return parser.parse_args()
 
 
@@ -472,8 +496,26 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             failures.append(f"{MERCHANT_COHORT}: {exc}")
             log.error(f"Đối soát {MERCHANT_COHORT} lỗi: {exc}")
+    if args.merchant_settlement:
+        try:
+            settlement_results = reconcile_merchant_settlement(
+                spark,
+                cob_dt,
+                amount_tolerance=Decimal(str(args.settlement_amount_tolerance)),
+                count_tolerance=args.settlement_count_tolerance,
+            )
+            all_results.extend(
+                to_reconciliation_log_rows(
+                    settlement_results,
+                    cob_dt,
+                    Decimal(str(args.settlement_amount_tolerance)),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"merchant_settlement: {exc}")
+            log.error(f"Đối soát merchant settlement lỗi: {exc}")
     for spec in RECONCILIATIONS:
-        if args.merchant_eod:
+        if args.merchant_eod or args.merchant_settlement:
             break
         # Legacy dimension/account reconciliation remains the default path.
 

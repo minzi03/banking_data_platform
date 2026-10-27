@@ -24,8 +24,13 @@ def test_alerts_cover_streaming_failure_modes():
         "SparkStreamingHeartbeatStale",
         "SparkStreamingKafkaLagHigh",
         "CDCDeadLetterGrowth",
-        "MerchantEODReconciliationFailed",
     } <= names
+
+
+def test_alerts_do_not_reference_unemitted_merchant_eod_metric():
+    text = ALERTS.read_text(encoding="utf-8")
+    assert "merchant_eod_reconciliation_failures_total" not in text
+    assert "MerchantEODReconciliationFailed" not in text
 
 
 def test_exporter_documents_existing_metric_surface():

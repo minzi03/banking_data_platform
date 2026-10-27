@@ -1,0 +1,36 @@
+# Merchant transaction-to-settlement reconciliation contract.
+# The current SFTP file is an aggregate settlement feed, so the comparison grain
+# is merchant_id x settlement_date x currency, not transaction_id.
+version: "1.0"
+domain: merchant_qr_pos
+business_timezone: Asia/Ho_Chi_Minh
+source:
+  transaction_table: lakehouse.silver.fact_online_transaction
+  settlement_table: lakehouse.bronze.pos_settlement
+  isolated_fixture_table: digital_banking.pos_settlement
+  isolated_fixture_note: "E2E-only source fixture; production path is SFTP -> Bronze."
+  settlement_feed: SFTP pos_settlement_*.csv
+key: [merchant_id, settlement_date, currency]
+filters:
+  transactions: status = SUCCESS AND payment_channel IN (QR, POS)
+  settlements: status = SETTLED
+metrics:
+  - gross_amount
+  - txn_count
+matching_rules:
+  gross_amount_tolerance: 0.00
+  txn_count_tolerance: 0
+  missing_transaction: fail
+  missing_settlement: fail
+  duplicate_settlement_key: fail
+outcomes:
+  - PASS
+  - MISSING_SETTLEMENT
+  - MISSING_TRANSACTION
+  - GROSS_AMOUNT_MISMATCH
+  - TXN_COUNT_MISMATCH
+  - DUPLICATE_SETTLEMENT_KEY
+limitations:
+  - Feed does not contain transaction_id, so this is aggregate reconciliation.
+  - Refund and fee reconciliation require a feed with refund and fee allocation keys.
+  - SFTP transport and credential readiness are separate from data reconciliation.

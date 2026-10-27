@@ -1,0 +1,35 @@
+kafka:
+  topic: merchant.e2e.digital_banking.online_transaction
+  starting_offsets: earliest
+  checkpoint_location: s3a://merchant-e2e/checkpoints/online_transaction_cdc
+  trigger_interval: 5 seconds
+  max_offsets_per_trigger: 100000
+
+dedup:
+  watermark_delay: "10 minutes"
+  keys: [transaction_id]
+
+target:
+  catalog: lakehouse
+  schema: bronze
+  table: online_transaction_cdc_e2e
+  primary_key: transaction_id
+  columns:
+    - {name: transaction_id, type: long}
+    - {name: account_id, type: long}
+    - {name: device_id, type: long}
+    - {name: location_id, type: long}
+    - {name: customer_id, type: long}
+    - {name: transaction_type, type: string}
+    - {name: channel, type: string}
+    - {name: amount, type: decimal}
+    - {name: currency, type: string}
+    - {name: is_fraud, type: string}
+    - {name: fraud_reason, type: string}
+    - {name: status, type: string}
+    - {name: merchant_id, type: long}
+    - {name: payment_channel, type: string}
+    - {name: refund_flag, type: int}
+    - {name: transaction_date, type: long}
+    - {name: created_ts, type: long}
+    - {name: last_updated, type: long}

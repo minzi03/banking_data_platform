@@ -85,6 +85,24 @@ merchant_reconcile = BashOperator(
     dag=dag,
 )
 
+# Settlement reconciliation compares the SFTP Bronze settlement feed against the
+# batch transaction aggregate. It runs only after the settlement file is ingested.
+wait_sftp_settlement = SqlSensor(
+    task_id="wait_sftp_settlement_ingestion",
+    conn_id=POSTGRES_ETL_CONN_ID,
+    sql=upstream_success_sql("bronze_sftp_files_dag", COB_DT),
+    poke_interval=120,
+    timeout=7200,
+    mode="reschedule",
+    dag=dag,
+)
+
+reconcile_settlement = BashOperator(
+    task_id="reconcile_merchant_settlement",
+    bash_command=f"{SPARK_SUBMIT} {APPLICATION_PATH} --cob_dt {COB_DT} --merchant-settlement",
+    dag=dag,
+)
+
 # ---------------------------------------------------------------------------
 # Flag tasks
 # ---------------------------------------------------------------------------
@@ -104,3 +122,4 @@ reconcile = BashOperator(
 # Task Flow
 # ---------------------------------------------------------------------------
 [wait_silver, wait_cdc_online_transaction] >> start >> [reconcile, merchant_reconcile] >> end
+wait_sftp_settlement >> reconcile_settlement >> end

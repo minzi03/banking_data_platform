@@ -36,8 +36,13 @@ GROUPS: dict[str, list[str]] = {
     "A": [f"jd{i}.md" for i in range(1, 8)] + ["jd8_bank.md"],
     "B": [f"jd{i}.md" for i in range(9, 14)],
     "C": ["jd14.md", "jd15.md", "jd16.md"],
-    "D": ["jd17.md", "jd18_DS.md", "jd19_DA.md", "jd20_AE.md", "jd21.md"],
+    "D": ["jd17.md", "jd18_DS.md", "jd19_DA.md", "jd20_AE_BI.md", "jd21.md"],
 }
+
+# jd22 is a Business Analyst / commercial-operations posting, not a peer
+# sample of the Data Engineer corpus. Measure it separately so it remains
+# visible to the audit without contaminating the A-D engineering baseline.
+SUPPLEMENTAL: dict[str, list[str]] = {"BA": ["jd22_BA.md"]}
 
 IC = re.IGNORECASE
 
@@ -189,7 +194,8 @@ def main() -> int:
 
     corpus = args.corpus
     files = sorted(p.name for p in corpus.glob("*.md"))
-    known = {n for names in GROUPS.values() for n in names} | {"repo.md"}
+    known = {n for names in GROUPS.values() for n in names}
+    known |= {n for names in SUPPLEMENTAL.values() for n in names} | {"repo.md"}
     unknown = [f for f in files if f not in known]
     if unknown:
         print(f"File chưa được xếp nhóm: {unknown} — thêm vào GROUPS trước khi đo.", file=sys.stderr)
@@ -202,7 +208,9 @@ def main() -> int:
 
     texts = {g: load(corpus, names) for g, names in GROUPS.items()}
     texts["ALL"] = "\n".join(texts[g] for g in GROUPS)
-    for g, text in texts.items():
+    supplemental_texts = {g: load(corpus, names) for g, names in SUPPLEMENTAL.items()}
+    measured = {**texts, **supplemental_texts}
+    for g, text in measured.items():
         d = dedup_lines(text)
         out["groups"][g] = {
             "chars": len(text),
@@ -210,6 +218,7 @@ def main() -> int:
             "raw": measure(text),
             "dedup": measure(d),
         }
+    out["supplemental_groups"] = list(supplemental_texts)
 
     if args.json:
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
@@ -224,15 +233,19 @@ def main() -> int:
     print("| Nhóm | Ký tự | Ký tự sau dedup |\n|---|---:|---:|")
     for g in gs:
         print(f"| {g} | {out['groups'][g]['chars']:,} | {out['groups'][g]['chars_dedup']:,} |")
+    for g in supplemental_texts:
+        print(f"| {g} (supplemental) | {out['groups'][g]['chars']:,} | {out['groups'][g]['chars_dedup']:,} |")
+    print("\nSupplemental groups are excluded from ALL and A-D density baselines.")
     print()
     head = " | ".join(f"{g}" for g in gs)
-    print(f"| Term (/100k, raw) | {head} | ALL count | ALL count dedup |")
-    print("|---|" + "---:|" * (len(gs) + 2))
+    print(f"| Term (/100k, raw) | {head} | ALL count | ALL count dedup | BA supplemental |")
+    print("|---|" + "---:|" * (len(gs) + 3))
     for label, _, _ in TERMS:
         cells = " | ".join(str(out["groups"][g]["raw"][label]["per_100k"]) for g in gs)
         cnt = out["groups"]["ALL"]["raw"][label]["count"]
         cntd = out["groups"]["ALL"]["dedup"][label]["count"]
-        print(f"| {label} | {cells} | {cnt} | {cntd} |")
+        ba = out["groups"]["BA"]["raw"][label]["per_100k"]
+        print(f"| {label} | {cells} | {cnt} | {cntd} | {ba} |")
     return 0
 
 

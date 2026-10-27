@@ -183,7 +183,7 @@
           "datasource": { "type": "postgres", "uid": "postgres-serving" },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT merchant_name, mcc_code, revenue, rank_in_mcc, pop_growth_rate FROM serving.merchant_ranking_current ORDER BY revenue DESC LIMIT 20",
+          "rawSql": "SELECT merchant_name_masked, mcc_code, revenue, rank_in_mcc, pop_growth_rate FROM serving.merchant_ranking_current ORDER BY revenue DESC LIMIT 20",
           "refId": "A"
         }
       ],

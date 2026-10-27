@@ -62,10 +62,13 @@ def spark_sql(sql: str) -> str:
     )
 
 
-def postgres_sql(sql: str) -> str:
-    user = os.environ.get("POSTGRES_USER", "banking_admin")
-    database = os.environ.get("POSTGRES_DB", "banking_db")
-    return docker_exec(POSTGRES_CONTAINER, ["psql", "-U", user, "-d", database, "-At", "-c", sql])
+def postgres_sql(sql: str, container: str, user: str, database: str) -> str:
+    return docker_exec(container, ["psql", "-U", user, "-d", database, "-At", "-F", "	", "-c", sql])
+
+
+def configure_containers(postgres_container: str, spark_container: str) -> None:
+    globals()["POSTGRES_CONTAINER"] = postgres_container
+    globals()["SPARK_CONTAINER"] = spark_container
 
 
 def parse_aggregate(output: str) -> dict[tuple[int, str, str], dict[str, Decimal]]:
@@ -143,12 +146,17 @@ def compare(source: dict, batch: dict, current: dict) -> list[dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Read-only Merchant QR/POS EOD three-way verification")
-    parser.add_argument("--cob-dt", required=True, help="ICT business date YYYY-MM-DD")
+    parser.add_argument("--cob-dt", required=True)
+    parser.add_argument("--postgres-container", default=POSTGRES_CONTAINER)
+    parser.add_argument("--postgres-user", default=os.environ.get("POSTGRES_USER", "banking_admin"))
+    parser.add_argument("--postgres-db", default=os.environ.get("POSTGRES_DB", "banking_db"))
+    parser.add_argument("--spark-container", default=SPARK_CONTAINER)
+    parser.add_argument("--batch-table", default=BATCH_TABLE)
     parser.add_argument("--current-table", default=DEFAULT_CURRENT_TABLE)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    configure_containers(args.postgres_container, args.spark_container)
     date.fromisoformat(args.cob_dt)
-
     result: dict[str, Any] = {
         "test": "merchant_eod_three_way_read_only",
         "cob_dt": args.cob_dt,
@@ -156,21 +164,23 @@ def main(argv: list[str] | None = None) -> int:
         "checks": [],
     }
     try:
-        source = parse_aggregate(postgres_sql(source_query(args.cob_dt)))
-        batch = parse_aggregate(spark_sql(spark_query(BATCH_TABLE, args.cob_dt)))
+        source = parse_aggregate(
+            postgres_sql(source_query(args.cob_dt), args.postgres_container, args.postgres_user, args.postgres_db)
+        )
+        batch = parse_aggregate(spark_sql(spark_query(args.batch_table, args.cob_dt)))
         current = parse_aggregate(spark_sql(spark_query(args.current_table, args.cob_dt, epoch_micros=True)))
-        result["source_groups"] = len(source)
-        result["batch_groups"] = len(batch)
-        result["current_groups"] = len(current)
-        result["checks"] = compare(source, batch, current)
+        result.update(
+            source_groups=len(source),
+            batch_groups=len(batch),
+            current_groups=len(current),
+            checks=compare(source, batch, current),
+        )
         passed = bool(result["checks"]) and all(check["status"] == "PASS" for check in result["checks"])
         result["tree"] = "PASS" if passed else "FAIL"
         code = 0 if passed else 1
     except (VerificationError, ValueError) as exc:
-        result["tree"] = "ENV"
-        result["error"] = str(exc)
+        result.update(tree="ENV", error=str(exc))
         code = 2
-
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

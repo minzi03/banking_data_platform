@@ -17,3 +17,11 @@ def test_eod_dag_runs_merchant_gate_separately():
     assert "reconcile_merchant_qr_pos" in text
     assert "--merchant-eod" in text
     assert "merchant_reconcile" in text
+
+
+def test_eod_dag_runs_settlement_reconciliation_after_sftp_ingestion():
+    text = DAG.read_text(encoding="utf-8")
+    assert "reconcile_merchant_settlement" in text
+    assert "--merchant-settlement" in text
+    assert "wait_sftp_settlement_ingestion" in text
+    assert 'upstream_success_sql("bronze_sftp_files_dag", COB_DT)' in text
