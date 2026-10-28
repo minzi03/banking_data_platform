@@ -1945,6 +1945,11 @@ exercising SFTP transport, and it does not reconcile refund or fee allocation.
 
 **Oracle follow-up:** still reference-only; not part of this EOD claim.
 
+**Event contract follow-up (2026-10-28):** the online transaction topic now has a versioned JSON Schema,
+topic registry, validator CLI, idempotency-key declaration, compatibility tests, checked-in event example,
+and CI governance gates. Runtime Schema Registry deployment, producer/consumer rollout, and exactly-once
+side-effect processing remain open by design.
+
 ---
 
 ## TD-21 — Ruff format gate failed on feature-branch files
