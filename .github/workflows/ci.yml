@@ -388,7 +388,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml pydantic
+          pip install pyyaml pydantic jsonschema
 
       - name: Validate governance contracts
         run: |
@@ -416,6 +416,11 @@ jobs:
 
           print('✅ All governance contracts validated successfully')
           "
+
+      - name: Validate Kafka topic registry
+        run: |
+          echo "=== Validating Kafka topic registry ==="
+          python schemas/validate_topic_registry.py
 
   # ===========================================================================
   # Job 5: Check Docker Compose
