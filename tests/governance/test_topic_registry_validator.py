@@ -28,6 +28,15 @@ def test_current_topic_registry_is_valid():
     assert validate_registry(REGISTRY) == []
 
 
+def test_registry_requires_idempotency_key(tmp_path):
+    registry = registry_data()
+    registry["topics"][0].pop("idempotency_key")
+
+    errors = validate_registry(write_registry(tmp_path, registry))
+
+    assert any("idempotency_key" in error for error in errors)
+
+
 def test_unknown_owner_is_rejected(tmp_path):
     registry = registry_data()
     registry["topics"][0]["owner"] = "unknown-team"
