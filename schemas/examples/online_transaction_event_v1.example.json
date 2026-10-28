@@ -1,0 +1,20 @@
+{
+  "event_id": "evt-10001",
+  "event_type": "ONLINE_TRANSACTION_CHANGED",
+  "event_version": 1,
+  "event_key": "transaction_id:10001",
+  "source_system": "postgresql",
+  "source_table": "digital_banking.online_transaction",
+  "occurred_at": "2026-10-28T10:00:00Z",
+  "ingested_at": "2026-10-28T10:00:01Z",
+  "payload": {
+    "transaction_id": 10001,
+    "amount": 10000.0,
+    "currency": "VND",
+    "status": "SUCCESS",
+    "merchant_id": 900001,
+    "payment_channel": "QR",
+    "refund_flag": 0,
+    "transaction_date": "2026-10-28T10:00:00Z"
+  }
+}
