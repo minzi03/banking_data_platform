@@ -13,6 +13,21 @@ REGISTRY = ROOT / "schemas" / "topic_registry.yml"
 TOPIC = "postgresql.banking.digital_banking.online_transaction"
 
 
+# The topic contract declares event_id as the idempotency key.
+def test_registered_event_has_idempotency_key():
+    event = valid_event()
+    assert event["event_id"]
+    validate_event(event, TOPIC, REGISTRY)
+
+
+def test_event_without_idempotency_key_is_rejected():
+    event = valid_event()
+    event.pop("event_id")
+
+    with pytest.raises(EventContractError, match="schema validation"):
+        validate_event(event, TOPIC, REGISTRY)
+
+
 def test_registered_event_is_valid():
     validate_event(valid_event(), TOPIC, REGISTRY)
 

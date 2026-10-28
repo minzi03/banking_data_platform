@@ -55,6 +55,7 @@ def validate_registry(registry_path: Path) -> list[str]:
             compatibility = _required_string(topic, "compatibility", context)
             delivery = _required_string(topic, "delivery_semantics", context)
             key = _required_string(topic, "key", context)
+            idempotency_key = _required_string(topic, "idempotency_key", context)
         except ValueError as exc:
             errors.append(str(exc))
             continue
@@ -100,6 +101,12 @@ def validate_registry(registry_path: Path) -> list[str]:
             errors.append(f"{context}: event_version does not match schema {schema_ref}")
         if key not in properties.get("payload", {}).get("properties", {}):
             errors.append(f"{context}: key {key!r} is not a payload schema property")
+        if idempotency_key not in properties:
+            errors.append(f"{context}: idempotency_key {idempotency_key!r} is not an envelope schema property")
+
+        required = schema.get("required", [])
+        if idempotency_key not in required:
+            errors.append(f"{context}: idempotency_key {idempotency_key!r} must be required by the schema")
 
     return errors
 
