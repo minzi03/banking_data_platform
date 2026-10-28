@@ -697,11 +697,16 @@ CDC records retain:
 - event timestamp (epoch ms and derived timestamp)
 - Spark batch ID
 - ingestion timestamp
+- Kafka topic, partition and offset on the valid-event path
 
-Kafka topic, partition and offset are **not** persisted on the valid-event path.
-They are captured only for events routed to the dead-letter queue, where they
-are needed for triage. Replay of valid events is therefore driven by event
-timestamp and batch id, not by Kafka offsets.
+Kafka coordinates are retained in Bronze so replay and audit can identify the
+source topic and exact partition/offset of each accepted event. DLQ rows retain
+the same coordinates plus the raw payload for triage.
+
+The current consolidation ordering remains timestamp → Spark batch ID → Kafka
+offset. Offset-level replay orchestration and partition-aware checkpoints remain
+future hardening work; storing the coordinates is the prerequisite, not a claim
+that the whole platform has global exactly-once semantics.
 
 ### Change Operations
 

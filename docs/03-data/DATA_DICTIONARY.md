@@ -8,13 +8,13 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**102 bảng · 1418 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
+**102 bảng · 1425 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
 
 ## Mục lục
 
 | Tầng | Số bảng | Số cột |
 |---|---:|---:|
-| [bronze](#bronze) | 30 | 456 |
+| [bronze](#bronze) | 30 | 463 |
 | [silver](#silver) | 21 | 301 |
 | [gold](#gold) | 19 | 302 |
 | [meta](#meta) | 1 | 5 |
@@ -50,6 +50,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -79,6 +80,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -129,6 +131,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -369,6 +372,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -663,6 +667,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -720,6 +725,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 
@@ -754,6 +760,7 @@ _Chưa có data contract trong `governance/datasets/`._
 | `__cdc_timestamp_ms` | `BIGINT` |  |  |
 | `__spark_batch_id` | `BIGINT` |  |  |
 | `__ingestion_time` | `TIMESTAMP` |  |  |
+| `__kafka_topic` | `VARCHAR(255)` |  |  |
 | `__kafka_partition` | `INT` |  |  |
 | `__kafka_offset` | `BIGINT` |  |  |
 

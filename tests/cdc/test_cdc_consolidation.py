@@ -297,17 +297,17 @@ class TestDlqSplit:
         _, invalid = split
         assert sorted(r["kafka_offset"] for r in invalid) == [4, 5]
 
-    def test_valid_path_carries_only_partition_and_offset(self, split):
-        """ADR-0010 (2026-09-30): Bronze CDC giữ __kafka_partition/__kafka_offset làm khoá
-        thứ tự; mọi cột Kafka khác vẫn chỉ ở DLQ (DDL không có, lệch là ARITY_MISMATCH)."""
+    def test_valid_path_carries_topic_partition_and_offset(self, split):
+        """Bronze CDC giữ topic/partition/offset để audit và replay theo nguồn."""
         valid, _ = split
         kafka_cols = sorted(c for c in valid[0].asDict() if "kafka" in c)
-        assert kafka_cols == ["__kafka_offset", "__kafka_partition"]
+        assert kafka_cols == ["__kafka_offset", "__kafka_partition", "__kafka_topic"]
         assert sorted(r["__kafka_offset"] for r in valid) == [1, 2]
+        assert {r["__kafka_topic"] for r in valid} == {"postgresql.banking.core_banking.customer"}
 
 
 class TestKafkaCoordinateColumns:
-    """Bảng Bronze CDC tạo trước 2026-09-30 được bổ sung cột khi stream khởi động."""
+    """Bảng Bronze CDC được bổ sung đủ topic/partition/offset khi stream khởi động."""
 
     class FakeSpark:
         def __init__(self, columns):
@@ -320,17 +320,75 @@ class TestKafkaCoordinateColumns:
         def sql(self, statement):
             self.statements.append(statement)
 
-    def test_old_table_gets_both_columns(self):
+    def test_old_table_gets_all_columns(self):
         spark = self.FakeSpark(["customer_id", "__ingestion_time"])
         assert dlq.ensure_kafka_coordinate_columns(spark, "lakehouse.bronze.core_customer_cdc") == [
+            "__kafka_topic",
             "__kafka_partition",
             "__kafka_offset",
         ]
         assert spark.statements == [
-            "ALTER TABLE lakehouse.bronze.core_customer_cdc ADD COLUMNS (__kafka_partition INT, __kafka_offset BIGINT)"
+            "ALTER TABLE lakehouse.bronze.core_customer_cdc ADD COLUMNS (__kafka_topic VARCHAR(255), __kafka_partition INT, __kafka_offset BIGINT)"
         ]
 
     def test_current_table_is_left_alone(self):
-        spark = self.FakeSpark(["customer_id", "__kafka_partition", "__kafka_offset"])
+        spark = self.FakeSpark(["customer_id", "__kafka_topic", "__kafka_partition", "__kafka_offset"])
         assert dlq.ensure_kafka_coordinate_columns(spark, "t") == []
         assert spark.statements == []
+
+    def test_existing_topic_gets_partition_and_offset(self):
+        spark = self.FakeSpark(["customer_id", "__kafka_topic"])
+        assert dlq.ensure_kafka_coordinate_columns(spark, "t") == ["__kafka_partition", "__kafka_offset"]
+        assert spark.statements == ["ALTER TABLE t ADD COLUMNS (__kafka_partition INT, __kafka_offset BIGINT)"]
+
+    def test_old_table_legacy_alias(self):
+        self.test_old_table_gets_all_columns()
+
+    def test_current_table_legacy_alias(self):
+        self.test_current_table_is_left_alone()
+
+
+# Legacy test class is retained below for backwards-compatible naming.
+class TestLegacyKafkaCoordinateColumns:
+    """Compatibility checks for the previous two-column migration contract."""
+
+    def test_old_table_gets_both_columns(self):
+        spark = TestKafkaCoordinateColumns.FakeSpark(["customer_id", "__ingestion_time"])
+        assert dlq.ensure_kafka_coordinate_columns(spark, "lakehouse.bronze.core_customer_cdc") == [
+            "__kafka_topic",
+            "__kafka_partition",
+            "__kafka_offset",
+        ]
+
+    def test_current_table_is_left_alone(self):
+        spark = TestKafkaCoordinateColumns.FakeSpark(
+            ["customer_id", "__kafka_topic", "__kafka_partition", "__kafka_offset"]
+        )
+        assert dlq.ensure_kafka_coordinate_columns(spark, "t") == []
+        assert spark.statements == []
+
+
+def test_old_table_gets_all_kafka_coordinate_columns():
+    spark = TestKafkaCoordinateColumns.FakeSpark(["customer_id", "__ingestion_time"])
+    assert dlq.ensure_kafka_coordinate_columns(spark, "lakehouse.bronze.core_customer_cdc") == [
+        "__kafka_topic",
+        "__kafka_partition",
+        "__kafka_offset",
+    ]
+    assert spark.statements == [
+        "ALTER TABLE lakehouse.bronze.core_customer_cdc ADD COLUMNS (__kafka_topic VARCHAR(255), __kafka_partition INT, __kafka_offset BIGINT)"
+    ]
+
+
+def test_current_table_with_all_kafka_coordinates_is_left_alone():
+    spark = TestKafkaCoordinateColumns.FakeSpark(
+        ["customer_id", "__kafka_topic", "__kafka_partition", "__kafka_offset"]
+    )
+    assert dlq.ensure_kafka_coordinate_columns(spark, "t") == []
+    assert spark.statements == []
+
+
+def test_old_table_gets_partition_and_offset_when_topic_already_exists():
+    spark = TestKafkaCoordinateColumns.FakeSpark(["customer_id", "__kafka_topic"])
+    assert dlq.ensure_kafka_coordinate_columns(spark, "t") == ["__kafka_partition", "__kafka_offset"]
+    assert spark.statements == ["ALTER TABLE t ADD COLUMNS (__kafka_partition INT, __kafka_offset BIGINT)"]
