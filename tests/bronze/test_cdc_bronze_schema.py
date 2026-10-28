@@ -41,6 +41,7 @@ META_COLUMNS = [
     "__spark_batch_id",
     "__ingestion_time",
     # Toạ độ Kafka: khoá thứ tự cuối trong dedup consolidation (ADR-0010, 2026-09-30)
+    "__kafka_topic",
     "__kafka_partition",
     "__kafka_offset",
 ]

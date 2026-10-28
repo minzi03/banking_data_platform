@@ -194,6 +194,7 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
         # INSERT và UPDATE trong một transaction ra cùng ms, cùng micro-batch, nên dedup
         # chọn ngẫu nhiên (đo trên stack 2026-09-30). Chỉ hai cột này — mọi cột khác phải
         # khớp DDL, lệch là INSERT_COLUMN_ARITY_MISMATCH (đo trên stack 2026-09-27).
+        .withColumnRenamed("_kafka_topic", "__kafka_topic")
         .withColumnRenamed("_kafka_partition", "__kafka_partition")
         .withColumnRenamed("_kafka_offset", "__kafka_offset")
         .drop(
@@ -231,7 +232,11 @@ def validate_and_split(batch_df: DataFrame, config: dict, batch_id: int):
     return valid_df, dlq_df
 
 
-KAFKA_COORDINATE_COLUMNS = {"__kafka_partition": "INT", "__kafka_offset": "BIGINT"}
+KAFKA_COORDINATE_COLUMNS = {
+    "__kafka_topic": "VARCHAR(255)",
+    "__kafka_partition": "INT",
+    "__kafka_offset": "BIGINT",
+}
 
 
 def ensure_kafka_coordinate_columns(spark, target_table: str) -> list[str]:
