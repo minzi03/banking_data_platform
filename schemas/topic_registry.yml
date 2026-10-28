@@ -1,0 +1,21 @@
+version: "1.0"
+compatibility_default: BACKWARD
+owners:
+  data-platform:
+    team: data-engineering
+    contact: data-platform-oncall
+
+topics:
+  - name: postgresql.banking.digital_banking.online_transaction
+    event_type: ONLINE_TRANSACTION_CHANGED
+    event_version: 1
+    key: transaction_id
+    schema: schemas/online_transaction_event_v1.json
+    compatibility: BACKWARD
+    owner: data-platform
+    pii: restricted
+    replayable: true
+    delivery_semantics: at_least_once
+    ordering_scope: kafka_partition_per_transaction_key
+    source: postgresql.digital_banking.online_transaction
+    bronze_table: lakehouse.bronze.online_transaction_cdc

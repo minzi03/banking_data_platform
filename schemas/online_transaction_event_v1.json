@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://banking-data-platform.example/schemas/online_transaction_event/v1",
+  "title": "OnlineTransactionChangedV1",
+  "description": "Versioned envelope for an online transaction CDC/domain event.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "event_key",
+    "source_system",
+    "source_table",
+    "occurred_at",
+    "ingested_at",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "event_type": {"const": "ONLINE_TRANSACTION_CHANGED"},
+    "event_version": {"const": 1},
+    "event_key": {"type": "string", "pattern": "^transaction_id:[1-9][0-9]*$"},
+    "source_system": {"const": "postgresql"},
+    "source_table": {"const": "digital_banking.online_transaction"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transaction_id",
+        "amount",
+        "currency",
+        "status",
+        "merchant_id",
+        "payment_channel",
+        "refund_flag",
+        "transaction_date"
+      ],
+      "properties": {
+        "transaction_id": {"type": "integer", "minimum": 1},
+        "amount": {"type": "number"},
+        "currency": {"type": "string", "minLength": 3, "maxLength": 3},
+        "status": {"type": "string", "enum": ["SUCCESS", "FAILED", "PENDING", "REVERSED"]},
+        "merchant_id": {"type": ["integer", "null"], "minimum": 1},
+        "payment_channel": {"type": ["string", "null"], "enum": ["QR", "POS", null]},
+        "refund_flag": {"type": "integer", "enum": [0, 1]},
+        "transaction_date": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
