@@ -50,4 +50,57 @@ def test_workflow_requires_explicit_apply(monkeypatch):
     )
 
     assert workflow.main() == 0
+    assert len(calls) == 2
     assert "--apply" in calls[1]
+
+
+def test_verify_after_apply_runs_read_only_check(monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--apply",
+            "--verify",
+            "--version",
+            "1",
+        ],
+    )
+
+    assert workflow.main() == 0
+    assert "--apply" in calls[1]
+    assert str(ROOT / "scripts" / "verify_schema_registry.py") in calls[2]
+
+
+def test_verify_without_apply_is_rejected(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+
+        class Result:
+            returncode = 0
+
+        return Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["register_isolated_event_schema", "--registry-url", "http://registry:8081", "--verify"],
+    )
+
+    assert workflow.main() == 2
+    assert calls == []
