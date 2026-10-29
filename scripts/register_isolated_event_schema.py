@@ -1,4 +1,4 @@
-"""Register the governed v1 event in the isolated E2E Schema Registry."""
+"""Register and verify the governed v1 event in the isolated Schema Registry."""
 
 from __future__ import annotations
 
@@ -22,12 +22,15 @@ def main() -> int:
     parser.add_argument("--topic", default=DEFAULT_TOPIC)
     parser.add_argument("--apply", action="store_true", help="Register after readiness verification")
     parser.add_argument("--verify", action="store_true", help="Verify the version after registration")
+    parser.add_argument(
+        "--verify-local", action="store_true", help="Compare the registered schema with local JSON Schema"
+    )
     parser.add_argument("--version", type=int, default=1)
     parser.add_argument("--timeout-seconds", type=int, default=120)
     args = parser.parse_args()
 
-    if args.verify and not args.apply:
-        print("ERROR: --verify requires --apply so a registered version can be checked")
+    if (args.verify or args.verify_local) and not args.apply:
+        print("ERROR: --verify/--verify-local require --apply")
         return 2
 
     python = sys.executable
@@ -55,13 +58,27 @@ def main() -> int:
     if args.apply:
         register_command.append("--apply")
     registered = _run(register_command)
-    if registered != 0 or not args.verify:
+    if registered != 0 or not (args.verify or args.verify_local):
         return registered
+
+    verify = [
+        python,
+        str(ROOT / "scripts" / "verify_schema_registry.py"),
+        "--registry-url",
+        args.registry_url,
+        "--topic",
+        args.topic,
+        "--version",
+        str(args.version),
+    ]
+    verified = _run(verify)
+    if verified != 0 or not args.verify_local:
+        return verified
 
     return _run(
         [
             python,
-            str(ROOT / "scripts" / "verify_schema_registry.py"),
+            str(ROOT / "scripts" / "verify_registered_event_schema.py"),
             "--registry-url",
             args.registry_url,
             "--topic",
