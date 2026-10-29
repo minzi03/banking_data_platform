@@ -167,3 +167,144 @@ def test_verify_local_without_apply_is_rejected(monkeypatch):
 
     assert workflow.main() == 2
     assert calls == []
+
+
+def test_readiness_failure_stops_registration(monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 7
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--apply",
+            "--verify-local",
+        ],
+    )
+
+    assert workflow.main() == 7
+    assert len(calls) == 1
+    assert str(ROOT / "scripts" / "wait_for_schema_registry.py") in calls[0]
+
+
+def test_registration_failure_stops_verification(monkeypatch):
+    calls = []
+
+    class Result:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result(0 if len(calls) == 1 else 9)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--apply",
+            "--verify-local",
+        ],
+    )
+
+    assert workflow.main() == 9
+    assert len(calls) == 2
+
+
+def test_registry_verification_failure_stops_local_drift_check(monkeypatch):
+    calls = []
+
+    class Result:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result(0 if len(calls) < 3 else 11)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--apply",
+            "--verify-local",
+        ],
+    )
+
+    assert workflow.main() == 11
+    assert len(calls) == 3
+
+
+def test_local_drift_failure_is_returned(monkeypatch):
+    calls = []
+
+    class Result:
+        def __init__(self, returncode):
+            self.returncode = returncode
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result(0 if len(calls) < 4 else 13)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--apply",
+            "--verify-local",
+        ],
+    )
+
+    assert workflow.main() == 13
+    assert len(calls) == 4
+    assert str(ROOT / "scripts" / "verify_registered_event_schema.py") in calls[3]
+
+
+def test_timeout_is_forwarded_to_readiness_check(monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return Result()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "register_isolated_event_schema",
+            "--registry-url",
+            "http://registry:8081",
+            "--timeout-seconds",
+            "17",
+        ],
+    )
+
+    assert workflow.main() == 0
+    assert calls[0][calls[0].index("--timeout-seconds") + 1] == "17"
+    assert len(calls) == 2
