@@ -22,6 +22,12 @@ def test_schema_registry_isolated_from_shared_stack():
     assert registry["networks"] == ["merchant_e2e_net"]
 
 
+def test_schema_registry_publishes_only_to_loopback():
+    registry = load_compose()["services"]["schema-registry"]
+
+    assert registry["ports"] == ["127.0.0.1:8081:8081"]
+
+
 def test_schema_registry_waits_for_isolated_kafka():
     registry = load_compose()["services"]["schema-registry"]
 
