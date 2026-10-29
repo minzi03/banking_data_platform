@@ -123,6 +123,10 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC: merchant-e2e-schemas
       SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      # Chỉ publish ra loopback: registry là isolated nhưng script verify trên
+      # host cần tới nó. Không dùng 8081 trên shared stack để tránh trùng cổng.
+      - "127.0.0.1:8081:8081"
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects"]
       interval: 10s

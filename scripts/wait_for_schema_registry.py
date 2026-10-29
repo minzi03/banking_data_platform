@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import time
+from pathlib import Path
 
-from scripts.verify_schema_registry import fetch_json, subject_for, verify_subject
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# Suốt thời gian chạy như một script, thư mục `scripts/` được đưa lên sys.path
+# chứ không phải repo root; chèn root trước khi import để `scripts.*` resolve được.
+from scripts.verify_schema_registry import fetch_json, subject_for, verify_subject  # noqa: E402
 
 
 def wait_for_registry(registry_url: str, timeout_seconds: int) -> None:
