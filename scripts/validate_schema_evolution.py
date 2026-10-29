@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from schemas.check_backward_compatibility import CompatibilityError, validate_backward
-from schemas.validate_topic_registry import load_registry
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from schemas.check_backward_compatibility import CompatibilityError, validate_backward  # noqa: E402
+from schemas.validate_topic_registry import load_registry  # noqa: E402
 
 
 def main() -> int:

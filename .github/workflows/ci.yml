@@ -422,6 +422,34 @@ jobs:
           echo "=== Validating Kafka topic registry ==="
           python schemas/validate_topic_registry.py
 
+      - name: Validate candidate schema evolution
+        run: |
+          echo "=== Validating candidate schema evolution ==="
+          python scripts/validate_schema_evolution.py \
+            --topic postgresql.banking.digital_banking.online_transaction \
+            --candidate schemas/online_transaction_event_v2.json
+
+      - name: Validate checked-in event example
+        run: |
+          echo "=== Validating checked-in event example ==="
+          python scripts/validate_event_contract.py \
+            --topic postgresql.banking.digital_banking.online_transaction \
+            < schemas/examples/online_transaction_event_v1.example.json
+
+      - name: Validate runtime contract tests
+        run: |
+          python -m pytest \
+            tests/governance/test_event_schema_contract.py \
+            tests/governance/test_event_schema_compatibility.py \
+            tests/governance/test_topic_registry_validator.py \
+            tests/governance/test_event_validator.py \
+            tests/governance/test_event_contract_runtime_boundaries.py \
+            tests/governance/test_event_contract_cli.py \
+            tests/governance/test_event_contract_example.py \
+            tests/governance/test_schema_backward_policy.py \
+            tests/governance/test_schema_evolution_cli.py \
+            -q
+
   # ===========================================================================
   # Job 5: Check Docker Compose
   # ===========================================================================
