@@ -592,7 +592,7 @@ Runs after Gold DAG completes. Custom `generate_schema_name` macro routes to `se
 - **Lineage automation:** OpenMetadata lineage is manual, not auto-captured from Spark
 - **Cost optimization:** No compaction, small file optimization, or partition pruning strategy
 - **Disaster recovery:** No cross-region replication, no backup/restore strategy
-- **Schema evolution:** Kafka event schema registry contract is now defined for the online transaction topic, with BACKWARD compatibility, versioned JSON Schema, topic ownership, replay/delivery semantics, and CI validation. Runtime Schema Registry integration and producer/consumer rollout remain future work.
+- **Schema evolution:** The online transaction topic has a versioned JSON Schema contract with topic ownership, replay/delivery semantics, repository-level BACKWARD policy, CI gates, and a measured isolated runtime registration/read-back proof. Producer serializer integration, consumer rollout, and production/shared Registry deployment remain future work.
 - **Late-arriving data:** No watermark management for out-of-order events
 
 ### 7.4. Scale Comparison

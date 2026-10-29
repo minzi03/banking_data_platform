@@ -53,4 +53,4 @@ The raw CDC path remains the audit and replay source. The governed envelope must
 - A breaking change requires a new event version and an explicit producer/consumer migration plan.
 - The registry remains v1-only until an actual producer and consumer rollout is ready.
 
-Runtime Schema Registry deployment, producer integration, consumer-side processed-event storage, and exactly-once claims remain future work.
+An isolated Schema Registry runtime proof now covers readiness, registration, subject/version read-back, idempotent re-registration, and local-schema drift comparison. Production/shared Registry deployment, producer serializer integration, consumer-side processed-event storage, and exactly-once claims remain future work.
