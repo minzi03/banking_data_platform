@@ -42,7 +42,7 @@ ports:
 
 ```text
 $ python scripts/register_isolated_event_schema.py \
-    --registry-url http://localhost:8081 --apply --verify --version 1
+    --registry-url http://localhost:8081 --apply --verify --verify-local --version 1
 
 Schema Registry ready
 {"id": 1}
@@ -91,7 +91,7 @@ docker compose -f docker/docker-compose.e2e-merchant.yml --project-name docker \
   up -d postgres minio iceberg-rest mc zookeeper kafka schema-registry
 
 python scripts/register_isolated_event_schema.py \
-  --registry-url http://localhost:8081 --apply --verify --version 1
+  --registry-url http://localhost:8081 --apply --verify --verify-local --version 1
 ```
 
 Re-running is idempotent: the same schema returns the existing schema id instead of a new version.
