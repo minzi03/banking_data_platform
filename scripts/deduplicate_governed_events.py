@@ -57,7 +57,7 @@ def deduplicate_events(
     emitted: list[dict[str, Any]] = []
     try:
         for event in unique.values():
-            if ledger.record(topic, event):
+            if not ledger.is_replay(topic, event):
                 emitted.append(event)
     except EventLedgerConflict as exc:
         raise ValueError(str(exc)) from exc
@@ -78,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         unique = deduplicate_events(events, args.topic, args.registry, ledger)
         for event in unique:
             print(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
+        if ledger is not None:
+            ledger.record_many(args.topic, unique)
         print(f"Validated {len(events)} events; emitted {len(unique)} unique events", file=sys.stderr)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
