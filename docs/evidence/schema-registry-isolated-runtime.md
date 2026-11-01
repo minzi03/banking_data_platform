@@ -81,7 +81,7 @@ required-field rules. This was not previously assumed and is now measured.
 
 - No producer or consumer uses the registry serializer, so wire-level compatibility is unproven.
 - No Avro or Protobuf subjects exist; only JSON Schema is exercised.
-- Consumer-side deduplication stores and exactly-once side effects remain unimplemented.
+- A persistent SQLite processed-event ledger and batch consumer integration now exist, but they are not transactionally coupled to business side effects; exactly-once remains unproven.
 - The `--project-name docker` reuse is an environment detail, not a hardening decision.
 
 ## Reproduce
