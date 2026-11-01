@@ -40,22 +40,32 @@ class ProcessedEventLedger:
     def close(self) -> None:
         self._connection.close()
 
-    def record(self, topic: str, event: dict[str, Any]) -> bool:
-        """Record an event; return False for an identical replay."""
+    def is_replay(self, topic: str, event: dict[str, Any]) -> bool:
+        """Return whether an event was already processed; reject fingerprint conflicts."""
         event_id = event["event_id"]
         fingerprint = event_fingerprint(event)
         row = self._connection.execute(
             "SELECT event_fingerprint FROM processed_events WHERE topic = ? AND event_id = ?",
             (topic, event_id),
         ).fetchone()
-        if row is not None:
-            if row[0] != fingerprint:
-                raise EventLedgerConflict(f"Event ID reused with a different payload: {event_id}")
+        if row is None:
             return False
+        if row[0] != fingerprint:
+            raise EventLedgerConflict(f"Event ID reused with a different payload: {event_id}")
+        return True
 
+    def record(self, topic: str, event: dict[str, Any]) -> bool:
+        """Record a completed event; return False for an identical replay."""
+        if self.is_replay(topic, event):
+            return False
         self._connection.execute(
             "INSERT INTO processed_events (topic, event_id, event_fingerprint) VALUES (?, ?, ?)",
-            (topic, event_id, fingerprint),
+            (topic, event["event_id"], event_fingerprint(event)),
         )
         self._connection.commit()
         return True
+
+    def record_many(self, topic: str, events: list[dict[str, Any]]) -> None:
+        """Record events after their downstream side effect has completed."""
+        for event in events:
+            self.record(topic, event)

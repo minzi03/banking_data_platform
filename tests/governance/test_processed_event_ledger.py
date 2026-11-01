@@ -29,6 +29,28 @@ def test_first_event_is_recorded_and_identical_replay_is_skipped(tmp_path):
         ledger.close()
 
 
+def test_replay_check_does_not_mark_event_processed(tmp_path):
+    ledger = ProcessedEventLedger(tmp_path / "events.db")
+    try:
+        event = _event()
+        assert ledger.is_replay("topic", event) is False
+        assert ledger.record("topic", event) is True
+        assert ledger.is_replay("topic", event) is True
+    finally:
+        ledger.close()
+
+
+def test_record_many_marks_events_after_side_effect(tmp_path):
+    ledger = ProcessedEventLedger(tmp_path / "events.db")
+    try:
+        event = _event()
+        assert ledger.is_replay("topic", event) is False
+        ledger.record_many("topic", [event])
+        assert ledger.is_replay("topic", event) is True
+    finally:
+        ledger.close()
+
+
 def test_same_event_id_with_different_payload_is_rejected(tmp_path):
     ledger = ProcessedEventLedger(tmp_path / "events.db")
     try:
