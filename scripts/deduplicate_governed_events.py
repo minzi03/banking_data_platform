@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.processed_event_ledger import EventLedgerConflict, ProcessedEventLedger
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TOPIC = "postgresql.banking.digital_banking.online_transaction"
 DEFAULT_REGISTRY = ROOT / "schemas" / "topic_registry.yml"
@@ -26,7 +28,12 @@ def _read_events(path: Path | None) -> list[dict[str, Any]]:
     return events
 
 
-def deduplicate_events(events: list[dict[str, Any]], topic: str, registry: Path) -> list[dict[str, Any]]:
+def deduplicate_events(
+    events: list[dict[str, Any]],
+    topic: str,
+    registry: Path,
+    ledger: ProcessedEventLedger | None = None,
+) -> list[dict[str, Any]]:
     sys.path.insert(0, str(ROOT))
     from schemas.validate_event import EventContractError, validate_event
 
@@ -39,12 +46,22 @@ def deduplicate_events(events: list[dict[str, Any]], topic: str, registry: Path)
 
         event_id = event["event_id"]
         previous = unique.get(event_id)
+        if previous is not None and previous != event:
+            raise ValueError(f"Event {position} conflicts with an earlier event_id: {event_id}")
         if previous is None:
             unique[event_id] = event
-        elif previous != event:
-            raise ValueError(f"Event {position} conflicts with an earlier event_id: {event_id}")
 
-    return list(unique.values())
+    if ledger is None:
+        return list(unique.values())
+
+    emitted: list[dict[str, Any]] = []
+    try:
+        for event in unique.values():
+            if ledger.record(topic, event):
+                emitted.append(event)
+    except EventLedgerConflict as exc:
+        raise ValueError(str(exc)) from exc
+    return emitted
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,17 +69,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--events", type=Path, help="JSONL input file; defaults to stdin")
     parser.add_argument("--topic", default=DEFAULT_TOPIC)
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
+    parser.add_argument("--ledger", type=Path, help="SQLite processed-event ledger")
     args = parser.parse_args(argv)
 
+    ledger = ProcessedEventLedger(args.ledger) if args.ledger else None
     try:
         events = _read_events(args.events)
-        unique = deduplicate_events(events, args.topic, args.registry)
+        unique = deduplicate_events(events, args.topic, args.registry, ledger)
         for event in unique:
             print(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
         print(f"Validated {len(events)} events; emitted {len(unique)} unique events", file=sys.stderr)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if ledger is not None:
+            ledger.close()
     return 0
 
 

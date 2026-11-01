@@ -55,3 +55,42 @@ def test_jsonl_cli_emits_unique_events(tmp_path, capsys):
     output = capsys.readouterr()
     assert len(output.out.splitlines()) == 1
     assert "Validated 2 events; emitted 1 unique events" in output.err
+
+
+def test_ledger_skips_replay_across_cli_runs(tmp_path, capsys):
+    event = _event()
+    events_path = tmp_path / "events.jsonl"
+    ledger_path = tmp_path / "processed.db"
+    events_path.write_text(json.dumps(event), encoding="utf-8")
+
+    assert main(["--events", str(events_path), "--topic", TOPIC, "--ledger", str(ledger_path)]) == 0
+    capsys.readouterr()
+    assert main(["--events", str(events_path), "--topic", TOPIC, "--ledger", str(ledger_path)]) == 0
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "Validated 1 events; emitted 0 unique events" in output.err
+
+
+def test_ledger_conflict_is_reported(tmp_path, capsys):
+    first = _event()
+    second = json.loads(json.dumps(first))
+    second["payload"]["amount"] = 20000.0
+    events_path = tmp_path / "events.jsonl"
+    ledger_path = tmp_path / "processed.db"
+    events_path.write_text(json.dumps(first), encoding="utf-8")
+    assert main(["--events", str(events_path), "--topic", TOPIC, "--ledger", str(ledger_path)]) == 0
+    capsys.readouterr()
+
+    events_path.write_text(json.dumps(second), encoding="utf-8")
+    assert main(["--events", str(events_path), "--topic", TOPIC, "--ledger", str(ledger_path)]) == 1
+    assert "different payload" in capsys.readouterr().err
+
+
+def test_without_ledger_preserves_batch_behavior(tmp_path, capsys):
+    event = _event()
+    events_path = tmp_path / "events.jsonl"
+    events_path.write_text(json.dumps(event), encoding="utf-8")
+
+    assert main(["--events", str(events_path), "--topic", TOPIC]) == 0
+    assert main(["--events", str(events_path), "--topic", TOPIC]) == 0
+    assert len(capsys.readouterr().out.splitlines()) == 2
