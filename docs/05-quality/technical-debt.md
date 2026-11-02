@@ -1950,6 +1950,12 @@ topic registry, validator CLI, idempotency-key declaration, compatibility tests,
 and CI governance gates. Runtime Schema Registry deployment, producer/consumer rollout, and exactly-once
 side-effect processing remain open by design.
 
+**Governed event follow-up (2026-11-01):** an isolated Schema Registry registration/read-back proof exists,
+plus a validating producer adapter, batch deduplication, a persistent SQLite processed-event ledger, and a
+consumer boundary that records events only after its side-effect callback returns. The ledger is not
+transactionally coupled to business side effects, no serializer-based wire compatibility is exercised, and
+no live Kafka consumer runs this path yet, so exactly-once remains unclaimed.
+
 ---
 
 ## TD-21 — Ruff format gate failed on feature-branch files
