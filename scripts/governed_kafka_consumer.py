@@ -129,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ledger = ProcessedEventLedger(args.ledger) if args.ledger else None
     processed = 0
+    consumed = 0
     empty_polls = 0
     try:
         while True:
@@ -143,8 +144,9 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             empty_polls = 0
             processed += process_poll(records, args.topic, args.registry, side_effect, ledger, args.dlq)
+            consumed += len(records)
             consumer.commit()
-            if args.max_messages and processed >= args.max_messages:
+            if args.max_messages and consumed >= args.max_messages:
                 break
     finally:
         consumer.close()
