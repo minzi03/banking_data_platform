@@ -57,6 +57,14 @@ def _write_dlq(path: Path, record: Any, error: Exception) -> None:
         output.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+def _append_events(path: Path, events: list[dict[str, Any]]) -> None:
+    """Append governed events to a JSONL sink after validation and deduplication."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as output:
+        for event in events:
+            output.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
 def process_poll(
     records: Iterable[Any],
     topic: str,
@@ -88,6 +96,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-messages", type=int, default=0, help="Stop after N messages (0 = run forever)")
     parser.add_argument("--max-empty-polls", type=int, default=0, help="Stop after N empty polls (0 = wait forever)")
     parser.add_argument("--dlq", type=Path, help="Append invalid records as JSONL")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Append accepted governed events as JSONL after side-effect processing",
+    )
     parser.add_argument("--timeout-ms", type=int, default=5000)
 
     args = parser.parse_args(argv)
@@ -96,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dlq is not None:
         args.dlq.parent.mkdir(parents=True, exist_ok=True)
+
+    def side_effect(events: list[dict[str, Any]]) -> None:
+        if args.output is not None:
+            _append_events(args.output, events)
 
     try:
         from kafka import KafkaConsumer
@@ -125,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                     break
                 continue
             empty_polls = 0
-            processed += process_poll(records, args.topic, args.registry, lambda events: None, ledger, args.dlq)
+            processed += process_poll(records, args.topic, args.registry, side_effect, ledger, args.dlq)
             consumer.commit()
             if args.max_messages and processed >= args.max_messages:
                 break
