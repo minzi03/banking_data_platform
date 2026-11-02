@@ -119,6 +119,31 @@ def test_cli_commits_offsets_after_successful_processing(monkeypatch, tmp_path):
     assert committed == [True]
 
 
+def test_cli_writes_accepted_events_after_processing(monkeypatch, tmp_path):
+    output = tmp_path / "accepted" / "events.jsonl"
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    assert main(["--group-id", "test-group", "--output", str(output), "--max-messages", "1"]) == 0
+    assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
+
+
 def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
     class FakeConsumer:
         def __init__(self, *args, **kwargs):
