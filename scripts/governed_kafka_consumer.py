@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -33,13 +34,27 @@ def decode_event(record: Any) -> dict[str, Any]:
 
 
 def _write_dlq(path: Path, record: Any, error: Exception) -> None:
-    """Append one rejected Kafka record and its reason to a JSONL DLQ."""
+    """Append one rejected Kafka record, coordinates, and reason to JSONL."""
     raw = record.value if hasattr(record, "value") else record
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8", errors="replace")
+    if isinstance(raw, str):
+        with suppress(json.JSONDecodeError):
+            raw = json.loads(raw)
+    payload = {
+        "topic": getattr(record, "topic", None),
+        "partition": getattr(record, "partition", None),
+        "offset": getattr(record, "offset", None),
+        "key": getattr(record, "key", None),
+        "timestamp": getattr(record, "timestamp", None),
+        "record": raw,
+        "error": str(error),
+    }
+    if isinstance(payload["key"], bytes):
+        payload["key"] = payload["key"].decode("utf-8", errors="replace")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as output:
-        output.write(json.dumps({"record": raw, "error": str(error)}, ensure_ascii=False) + "\n")
+        output.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def process_poll(
