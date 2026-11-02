@@ -54,8 +54,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument("--ledger", type=Path, help="SQLite processed-event ledger")
     parser.add_argument("--max-messages", type=int, default=0, help="Stop after N messages (0 = run forever)")
+    parser.add_argument("--max-empty-polls", type=int, default=0, help="Stop after N empty polls (0 = wait forever)")
     parser.add_argument("--timeout-ms", type=int, default=5000)
+
     args = parser.parse_args(argv)
+    if args.max_messages < 0 or args.max_empty_polls < 0:
+        parser.error("--max-messages and --max-empty-polls must be non-negative")
+    if args.max_messages < 0 or args.max_empty_polls < 0:
+        parser.error("--max-messages and --max-empty-polls must be non-negative")
 
     try:
         from kafka import KafkaConsumer
@@ -73,14 +79,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     ledger = ProcessedEventLedger(args.ledger) if args.ledger else None
     processed = 0
+    empty_polls = 0
     try:
         while True:
             polled = consumer.poll(timeout_ms=args.timeout_ms)
             records = [record for _, batch in polled.items() for record in batch]
             if not records:
+                empty_polls += 1
+                if args.max_empty_polls and empty_polls >= args.max_empty_polls:
+                    break
                 if args.max_messages and processed >= args.max_messages:
                     break
                 continue
+            empty_polls = 0
             processed += process_poll(records, args.topic, args.registry, lambda events: None, ledger)
             consumer.commit()
             if args.max_messages and processed >= args.max_messages:

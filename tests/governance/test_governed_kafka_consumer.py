@@ -81,6 +81,31 @@ def test_cli_commits_offsets_after_successful_processing(monkeypatch, tmp_path):
     assert committed == [True]
 
 
+def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def poll(self, timeout_ms):
+            return {}
+
+        def commit(self):
+            pytest.fail("empty poll must not commit")
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    assert main(["--group-id", "test-group", "--max-empty-polls", "2", "--timeout-ms", "1"]) == 0
+    assert "Processed 0 governed events" in capsys.readouterr().out
+
+
+def test_cli_rejects_negative_poll_bounds():
+    with pytest.raises(SystemExit):
+        main(["--group-id", "test-group", "--max-empty-polls", "-1"])
+
+
 def test_cli_does_not_commit_when_side_effect_fails(monkeypatch, tmp_path):
     committed = []
 
