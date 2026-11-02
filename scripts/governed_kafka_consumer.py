@@ -9,10 +9,13 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from scripts.governed_event_consumer import consume_batch
-from scripts.processed_event_ledger import ProcessedEventLedger
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # running as a script puts scripts/ on sys.path, not the repo root
+    sys.path.insert(0, str(ROOT))
+
+from scripts.governed_event_consumer import consume_batch  # noqa: E402
+from scripts.processed_event_ledger import ProcessedEventLedger  # noqa: E402
+
 DEFAULT_TOPIC = "postgresql.banking.digital_banking.online_transaction"
 DEFAULT_REGISTRY = ROOT / "schemas" / "topic_registry.yml"
 
