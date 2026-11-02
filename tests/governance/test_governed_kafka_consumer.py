@@ -144,6 +144,46 @@ def test_cli_writes_accepted_events_after_processing(monkeypatch, tmp_path):
     assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
 
 
+def test_cli_output_sink_and_ledger_suppress_replay(monkeypatch, tmp_path, capsys):
+    output = tmp_path / "events.jsonl"
+    ledger = tmp_path / "events.db"
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    arguments = [
+        "--group-id",
+        "test-group",
+        "--ledger",
+        str(ledger),
+        "--output",
+        str(output),
+        "--max-messages",
+        "1",
+    ]
+    assert main(arguments) == 0
+    assert main(arguments) == 0
+    output_text = capsys.readouterr().out
+    assert output_text.count("Processed 1 governed events") == 1
+    assert "Processed 0 governed events" in output_text
+    assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
+
+
 def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
     class FakeConsumer:
         def __init__(self, *args, **kwargs):
