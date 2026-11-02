@@ -46,6 +46,20 @@ def test_process_poll_empty_batch_is_noop():
     assert process_poll([], TOPIC, REGISTRY, lambda events: None) == 0
 
 
+def test_process_poll_routes_invalid_record_to_dlq(tmp_path):
+    dlq = tmp_path / "nested" / "dead.jsonl"
+    assert process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["record"] == "not-json"
+    assert payload["error"]
+    assert "line 1" in payload["error"]
+
+
+def test_process_poll_without_dlq_preserves_failure():
+    with pytest.raises(json.JSONDecodeError):
+        process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None)
+
+
 def test_cli_fails_without_kafka_python(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "kafka", None)
     assert main(["--group-id", "test-group"]) == 2

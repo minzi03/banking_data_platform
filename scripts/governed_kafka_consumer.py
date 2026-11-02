@@ -32,18 +32,35 @@ def decode_event(record: Any) -> dict[str, Any]:
     return raw
 
 
+def _write_dlq(path: Path, record: Any, error: Exception) -> None:
+    """Append one rejected Kafka record and its reason to a JSONL DLQ."""
+    raw = record.value if hasattr(record, "value") else record
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as output:
+        output.write(json.dumps({"record": raw, "error": str(error)}, ensure_ascii=False) + "\n")
+
+
 def process_poll(
     records: Iterable[Any],
     topic: str,
     registry: Path,
     side_effect: Callable[[list[dict[str, Any]]], None],
     ledger: ProcessedEventLedger | None = None,
+    dlq: Path | None = None,
 ) -> int:
-    """Decode one poll batch and run it through the governed consumer boundary."""
-    events = [decode_event(record) for record in records]
-    if not events:
-        return 0
-    return consume_batch(events, topic, registry, side_effect, ledger)
+    """Decode one poll batch, route invalid records, and process valid records."""
+    processed = 0
+    for record in records:
+        try:
+            event = decode_event(record)
+            processed += consume_batch([event], topic, registry, side_effect, ledger)
+        except (ValueError, json.JSONDecodeError) as exc:
+            if dlq is None:
+                raise
+            _write_dlq(dlq, record, exc)
+    return processed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,13 +72,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ledger", type=Path, help="SQLite processed-event ledger")
     parser.add_argument("--max-messages", type=int, default=0, help="Stop after N messages (0 = run forever)")
     parser.add_argument("--max-empty-polls", type=int, default=0, help="Stop after N empty polls (0 = wait forever)")
+    parser.add_argument("--dlq", type=Path, help="Append invalid records as JSONL")
     parser.add_argument("--timeout-ms", type=int, default=5000)
 
     args = parser.parse_args(argv)
     if args.max_messages < 0 or args.max_empty_polls < 0:
         parser.error("--max-messages and --max-empty-polls must be non-negative")
-    if args.max_messages < 0 or args.max_empty_polls < 0:
-        parser.error("--max-messages and --max-empty-polls must be non-negative")
+
+    if args.dlq is not None:
+        args.dlq.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         from kafka import KafkaConsumer
@@ -73,7 +92,6 @@ def main(argv: list[str] | None = None) -> int:
         args.topic,
         bootstrap_servers=args.bootstrap.split(","),
         group_id=args.group_id,
-        # Commit chỉ sau khi side effect và ledger thành công. Xem docstring.
         enable_auto_commit=False,
         auto_offset_reset="earliest",
     )
@@ -92,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
                     break
                 continue
             empty_polls = 0
-            processed += process_poll(records, args.topic, args.registry, lambda events: None, ledger)
+            processed += process_poll(records, args.topic, args.registry, lambda events: None, ledger, args.dlq)
             consumer.commit()
             if args.max_messages and processed >= args.max_messages:
                 break
