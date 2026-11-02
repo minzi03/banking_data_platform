@@ -48,11 +48,35 @@ def test_process_poll_empty_batch_is_noop():
 
 def test_process_poll_routes_invalid_record_to_dlq(tmp_path):
     dlq = tmp_path / "nested" / "dead.jsonl"
-    assert process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    record = types.SimpleNamespace(
+        value=b"not-json", topic=TOPIC, partition=2, offset=17, key=b"transaction_id:10001", timestamp=123
+    )
+    assert process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
     payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
-    assert payload["record"] == "not-json"
-    assert payload["error"]
+    assert payload == {
+        "topic": TOPIC,
+        "partition": 2,
+        "offset": 17,
+        "key": "transaction_id:10001",
+        "timestamp": 123,
+        "record": "not-json",
+        "error": payload["error"],
+    }
     assert "line 1" in payload["error"]
+
+
+def test_process_poll_routes_schema_violation_to_dlq(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    invalid = _event()
+    invalid["payload"]["currency"] = "USDD"
+    record = types.SimpleNamespace(value=json.dumps(invalid).encode("utf-8"), topic=TOPIC, partition=0, offset=1)
+
+    assert process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["topic"] == TOPIC
+    assert payload["offset"] == 1
+    assert "contract validation" in payload["error"]
+    assert payload["record"]["payload"]["currency"] == "USDD"
 
 
 def test_process_poll_without_dlq_preserves_failure():
