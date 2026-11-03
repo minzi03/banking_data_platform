@@ -160,6 +160,39 @@ def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
     assert order == ["poll", "commit"]
 
 
+def test_process_poll_isolates_a_bad_record_from_its_valid_neighbours(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    ledger = ProcessedEventLedger(tmp_path / "events.db")
+    received = []
+    try:
+        event = _event()
+        bad = types.SimpleNamespace(value=b"not-json", topic=TOPIC, partition=0, offset=2)
+        good = types.SimpleNamespace(value=json.dumps(event).encode("utf-8"), topic=TOPIC, partition=0, offset=3)
+
+        assert process_poll([bad, good], TOPIC, REGISTRY, received.extend, ledger, dlq) == 1
+        assert received == [event]
+        lines = dlq.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["offset"] == 2
+    finally:
+        ledger.close()
+
+
+def test_process_poll_keeps_valid_records_when_every_record_but_one_is_bad(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    received = []
+    event = _event()
+    records = [
+        b"not-json",
+        types.SimpleNamespace(value=json.dumps(event).encode("utf-8"), topic=TOPIC, partition=0, offset=1),
+        b"{broken",
+    ]
+
+    assert process_poll(records, TOPIC, REGISTRY, received.extend, dlq=dlq) == 1
+    assert received == [event]
+    assert len(dlq.read_text(encoding="utf-8").splitlines()) == 2
+
+
 def test_cli_fails_without_kafka_python(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "kafka", None)
     assert main(["--group-id", "test-group"]) == 2
