@@ -243,6 +243,46 @@ def test_cli_output_sink_and_ledger_suppress_replay(monkeypatch, tmp_path, capsy
     assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
 
 
+def test_cli_output_failure_leaves_the_ledger_untouched(monkeypatch, tmp_path):
+    ledger_path = tmp_path / "events.db"
+    output = tmp_path / "events.jsonl"
+    committed = []
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            committed.append(True)
+
+        def close(self):
+            pass
+
+    def failing_append(path, events):
+        raise OSError("sink is full")
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+    monkeypatch.setattr("scripts.governed_kafka_consumer._append_events", failing_append)
+
+    with pytest.raises(OSError, match="sink is full"):
+        main(["--group-id", "test-group", "--ledger", str(ledger_path), "--output", str(output), "--max-messages", "1"])
+
+    assert committed == []
+    assert not output.exists()
+
+    ledger = ProcessedEventLedger(ledger_path)
+    try:
+        assert ledger.is_replay(TOPIC, _event()) is False
+    finally:
+        ledger.close()
+
+
 def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
     class FakeConsumer:
         def __init__(self, *args, **kwargs):
