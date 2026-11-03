@@ -79,6 +79,15 @@ def test_process_poll_routes_schema_violation_to_dlq(tmp_path):
     assert payload["record"]["payload"]["currency"] == "USDD"
 
 
+def test_dlq_write_survives_a_bare_record_without_coordinates(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    assert process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["partition"] is None
+    assert payload["record"] == "not-json"
+    assert "Expecting value" in payload["error"]
+
+
 def test_process_poll_without_dlq_preserves_failure():
     with pytest.raises(json.JSONDecodeError):
         process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None)
