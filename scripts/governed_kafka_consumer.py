@@ -33,6 +33,25 @@ def decode_event(record: Any) -> dict[str, Any]:
     return raw
 
 
+def _record_attribute(record: Any, name: str) -> Any:
+    """Read one Kafka coordinate without invoking a method of the same name."""
+    attribute = getattr(record, name, None)
+    return None if callable(attribute) else attribute
+
+
+def _json_safe(value: Any) -> Any:
+    """Return a JSON-serialisable form of a rejected record value."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return repr(value)
+
+
 def _write_dlq(path: Path, record: Any, error: Exception) -> None:
     """Append one rejected Kafka record, coordinates, and reason to JSONL."""
     raw = record.value if hasattr(record, "value") else record
@@ -42,19 +61,17 @@ def _write_dlq(path: Path, record: Any, error: Exception) -> None:
         with suppress(json.JSONDecodeError):
             raw = json.loads(raw)
     payload = {
-        "topic": getattr(record, "topic", None),
-        "partition": getattr(record, "partition", None),
-        "offset": getattr(record, "offset", None),
-        "key": getattr(record, "key", None),
-        "timestamp": getattr(record, "timestamp", None),
-        "record": raw,
+        "topic": _record_attribute(record, "topic"),
+        "partition": _record_attribute(record, "partition"),
+        "offset": _record_attribute(record, "offset"),
+        "key": _json_safe(_record_attribute(record, "key")),
+        "timestamp": _record_attribute(record, "timestamp"),
+        "record": _json_safe(raw),
         "error": str(error),
     }
-    if isinstance(payload["key"], bytes):
-        payload["key"] = payload["key"].decode("utf-8", errors="replace")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as output:
-        output.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        output.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
 
 def _append_events(path: Path, events: list[dict[str, Any]]) -> None:
