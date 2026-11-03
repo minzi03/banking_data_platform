@@ -727,6 +727,46 @@ Author: [Name]
 
 ---
 
+## Governed Kafka consumer — bounded replay proof
+
+The governed online-transaction topic is validated against the checked-in registry before
+processing. The adapter uses manual Kafka commits, an optional SQLite processed-event ledger,
+and an optional JSONL output sink. The sink is a local proof side effect, not a production
+business write. Ledger, sink and Kafka offset are not one atomic transaction; this is
+at-least-once replay protection, not an exactly-once guarantee.
+
+Run the adapter only against the isolated merchant stack (`merchant_e2e_net`) and use a
+separate temporary directory for the ledger, output and DLQ files:
+
+```bash
+python scripts/governed_kafka_consumer.py \
+  --bootstrap kafka:9092 \
+  --topic postgresql.banking.digital_banking.online_transaction \
+  --group-id governed-proof-$(date +%s) \
+  --ledger /tmp/governed-events.db \
+  --output /tmp/governed-events.jsonl \
+  --dlq /tmp/governed-events.dlq.jsonl \
+  --max-messages 1 \
+  --max-empty-polls 3
+```
+
+Expected behavior for one valid fixture record:
+
+```text
+Processed 1 governed events from postgresql.banking.digital_banking.online_transaction
+```
+
+Re-running with the same ledger and a new consumer group must not append a second JSONL
+event; it should report zero newly processed governed events. Invalid records are appended
+to the DLQ with their original payload and Kafka topic/partition/offset/key/timestamp.
+
+The live proof is recorded in
+[`docs/evidence/governed-kafka-consumer-live.md`](docs/evidence/governed-kafka-consumer-live.md).
+The CLI's output-sink path remains pending live verification until an operator explicitly
+authorizes a write to the isolated topic.
+
+---
+
 ## CDC Consolidation — replay and reset
 
 Progress per target table is the last merged Iceberg snapshot of its Bronze CDC table
