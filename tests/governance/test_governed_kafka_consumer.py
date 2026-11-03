@@ -31,6 +31,23 @@ def test_decode_event_rejects_non_object():
         decode_event(b"[]")
 
 
+@pytest.mark.parametrize("raw", [b"[]", b'"text"', b"42", b"null"])
+def test_decode_event_rejects_every_json_non_object(raw):
+    with pytest.raises(ValueError, match="JSON object"):
+        decode_event(raw)
+
+
+def test_decode_event_rejects_undecodable_bytes():
+    with pytest.raises(UnicodeDecodeError):
+        decode_event(b"\xff\xfe\x00")
+
+
+def test_decode_event_reads_the_value_attribute_of_a_kafka_record():
+    event = _event()
+    record = types.SimpleNamespace(value=json.dumps(event).encode("utf-8"))
+    assert decode_event(record) == event
+
+
 def test_process_poll_runs_governed_boundary(tmp_path):
     ledger = ProcessedEventLedger(tmp_path / "events.db")
     received = []
