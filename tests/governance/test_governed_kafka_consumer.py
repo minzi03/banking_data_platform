@@ -204,6 +204,59 @@ def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
     assert "Processed 0 governed events" in capsys.readouterr().out
 
 
+def test_cli_bounds_invalid_record_routed_to_dlq(monkeypatch, tmp_path, capsys):
+    dlq = tmp_path / "invalid.jsonl"
+    committed = []
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {
+                object(): [
+                    types.SimpleNamespace(
+                        value=b"not-json",
+                        topic=TOPIC,
+                        partition=1,
+                        offset=9,
+                        key=b"bad",
+                    )
+                ]
+            }
+
+        def commit(self):
+            committed.append(True)
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    assert (
+        main(
+            [
+                "--group-id",
+                "test-group",
+                "--dlq",
+                str(dlq),
+                "--max-messages",
+                "1",
+            ]
+        )
+        == 0
+    )
+    assert committed == [True]
+    assert "Processed 0 governed events" in capsys.readouterr().out
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["topic"] == TOPIC
+    assert payload["partition"] == 1
+    assert payload["offset"] == 9
+
+
 def test_cli_rejects_negative_poll_bounds():
     with pytest.raises(SystemExit):
         main(["--group-id", "test-group", "--max-empty-polls", "-1"])
