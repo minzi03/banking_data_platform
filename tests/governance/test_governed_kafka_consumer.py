@@ -257,9 +257,10 @@ def test_cli_bounds_invalid_record_routed_to_dlq(monkeypatch, tmp_path, capsys):
     assert payload["offset"] == 9
 
 
-def test_cli_rejects_negative_poll_bounds():
+@pytest.mark.parametrize("option", ["--max-messages", "--max-empty-polls"])
+def test_cli_rejects_negative_poll_bounds(option):
     with pytest.raises(SystemExit):
-        main(["--group-id", "test-group", "--max-empty-polls", "-1"])
+        main(["--group-id", "test-group", option, "-1"])
 
 
 def test_cli_does_not_commit_when_side_effect_fails(monkeypatch, tmp_path):
