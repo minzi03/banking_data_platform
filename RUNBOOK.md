@@ -759,6 +759,13 @@ Processed 1 governed events from postgresql.banking.digital_banking.online_trans
 Re-running with the same ledger and a new consumer group must not append a second JSONL
 event; it should report zero newly processed governed events. Invalid records are appended
 to the DLQ with their original payload and Kafka topic/partition/offset/key/timestamp.
+Coordinates are read as data, never invoked: a record object whose attribute of that name is
+a method yields `null` instead of crashing the writer, and a value that no JSON encoder
+accepts is stored through its `repr()`. Quarantining a record must not fail.
+
+A record whose `event_id` was already processed with a different payload is also rejected
+into the DLQ (`Event ID reused with a different payload`); the ledger keeps the original
+fingerprint, so a conflicting re-send cannot overwrite processed state.
 
 The live proof is recorded in
 [`docs/evidence/governed-kafka-consumer-live.md`](docs/evidence/governed-kafka-consumer-live.md).
