@@ -84,6 +84,56 @@ def test_process_poll_without_dlq_preserves_failure():
         process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None)
 
 
+def test_process_poll_routes_reused_event_id_to_dlq(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    ledger = ProcessedEventLedger(tmp_path / "events.db")
+    original = _event()
+    conflicting = _event()
+    conflicting["payload"]["amount"] = 999999.99
+    try:
+        assert process_poll([original], TOPIC, REGISTRY, lambda events: None, ledger) == 1
+        records = [
+            types.SimpleNamespace(value=json.dumps(conflicting).encode("utf-8"), topic=TOPIC, partition=0, offset=5)
+        ]
+        assert process_poll(records, TOPIC, REGISTRY, lambda events: None, ledger, dlq) == 0
+        payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+        assert "different payload" in payload["error"]
+        assert payload["record"]["payload"]["amount"] == 999999.99
+        assert ledger.is_replay(TOPIC, original) is True
+    finally:
+        ledger.close()
+
+
+def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
+    order = []
+
+    def fake_process_poll(*args, **kwargs):
+        order.append("poll")
+        return 1
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=b"{}")]}
+
+        def commit(self):
+            order.append("commit")
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+    monkeypatch.setattr("scripts.governed_kafka_consumer.process_poll", fake_process_poll)
+
+    assert main(["--group-id", "test-group", "--max-messages", "1"]) == 0
+    assert order == ["poll", "commit"]
+
+
 def test_cli_fails_without_kafka_python(monkeypatch, capsys):
     monkeypatch.setitem(sys.modules, "kafka", None)
     assert main(["--group-id", "test-group"]) == 2
