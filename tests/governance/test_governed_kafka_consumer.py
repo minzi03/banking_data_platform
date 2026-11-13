@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.governed_kafka_consumer import decode_event, main, process_poll
+from scripts.governed_kafka_consumer import _append_events, decode_event, main, process_poll
 from scripts.processed_event_ledger import ProcessedEventLedger
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -158,6 +158,61 @@ def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
 
     assert main(["--group-id", "test-group", "--max-messages", "1"]) == 0
     assert order == ["poll", "commit"]
+
+
+def test_output_sink_appends_multiple_events_as_jsonl(tmp_path):
+    output = tmp_path / "nested" / "events.jsonl"
+    event = _event()
+    second = json.loads(json.dumps(event))
+    second["event_id"] = "evt-10002"
+    second["event_key"] = "transaction_id:10002"
+    _append_events(output, [event, second])
+    assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [event, second]
+
+
+def test_output_sink_appends_to_an_existing_jsonl_file(tmp_path):
+    output = tmp_path / "events.jsonl"
+    first = _event()
+    second = json.loads(json.dumps(first))
+    second["event_id"] = "evt-10002"
+    _append_events(output, [first])
+    _append_events(output, [second])
+    assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [first, second]
+
+
+def test_output_sink_creates_parent_directories(tmp_path):
+    output = tmp_path / "deep" / "nested" / "events.jsonl"
+    _append_events(output, [_event()])
+    assert output.exists()
+    assert len(output.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_output_sink_preserves_unicode(tmp_path):
+    output = tmp_path / "events.jsonl"
+    event = _event()
+    event["source_system"] = "ngân hàng"
+    _append_events(output, [event])
+    assert "ngân hàng" in output.read_text(encoding="utf-8")
+
+
+def test_process_poll_uses_the_same_output_boundary_for_multiple_events(tmp_path):
+    output = tmp_path / "events.jsonl"
+    event = _event()
+    second = json.loads(json.dumps(event))
+    second["event_id"] = "evt-10002"
+    second["event_key"] = "transaction_id:10002"
+    received = []
+    assert (
+        process_poll(
+            [json.dumps(event).encode("utf-8"), json.dumps(second).encode("utf-8")],
+            TOPIC,
+            REGISTRY,
+            lambda events: (received.extend(events), _append_events(output, events)),
+        )
+        == 2
+    )
+    assert received == [event, second]
+    assert len(output.read_text(encoding="utf-8").splitlines()) == 2
 
 
 def test_process_poll_isolates_a_bad_record_from_its_valid_neighbours(tmp_path):
