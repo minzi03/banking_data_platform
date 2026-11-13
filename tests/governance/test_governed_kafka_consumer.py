@@ -293,6 +293,33 @@ def test_cli_output_sink_and_ledger_suppress_replay(monkeypatch, tmp_path, capsy
     assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
 
 
+def test_cli_without_ledger_writes_the_same_event_on_every_run(monkeypatch, tmp_path):
+    output = tmp_path / "events.jsonl"
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+    arguments = ["--group-id", "test-group", "--output", str(output), "--max-messages", "1"]
+
+    assert main(arguments) == 0
+    assert main(arguments) == 0
+    assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event(), _event()]
+
+
 def test_cli_output_failure_leaves_the_ledger_untouched(monkeypatch, tmp_path):
     ledger_path = tmp_path / "events.db"
     output = tmp_path / "events.jsonl"
