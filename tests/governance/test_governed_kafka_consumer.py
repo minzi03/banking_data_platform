@@ -253,6 +253,19 @@ def test_cli_writes_accepted_events_after_processing(monkeypatch, tmp_path):
     assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
 
 
+def test_cli_same_event_in_different_topics_is_not_a_replay(tmp_path):
+    ledger = ProcessedEventLedger(tmp_path / "events.db")
+    event = _event()
+    other_topic = f"{TOPIC}.other"
+    try:
+        assert ledger.record(TOPIC, event) is True
+        assert ledger.is_replay(TOPIC, event) is True
+        assert ledger.is_replay(other_topic, event) is False
+        assert ledger.record(other_topic, event) is True
+    finally:
+        ledger.close()
+
+
 def test_cli_output_sink_and_ledger_suppress_replay(monkeypatch, tmp_path, capsys):
     output = tmp_path / "events.jsonl"
     ledger = tmp_path / "events.db"
