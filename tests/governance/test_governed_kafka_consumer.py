@@ -253,6 +253,23 @@ def test_cli_writes_accepted_events_after_processing(monkeypatch, tmp_path):
     assert [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] == [_event()]
 
 
+def test_ledger_replay_survives_consumer_restart(tmp_path):
+    ledger_path = tmp_path / "events.db"
+    event = _event()
+    first = ProcessedEventLedger(ledger_path)
+    try:
+        assert first.record(TOPIC, event) is True
+    finally:
+        first.close()
+
+    second = ProcessedEventLedger(ledger_path)
+    try:
+        assert second.is_replay(TOPIC, event) is True
+        assert second.record(TOPIC, event) is False
+    finally:
+        second.close()
+
+
 def test_cli_same_event_in_different_topics_is_not_a_replay(tmp_path):
     ledger = ProcessedEventLedger(tmp_path / "events.db")
     event = _event()
