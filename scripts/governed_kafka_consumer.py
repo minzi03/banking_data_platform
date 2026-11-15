@@ -76,6 +76,8 @@ def _write_dlq(path: Path, record: Any, error: Exception) -> None:
 
 def _append_events(path: Path, events: list[dict[str, Any]]) -> None:
     """Append governed events to a JSONL sink after validation and deduplication."""
+    if not events:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as output:
         for event in events:
