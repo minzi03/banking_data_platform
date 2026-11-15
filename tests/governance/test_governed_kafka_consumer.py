@@ -160,6 +160,29 @@ def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
     assert order == ["poll", "commit"]
 
 
+def test_cli_does_not_swallow_commit_failure(monkeypatch):
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            raise RuntimeError("commit failed")
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        main(["--group-id", "test-group", "--max-messages", "1"])
+
+
 def test_process_poll_isolates_a_bad_record_from_its_valid_neighbours(tmp_path):
     dlq = tmp_path / "dead.jsonl"
     ledger = ProcessedEventLedger(tmp_path / "events.db")
