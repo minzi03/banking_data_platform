@@ -480,6 +480,18 @@ def test_cli_output_failure_leaves_the_ledger_untouched(monkeypatch, tmp_path):
         ledger.close()
 
 
+def test_output_sink_propagates_write_failure(tmp_path, monkeypatch):
+    output = tmp_path / "events.jsonl"
+
+    class BrokenPath:
+        def open(self, *args, **kwargs):
+            raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "open", BrokenPath.open)
+    with pytest.raises(OSError, match="disk full"):
+        _append_events(output, [_event()])
+
+
 def test_output_sink_does_not_create_file_for_empty_events(tmp_path):
     output = tmp_path / "events.jsonl"
     _append_events(output, [])
