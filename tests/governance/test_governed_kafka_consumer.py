@@ -160,6 +160,36 @@ def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
     assert order == ["poll", "commit"]
 
 
+def test_cli_closes_consumer_when_processing_fails(monkeypatch):
+    closed = []
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            pass
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("processing failed")
+
+    monkeypatch.setattr("scripts.governed_kafka_consumer.process_poll", fail)
+    with pytest.raises(RuntimeError, match="processing failed"):
+        main(["--group-id", "test-group", "--max-messages", "1"])
+    assert closed == [True]
+
+
 def test_cli_does_not_swallow_commit_failure(monkeypatch):
     class FakeConsumer:
         def __init__(self, *args, **kwargs):
