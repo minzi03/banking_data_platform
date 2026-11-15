@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.governed_kafka_consumer import decode_event, main, process_poll
+from scripts.governed_kafka_consumer import _append_events, decode_event, main, process_poll
 from scripts.processed_event_ledger import ProcessedEventLedger
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -478,6 +478,49 @@ def test_cli_output_failure_leaves_the_ledger_untouched(monkeypatch, tmp_path):
         assert ledger.is_replay(TOPIC, _event()) is False
     finally:
         ledger.close()
+
+
+def test_output_sink_does_not_create_file_for_empty_events(tmp_path):
+    output = tmp_path / "events.jsonl"
+    _append_events(output, [])
+    assert not output.exists()
+
+
+def test_cli_empty_poll_does_not_create_output_file(monkeypatch, tmp_path, capsys):
+    output = tmp_path / "events.jsonl"
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def poll(self, timeout_ms):
+            return {}
+
+        def commit(self):
+            pytest.fail("empty poll must not commit")
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+
+    assert (
+        main(
+            [
+                "--group-id",
+                "test-group",
+                "--output",
+                str(output),
+                "--max-empty-polls",
+                "2",
+                "--timeout-ms",
+                "1",
+            ]
+        )
+        == 0
+    )
+    assert not output.exists()
+    assert "Processed 0 governed events" in capsys.readouterr().out
 
 
 def test_cli_stops_after_bounded_empty_polls(monkeypatch, capsys):
