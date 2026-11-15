@@ -160,6 +160,43 @@ def test_cli_commits_only_after_process_poll_returns(monkeypatch, tmp_path):
     assert order == ["poll", "commit"]
 
 
+def test_cli_closes_ledger_when_processing_fails(monkeypatch, tmp_path):
+    closed = []
+
+    class FakeConsumer:
+        def __init__(self, *args, **kwargs):
+            self._polled = False
+
+        def poll(self, timeout_ms):
+            if self._polled:
+                return {}
+            self._polled = True
+            return {object(): [types.SimpleNamespace(value=json.dumps(_event()).encode("utf-8"))]}
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    class TrackingLedger(ProcessedEventLedger):
+        def close(self):
+            closed.append(True)
+            super().close()
+
+    monkeypatch.setitem(sys.modules, "kafka", types.SimpleNamespace(KafkaConsumer=FakeConsumer))
+    monkeypatch.setattr("scripts.governed_kafka_consumer.ProcessedEventLedger", TrackingLedger)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("processing failed")
+
+    monkeypatch.setattr("scripts.governed_kafka_consumer.process_poll", fail)
+
+    with pytest.raises(RuntimeError, match="processing failed"):
+        main(["--group-id", "test-group", "--ledger", str(tmp_path / "events.db"), "--max-messages", "1"])
+    assert closed == [True]
+
+
 def test_cli_closes_consumer_when_processing_fails(monkeypatch):
     closed = []
 
