@@ -480,6 +480,19 @@ def test_cli_output_failure_leaves_the_ledger_untouched(monkeypatch, tmp_path):
         ledger.close()
 
 
+def test_dlq_write_propagates_write_failure(tmp_path, monkeypatch):
+    dlq = tmp_path / "dead.jsonl"
+    record = types.SimpleNamespace(value=b"not-json", topic=TOPIC, partition=0, offset=1)
+
+    class BrokenPath:
+        def open(self, *args, **kwargs):
+            raise OSError("dlq disk full")
+
+    monkeypatch.setattr(Path, "open", BrokenPath.open)
+    with pytest.raises(OSError, match="dlq disk full"):
+        process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq)
+
+
 def test_output_sink_propagates_write_failure(tmp_path, monkeypatch):
     output = tmp_path / "events.jsonl"
 
