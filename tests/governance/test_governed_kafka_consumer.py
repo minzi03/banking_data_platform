@@ -96,6 +96,21 @@ def test_process_poll_routes_schema_violation_to_dlq(tmp_path):
     assert payload["record"]["payload"]["currency"] == "USDD"
 
 
+def test_dlq_json_safe_converts_nested_non_json_values(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    record = types.SimpleNamespace(
+        value=b"not-json",
+        topic=TOPIC,
+        partition=0,
+        offset=1,
+        key={"raw": b"bad-\xff"},
+    )
+
+    assert process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["key"] == {"raw": "bad-�"}
+
+
 def test_dlq_decodes_non_utf8_key_with_replacement(tmp_path):
     dlq = tmp_path / "dead.jsonl"
     record = types.SimpleNamespace(value=b"not-json", topic=TOPIC, partition=0, offset=1, key=b"bad-\xff-key")
