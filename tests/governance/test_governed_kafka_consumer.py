@@ -96,6 +96,23 @@ def test_process_poll_routes_schema_violation_to_dlq(tmp_path):
     assert payload["record"]["payload"]["currency"] == "USDD"
 
 
+def test_dlq_preserves_json_safe_scalar_metadata(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    record = types.SimpleNamespace(
+        value=b"not-json",
+        topic=TOPIC,
+        partition=0,
+        offset=1,
+        key=123,
+        timestamp=None,
+    )
+
+    assert process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+    payload = json.loads(dlq.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["key"] == 123
+    assert payload["timestamp"] is None
+
+
 def test_dlq_preserves_kafka_timestamp_tuple(tmp_path):
     dlq = tmp_path / "dead.jsonl"
     record = types.SimpleNamespace(
