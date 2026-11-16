@@ -78,10 +78,10 @@ def _append_events(path: Path, events: list[dict[str, Any]]) -> None:
     """Append governed events to a JSONL sink after validation and deduplication."""
     if not events:
         return
+    lines = [json.dumps(event, ensure_ascii=False) + "\n" for event in events]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as output:
-        for event in events:
-            output.write(json.dumps(event, ensure_ascii=False) + "\n")
+        output.writelines(lines)
 
 
 def process_poll(
