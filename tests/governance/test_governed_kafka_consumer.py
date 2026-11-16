@@ -96,6 +96,20 @@ def test_process_poll_routes_schema_violation_to_dlq(tmp_path):
     assert payload["record"]["payload"]["currency"] == "USDD"
 
 
+def test_dlq_preserves_unicode_record_values(tmp_path):
+    dlq = tmp_path / "dead.jsonl"
+    event = _event()
+    event["payload"]["currency"] = "USDD"
+    event["source_system"] = "ngân hàng"
+    record = types.SimpleNamespace(value=json.dumps(event, ensure_ascii=False).encode("utf-8"), topic=TOPIC)
+
+    assert process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
+
+    text = dlq.read_text(encoding="utf-8")
+    assert "ngân hàng" in text
+    assert "\\u00e2n" not in text
+
+
 def test_dlq_write_survives_a_bare_record_without_coordinates(tmp_path):
     dlq = tmp_path / "dead.jsonl"
     assert process_poll([b"not-json"], TOPIC, REGISTRY, lambda events: None, dlq=dlq) == 0
