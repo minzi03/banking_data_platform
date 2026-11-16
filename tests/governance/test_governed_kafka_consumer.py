@@ -493,6 +493,32 @@ def test_dlq_write_propagates_write_failure(tmp_path, monkeypatch):
         process_poll([record], TOPIC, REGISTRY, lambda events: None, dlq=dlq)
 
 
+def test_output_sink_writes_a_batch_with_one_writelines_call(tmp_path, monkeypatch):
+    output = tmp_path / "events.jsonl"
+    calls = []
+    events = [_event(), _event()]
+    original_open = Path.open
+
+    class TrackingFile:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def writelines(self, lines):
+            calls.append(list(lines))
+
+    def tracking_open(self, *args, **kwargs):
+        return TrackingFile()
+
+    monkeypatch.setattr(Path, "open", tracking_open)
+    _append_events(output, events)
+    assert len(calls) == 1
+    assert len(calls[0]) == 2
+    monkeypatch.setattr(Path, "open", original_open)
+
+
 def test_output_sink_propagates_write_failure(tmp_path, monkeypatch):
     output = tmp_path / "events.jsonl"
 
