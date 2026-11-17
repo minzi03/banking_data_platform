@@ -206,6 +206,13 @@ docker exec banking-airflow-scheduler sh -c \
   'cd /opt/project && python scripts/pipeline_run_report.py --stale-minutes 120 --json --limit 100'
 ```
 
+Check the latest successful audit row for each DAG:
+
+```bash
+docker exec banking-airflow-scheduler sh -c \
+  'cd /opt/project && python scripts/pipeline_run_report.py --latest-success --json --limit 100'
+```
+
 A `RUNNING` row is not automatically a stuck-run alert. Compare its age with
 the DAG timeout/schedule and inspect the Airflow task log before escalation. The
 report is read-only and does not mark a run failed or change a watermark.
