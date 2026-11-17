@@ -30,6 +30,21 @@ outcomes:
   - GROSS_AMOUNT_MISMATCH
   - TXN_COUNT_MISMATCH
   - DUPLICATE_SETTLEMENT_KEY
+business_status_map:
+  PASS: MATCHED
+  MISSING_SETTLEMENT: MISSING
+  MISSING_TRANSACTION: MISSING
+  GROSS_AMOUNT_MISMATCH: MISMATCH
+  TXN_COUNT_MISMATCH: MISMATCH
+  DUPLICATE_SETTLEMENT_KEY: DUPLICATE
+legacy_gate_map:
+  MATCHED: PASS
+  MISMATCH: FAIL
+  MISSING: FAIL
+  DUPLICATE: FAIL
+  PENDING: WARN
+  AMBIGUOUS: WARN
+  NOT_COMPARABLE: WARN
 limitations:
   - Feed does not contain transaction_id, so this is aggregate reconciliation.
   - Refund and fee reconciliation require a feed with refund and fee allocation keys.
