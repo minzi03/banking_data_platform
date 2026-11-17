@@ -9,6 +9,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from ops.reconciliation_contract import with_reconciliation_status
+
 KEY = ("merchant_id", "settlement_date", "currency")
 METRICS = ("gross_amount", "txn_count")
 
@@ -65,14 +67,16 @@ def reconcile(
             outcome = "PASS"
 
         results.append(
-            {
-                "merchant_id": key[0],
-                "settlement_date": key[1],
-                "currency": key[2],
-                "outcome": outcome,
-                "transaction": transaction,
-                "settlement": settlement,
-            }
+            with_reconciliation_status(
+                {
+                    "merchant_id": key[0],
+                    "settlement_date": key[1],
+                    "currency": key[2],
+                    "outcome": outcome,
+                    "transaction": transaction,
+                    "settlement": settlement,
+                }
+            )
         )
     return results
 
@@ -140,7 +144,7 @@ def to_reconciliation_log_rows(results: list[dict[str, Any]], cob_dt: str, toler
                 "batch_value": float(source_amount),
                 "delta": float(settled_amount - source_amount),
                 "tolerance": float(tolerance),
-                "check_status": "PASS" if result["outcome"] == "PASS" else "FAIL",
+                "check_status": result.get("check_status", "PASS" if result["outcome"] == "PASS" else "FAIL"),
                 "details": f"outcome={result['outcome']} transaction={transaction} settlement={settlement}",
                 "cob_dt": cob_dt,
             }

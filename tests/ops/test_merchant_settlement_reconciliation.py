@@ -25,6 +25,8 @@ def settlement(**overrides):
 def test_matching_aggregate_passes():
     result = reconcile([BASE_TXN], [settlement()])
     assert result[0]["outcome"] == "PASS"
+    assert result[0]["status"] == "MATCHED"
+    assert result[0]["check_status"] == "PASS"
 
 
 def test_amount_mismatch_is_fail_closed():
