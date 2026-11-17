@@ -213,6 +213,23 @@ Do not run a full EOD reconciliation merely to migrate the schema. The migration
 adds the column with `NOT_COMPARABLE` for historical rows; it does not infer
 historical business outcomes.
 
+Use the read-only report for incident triage or a bounded daily review:
+
+```bash
+# Human-readable exceptions for one business date.
+docker exec banking-airflow-scheduler sh -c \
+  'cd /opt/project && python scripts/reconciliation_report.py --cob-dt 2026-10-18 --status MISMATCH --limit 50'
+
+# Machine-readable output for an incident attachment.
+docker exec banking-airflow-scheduler sh -c \
+  'cd /opt/project && python scripts/reconciliation_report.py --cob-dt 2026-10-18 --json --limit 200'
+```
+
+The report only reads `opslakehouse.reconciliation_log`; it does not acknowledge,
+resolve or mutate exceptions. Do not treat an empty report as proof that a source,
+settlement feed or business date was complete unless the reconciliation DAG itself
+also finished successfully.
+
 ### 6. Check Lineage
 
 `opslakehouse.lineage_log` holds the table-level edges that Silver/Gold jobs
