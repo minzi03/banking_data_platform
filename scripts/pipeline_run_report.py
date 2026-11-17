@@ -20,11 +20,18 @@ def _json_value(value: Any) -> Any:
     return value
 
 
-def build_query(status: str | None = None, dag_id: str | None = None, limit: int = 50) -> tuple[str, list[Any]]:
+def build_query(
+    status: str | None = None,
+    dag_id: str | None = None,
+    stale_minutes: int | None = None,
+    limit: int = 50,
+) -> tuple[str, list[Any]]:
     if limit < 1:
         raise ValueError("limit must be positive")
     if status is not None and status not in STATUSES:
         raise ValueError(f"unknown pipeline status: {status}")
+    if stale_minutes is not None and stale_minutes < 1:
+        raise ValueError("stale_minutes must be positive")
 
     clauses: list[str] = []
     params: list[Any] = []
@@ -34,6 +41,9 @@ def build_query(status: str | None = None, dag_id: str | None = None, limit: int
     if dag_id is not None:
         clauses.append("dag_id = %s")
         params.append(dag_id)
+    if stale_minutes is not None:
+        clauses.append("status = 'RUNNING' AND started_at < NOW() - (%s * INTERVAL '1 minute')")
+        params.append(stale_minutes)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     query = (
         "SELECT dag_id, task_id, status, cob_dt, rows_processed, execution_time_s, "
@@ -60,12 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--status", choices=sorted(STATUSES))
     parser.add_argument("--dag-id")
+    parser.add_argument("--stale-minutes", type=int, help="Show RUNNING rows older than N minutes")
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
 
     try:
-        query, params = build_query(args.status, args.dag_id, args.limit)
+        query, params = build_query(args.status, args.dag_id, args.stale_minutes, args.limit)
         import psycopg2
 
         connection = psycopg2.connect(
