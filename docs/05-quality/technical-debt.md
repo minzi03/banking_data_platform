@@ -1950,13 +1950,14 @@ topic registry, validator CLI, idempotency-key declaration, compatibility tests,
 and CI governance gates. Runtime Schema Registry deployment, producer/consumer rollout, and exactly-once
 side-effect processing remain open by design.
 
-**Governed event follow-up (2026-11-02):** an isolated Schema Registry registration/read-back proof exists,
+**Governed event follow-up (2026-11-17):** an isolated Schema Registry registration/read-back proof exists,
 plus a validating producer adapter, batch deduplication, a persistent SQLite processed-event ledger, and a
 Kafka consumer adapter with DLQ coordinate preservation and an optional JSONL output sink. The adapter records
-events only after its side-effect callback returns and commits offsets after processing. A replay regression
-test proves the sink is not repeated for an identical event in the same ledger scope. The ledger, output file,
-and Kafka offset are not one atomic transaction; no serializer-based wire compatibility is exercised, and the
-new output-sink path has not yet been live-verified against Kafka, so exactly-once remains unclaimed.
+events only after its side-effect callback returns and commits offsets after processing. A live isolated proof
+published the checked-in fixture, wrote one accepted event to JSONL and one ledger row, then replayed it with a
+second consumer group and produced zero new output; DLQ remained empty. The ledger, output file, and Kafka offset
+are not one atomic transaction; no serializer-based wire compatibility is exercised, and exactly-once remains
+unclaimed. Full evidence: [governed Kafka consumer live proof](../evidence/governed-kafka-consumer-live.md).
 
 ---
 
