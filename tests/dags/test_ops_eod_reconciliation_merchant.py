@@ -6,6 +6,15 @@ ROOT = Path(__file__).resolve().parents[2]
 DAG = ROOT / "airflow" / "dags" / "ops" / "ops_eod_reconciliation_dag.py"
 
 
+def test_eod_dag_has_pipeline_audit_lifecycle_tasks():
+    text = DAG.read_text(encoding="utf-8")
+    assert "audit_pipeline_running" in text
+    assert 'op_kwargs={"status": "RUNNING"}' in text
+    assert "audit_pipeline_success" in text
+    assert 'op_kwargs={"status": "SUCCESS"}' in text
+    assert "pipeline_run_audit" in text
+
+
 def test_eod_dag_waits_for_online_transaction_consolidation():
     text = DAG.read_text(encoding="utf-8")
     assert "wait_cdc_online_transaction_consolidation" in text
