@@ -13,6 +13,9 @@ def test_eod_dag_has_pipeline_audit_lifecycle_tasks():
     assert "audit_pipeline_success" in text
     assert 'op_kwargs={"status": "SUCCESS"}' in text
     assert "pipeline_run_audit" in text
+    assert "audit_pipeline_failed" in text
+    assert 'op_kwargs={"status": "FAILED"}' in text
+    assert 'trigger_rule="one_failed"' in text
 
 
 def test_eod_dag_waits_for_online_transaction_consolidation():

@@ -146,6 +146,13 @@ audit_completed = PythonOperator(
     trigger_rule="all_success",
     dag=dag,
 )
+audit_failed = PythonOperator(
+    task_id="audit_pipeline_failed",
+    python_callable=audit_run,
+    op_kwargs={"status": "FAILED"},
+    trigger_rule="one_failed",
+    dag=dag,
+)
 
 # ---------------------------------------------------------------------------
 # Flag tasks
@@ -173,4 +180,5 @@ reconcile = BashOperator(
     >> end
     >> audit_completed
 )
+[reconcile, merchant_reconcile, reconcile_settlement] >> audit_failed
 wait_sftp_settlement >> reconcile_settlement >> end
