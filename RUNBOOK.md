@@ -178,6 +178,41 @@ The first is idempotent (`CREATE ... IF NOT EXISTS`). The second recreates the
 worker so it picks up `POSTGRES_USER`/`POSTGRES_PASSWORD`; without them the job
 stops with an explicit error instead of falling back to a password in the code.
 
+### 5c. Reconciliation business outcomes
+
+`opslakehouse.reconciliation_log` preserves the legacy `check_status` gate
+(`PASS`/`FAIL`/`WARN`) and additionally records `reconciliation_status` for the
+business result. The business status does not replace gate semantics:
+
+```text
+MATCHED / MISMATCH / MISSING / DUPLICATE / PENDING / AMBIGUOUS / NOT_COMPARABLE
+```
+
+Inspect the latest results:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT cob_dt, entity, metric_name, reconciliation_status, check_status, stream_value, batch_value, delta, tolerance, details FROM opslakehouse.reconciliation_log ORDER BY checked_at DESC LIMIT 50"'
+```
+
+Only actionable exceptions:
+
+```bash
+docker exec banking-postgres sh -c 'psql -U "$POSTGRES_USER" -d banking_db -c "SELECT cob_dt, entity, metric_name, reconciliation_status, check_status, delta, tolerance, details FROM opslakehouse.reconciliation_log WHERE reconciliation_status <> '\''MATCHED'\'' ORDER BY checked_at DESC LIMIT 50"'
+```
+
+**Existing stacks need the additive column once.** The DDL is idempotent; apply
+it to the already-running PostgreSQL container, then recreate the Spark worker so
+the writer's new JDBC schema is deployed:
+
+```bash
+sed -n '/^-- Table: reconciliation_log/,/^COMMENT ON TABLE opslakehouse.reconciliation_log/p' docker/init_postgres/00_extensions.sql | docker exec -i banking-postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d banking_db'
+docker compose -f docker/docker-compose.yml up -d --no-deps --force-recreate spark-worker-1
+```
+
+Do not run a full EOD reconciliation merely to migrate the schema. The migration
+adds the column with `NOT_COMPARABLE` for historical rows; it does not infer
+historical business outcomes.
+
 ### 6. Check Lineage
 
 `opslakehouse.lineage_log` holds the table-level edges that Silver/Gold jobs

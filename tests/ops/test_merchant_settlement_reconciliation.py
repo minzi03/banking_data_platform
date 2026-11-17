@@ -63,5 +63,6 @@ def test_result_maps_to_existing_reconciliation_log_schema():
     result = reconcile([BASE_TXN], [settlement(gross_amount="9999.00")])
     rows = to_reconciliation_log_rows(result, "2026-10-18", Decimal("0.00"))
     assert rows[0]["check_status"] == "FAIL"
+    assert rows[0]["reconciliation_status"] == "MISMATCH"
     assert rows[0]["metric_name"] == "merchant_settlement.gross_amount_mismatch"
     assert rows[0]["cob_dt"] == "2026-10-18"

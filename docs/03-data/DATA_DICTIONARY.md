@@ -8,7 +8,7 @@
 >
 > Sinh lại: `py -3 scripts/generate_data_dictionary.py`
 
-**102 bảng · 1425 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
+**102 bảng · 1426 cột · 25 bảng có data contract · 38 cột nghi chứa PII**
 
 ## Mục lục
 
@@ -21,7 +21,7 @@
 | [card_crm](#card_crm) | 3 | 42 |
 | [core_banking](#core_banking) | 14 | 176 |
 | [digital_banking](#digital_banking) | 7 | 70 |
-| [opslakehouse](#opslakehouse) | 7 | 66 |
+| [opslakehouse](#opslakehouse) | 7 | 67 |
 
 ---
 
@@ -2571,7 +2571,8 @@ _Chưa có data contract trong `governance/datasets/`._
 | `batch_value` | `NUMERIC` |  | giá trị từ đường batch |
 | `delta` | `NUMERIC` |  | stream - batch |
 | `tolerance` | `NUMERIC` |  | ngưỡng cho phép (tuyệt đối) |
-| `check_status` | `VARCHAR(20)` |  | PASS / FAIL / WARN |
+| `check_status` | `VARCHAR(20)` |  | PASS / FAIL / WARN (legacy gate) |
+| `reconciliation_status` | `VARCHAR(24)` |  | business outcome |
 | `details` | `TEXT` |  |  |
 | `cob_dt` | `DATE` |  |  |
 | `checked_at` | `TIMESTAMP` |  |  |

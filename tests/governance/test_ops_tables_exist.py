@@ -56,11 +56,37 @@ REFERENCED = _referenced()
 CREATED = _created()
 
 
+def test_reconciliation_business_status_is_initialized_and_written():
+    ddl = (REPO_ROOT / "docker" / "init_postgres" / "00_extensions.sql").read_text(encoding="utf-8")
+    writer = (REPO_ROOT / "code_etl" / "shared" / "ops" / "eod_reconciliation.py").read_text(encoding="utf-8")
+
+    assert "ADD COLUMN IF NOT EXISTS reconciliation_status VARCHAR(24)" in ddl
+    for status in (
+        "MATCHED",
+        "MISMATCH",
+        "MISSING",
+        "DUPLICATE",
+        "PENDING",
+        "AMBIGUOUS",
+        "NOT_COMPARABLE",
+    ):
+        assert f"'{status}'" in ddl
+    assert 'reconciliation_status=r.get("reconciliation_status", "NOT_COMPARABLE")' in writer
+    assert 'StructField("reconciliation_status", StringType())' in writer
+
+
+def test_reconciliation_dictionary_includes_business_status():
+    dictionary = (REPO_ROOT / "docs" / "03-data" / "DATA_DICTIONARY.md").read_text(encoding="utf-8")
+    section = dictionary.split("### `opslakehouse.reconciliation_log`", maxsplit=1)[1].split("### `", maxsplit=1)[0]
+    assert "`reconciliation_status`" in section
+
+
 def test_inputs_are_found():
     """Guard chống pass rỗng."""
     assert len(REFERENCED) >= 5, REFERENCED
     assert len(CREATED) >= 5, CREATED
     assert "flag_job_etl" in REFERENCED and "flag_job_etl" in CREATED
+    assert "reconciliation_log" in REFERENCED and "reconciliation_log" in CREATED
 
 
 @pytest.mark.parametrize("table", sorted(REFERENCED))

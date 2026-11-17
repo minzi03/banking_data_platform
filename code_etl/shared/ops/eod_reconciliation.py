@@ -207,6 +207,7 @@ def reconcile_merchant_transactions(spark, cob_dt: str, tolerance: float = 0.0) 
                     "delta": stream_value - batch_value,
                     "tolerance": tolerance,
                     "check_status": status,
+                    "reconciliation_status": "MATCHED" if status == "PASS" else "MISMATCH",
                     "details": (
                         f"source={source_value} batch={batch_value} stream={stream_value} "
                         f"merchant_id={merchant_id} channel={channel} currency={currency}"
@@ -322,6 +323,7 @@ def reconcile_one(spark, spec: dict[str, str], cob_dt: str, tolerance: float) ->
                 "delta": delta,
                 "tolerance": tolerance,
                 "check_status": status,
+                "reconciliation_status": "MATCHED" if status == "PASS" else "MISMATCH",
                 "details": (
                     f"{entity}.{check_name}: stream={stream_value} batch={batch_value} "
                     f"delta={delta} tolerance={tolerance}"
@@ -363,6 +365,7 @@ def _reconcile_control_total(spark, spec: dict[str, str], cob_dt: str, tolerance
             "delta": delta,
             "tolerance": tolerance,
             "check_status": status,
+            "reconciliation_status": "MATCHED" if status == "PASS" else "MISMATCH",
             "details": (
                 f"{entity}.balance_control_total: source={source_value} batch={batch_value} "
                 f"delta={delta} tolerance={tolerance}"
@@ -422,6 +425,7 @@ def write_results_to_pg(spark, results: list[dict[str, Any]], cob_dt: str) -> No
             delta=float(r["delta"]),
             tolerance=float(r["tolerance"]),
             check_status=r["check_status"],
+            reconciliation_status=r.get("reconciliation_status", "NOT_COMPARABLE"),
             details=r["details"],
             cob_dt=datetime.datetime.strptime(cob_dt, "%Y-%m-%d").date(),
         )
@@ -436,6 +440,7 @@ def write_results_to_pg(spark, results: list[dict[str, Any]], cob_dt: str) -> No
             StructField("delta", DoubleType()),
             StructField("tolerance", DoubleType()),
             StructField("check_status", StringType()),
+            StructField("reconciliation_status", StringType()),
             StructField("details", StringType()),
             StructField("cob_dt", DateType()),
         ]

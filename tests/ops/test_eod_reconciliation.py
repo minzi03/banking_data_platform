@@ -71,6 +71,87 @@ def test_merchant_metric_sql_uses_same_cohort():
     assert "refund_flag = 1" in query
 
 
+def test_write_results_spark_schema_and_rows_include_business_status():
+    results = [
+        {
+            "metric_name": "account.count",
+            "entity": "account",
+            "stream_value": 10.0,
+            "batch_value": 10.0,
+            "delta": 0.0,
+            "tolerance": 0.0,
+            "check_status": "PASS",
+            "reconciliation_status": "MATCHED",
+            "details": "ok",
+            "cob_dt": "2025-12-31",
+        }
+    ]
+    spark = MagicMock()
+    captured_rows = []
+
+    class Field:
+        def __init__(self, name, data_type):
+            self.name = name
+            self.data_type = data_type
+
+    class Schema:
+        def __init__(self, fields):
+            self.fields = fields
+
+    types_module = type(
+        "Types",
+        (),
+        {
+            "DateType": staticmethod(lambda: "date"),
+            "DoubleType": staticmethod(lambda: "double"),
+            "StringType": staticmethod(lambda: "string"),
+            "StructField": Field,
+            "StructType": Schema,
+        },
+    )()
+
+    def row_factory(**values):
+        captured_rows.append(values)
+        return values
+
+    sql_module = type(
+        "Sql",
+        (),
+        {"Row": staticmethod(row_factory), "types": types_module},
+    )()
+    pyspark_module = type("Pyspark", (), {"sql": sql_module})()
+    with (
+        patch.dict("os.environ", {"POSTGRES_USER": "test", "POSTGRES_PASSWORD": "test"}),
+        patch.object(_imod, "JDBC_URL", "jdbc:test"),
+        patch.object(_imod, "RECON_LOG_TABLE", "opslakehouse.reconciliation_log"),
+        patch.dict(
+            sys.modules, {"pyspark": pyspark_module, "pyspark.sql": sql_module, "pyspark.sql.types": types_module}
+        ),
+    ):
+        _imod.write_results_to_pg(spark, results, "2025-12-31")
+
+    assert captured_rows[0]["reconciliation_status"] == "MATCHED"
+    schema_fields = [field.name for field in spark.createDataFrame.call_args.kwargs["schema"].fields]
+    assert "reconciliation_status" in schema_fields
+
+
+def test_merchant_reconciliation_rows_carry_business_status():
+    spark = MagicMock()
+    aggregate = {
+        "merchant_id": 1,
+        "payment_channel": "QR",
+        "currency": "VND",
+        "success_count": 2,
+        "gross_amount": 100,
+        "refund_count": 0,
+    }
+    spark.sql.return_value.collect.side_effect = [[aggregate], [aggregate]]
+    with patch.object(_imod, "_read_source_rows", return_value=[aggregate]):
+        output = _imod.reconcile_merchant_transactions(spark, "2025-12-31")
+    assert output
+    assert all(row["reconciliation_status"] == "MATCHED" for row in output)
+
+
 def test_metric_map_preserves_merchant_channel_currency_and_defaults():
     rows = [
         {
@@ -214,6 +295,7 @@ class TestReconcileOne:
         results = self._run(source=100, bronze=100, batch=100)
         first = results[0]
         assert first["delta"] == 0
+        assert first["reconciliation_status"] == "MATCHED"
         assert first["cob_dt"] == "2025-12-31"
 
 
