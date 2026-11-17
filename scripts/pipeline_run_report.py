@@ -24,12 +24,15 @@ def build_query(
     status: str | None = None,
     dag_id: str | None = None,
     stale_minutes: int | None = None,
+    latest_success: bool = False,
     limit: int = 50,
 ) -> tuple[str, list[Any]]:
     if limit < 1:
         raise ValueError("limit must be positive")
     if status is not None and status not in STATUSES:
         raise ValueError(f"unknown pipeline status: {status}")
+    if latest_success and status is not None:
+        raise ValueError("latest_success cannot be combined with status")
     if stale_minutes is not None and stale_minutes < 1:
         raise ValueError("stale_minutes must be positive")
 
@@ -44,12 +47,21 @@ def build_query(
     if stale_minutes is not None:
         clauses.append("status = 'RUNNING' AND started_at < NOW() - (%s * INTERVAL '1 minute')")
         params.append(stale_minutes)
+    if latest_success:
+        clauses.append("status = 'SUCCESS'")
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    query = (
-        "SELECT dag_id, task_id, status, cob_dt, rows_processed, execution_time_s, "
-        "error_message, started_at, completed_at "
-        f"FROM {TABLE}{where} ORDER BY started_at DESC LIMIT %s"
-    )
+    if latest_success:
+        query = (
+            "SELECT DISTINCT ON (dag_id) dag_id, task_id, status, cob_dt, rows_processed, execution_time_s, "
+            "error_message, started_at, completed_at "
+            f"FROM {TABLE}{where} ORDER BY dag_id, started_at DESC LIMIT %s"
+        )
+    else:
+        query = (
+            "SELECT dag_id, task_id, status, cob_dt, rows_processed, execution_time_s, "
+            "error_message, started_at, completed_at "
+            f"FROM {TABLE}{where} ORDER BY started_at DESC LIMIT %s"
+        )
     params.append(limit)
     return query, params
 
@@ -71,12 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--status", choices=sorted(STATUSES))
     parser.add_argument("--dag-id")
     parser.add_argument("--stale-minutes", type=int, help="Show RUNNING rows older than N minutes")
+    parser.add_argument("--latest-success", action="store_true", help="Show the latest SUCCESS row per DAG")
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
 
     try:
-        query, params = build_query(args.status, args.dag_id, args.stale_minutes, args.limit)
+        query, params = build_query(args.status, args.dag_id, args.stale_minutes, args.latest_success, args.limit)
         import psycopg2
 
         connection = psycopg2.connect(

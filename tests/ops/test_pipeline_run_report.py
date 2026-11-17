@@ -17,6 +17,18 @@ def test_build_query_parameterizes_status_and_dag():
     assert "FAILED" not in query
 
 
+def test_build_query_returns_latest_success_per_dag():
+    query, params = build_query(latest_success=True, limit=10)
+    assert "DISTINCT ON (dag_id)" in query
+    assert "status = 'SUCCESS'" in query
+    assert params == [10]
+
+
+def test_build_query_rejects_latest_success_with_status():
+    with pytest.raises(ValueError, match="cannot be combined"):
+        build_query(status="FAILED", latest_success=True)
+
+
 def test_build_query_filters_stale_running_rows():
     query, params = build_query(stale_minutes=30, limit=10)
     assert "status = 'RUNNING'" in query
