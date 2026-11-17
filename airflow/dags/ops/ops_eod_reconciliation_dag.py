@@ -15,14 +15,41 @@ from datetime import timedelta
 import pendulum
 from cob_dt import COB_DT
 from etl_flag import make_end_flag_task, make_start_flag_task, upstream_success_sql
+from pipeline_run_audit import PipelineRun, connect_from_env, insert_run
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
 DAG_ID = "ops_eod_reconciliation_dag"
 APPLICATION_PATH = "/opt/project/code_etl/shared/ops/eod_reconciliation.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
+
+
+def audit_run(status: str, **context) -> None:
+    """Persist one DAG lifecycle row without exposing credentials or row data."""
+    task_instance = context["task_instance"]
+    start = task_instance.start_date or pendulum.now("Asia/Ho_Chi_Minh")
+    completed = pendulum.now("Asia/Ho_Chi_Minh")
+    connection = connect_from_env()
+    try:
+        insert_run(
+            connection,
+            PipelineRun(
+                dag_id=DAG_ID,
+                task_id=task_instance.task_id,
+                status=status,
+                cob_dt=pendulum.parse(COB_DT).date(),
+                execution_time_s=max((completed - start).total_seconds(), 0),
+                error_message=str(context.get("exception")) if status == "FAILED" else None,
+                started_at=start,
+                completed_at=completed,
+            ),
+        )
+    finally:
+        connection.close()
+
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -104,6 +131,23 @@ reconcile_settlement = BashOperator(
 )
 
 # ---------------------------------------------------------------------------
+# Audit lifecycle tasks
+# ---------------------------------------------------------------------------
+audit_started = PythonOperator(
+    task_id="audit_pipeline_running",
+    python_callable=audit_run,
+    op_kwargs={"status": "RUNNING"},
+    dag=dag,
+)
+audit_completed = PythonOperator(
+    task_id="audit_pipeline_success",
+    python_callable=audit_run,
+    op_kwargs={"status": "SUCCESS"},
+    trigger_rule="all_success",
+    dag=dag,
+)
+
+# ---------------------------------------------------------------------------
 # Flag tasks
 # ---------------------------------------------------------------------------
 start = make_start_flag_task("start", DAG_ID, "ops", dag, cob_dt=COB_DT)
@@ -121,5 +165,12 @@ reconcile = BashOperator(
 # ---------------------------------------------------------------------------
 # Task Flow
 # ---------------------------------------------------------------------------
-[wait_silver, wait_cdc_online_transaction] >> start >> [reconcile, merchant_reconcile] >> end
+(
+    [wait_silver, wait_cdc_online_transaction]
+    >> audit_started
+    >> start
+    >> [reconcile, merchant_reconcile]
+    >> end
+    >> audit_completed
+)
 wait_sftp_settlement >> reconcile_settlement >> end
