@@ -22,6 +22,15 @@ def settlement(**overrides):
     return row
 
 
+def test_reconciliation_results_are_deterministically_sorted():
+    first = settlement(merchant_id=900002, currency="USD")
+    results = reconcile([BASE_TXN, first], [BASE_TXN, first])
+    assert [(row["merchant_id"], row["currency"]) for row in results] == [
+        (900001, "VND"),
+        (900002, "USD"),
+    ]
+
+
 def test_matching_aggregate_passes():
     result = reconcile([BASE_TXN], [settlement()])
     assert result[0]["outcome"] == "PASS"
