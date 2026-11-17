@@ -33,6 +33,27 @@ def test_aggregate_reconciliation_key_and_metrics_are_explicit():
     assert contract["matching_rules"]["txn_count_tolerance"] == 0
 
 
+def test_business_status_and_legacy_gate_maps_match_shared_contract():
+    contract = load_contract()
+    assert contract["business_status_map"] == {
+        "PASS": "MATCHED",
+        "MISSING_SETTLEMENT": "MISSING",
+        "MISSING_TRANSACTION": "MISSING",
+        "GROSS_AMOUNT_MISMATCH": "MISMATCH",
+        "TXN_COUNT_MISMATCH": "MISMATCH",
+        "DUPLICATE_SETTLEMENT_KEY": "DUPLICATE",
+    }
+    assert contract["legacy_gate_map"] == {
+        "MATCHED": "PASS",
+        "MISMATCH": "FAIL",
+        "MISSING": "FAIL",
+        "DUPLICATE": "FAIL",
+        "PENDING": "WARN",
+        "AMBIGUOUS": "WARN",
+        "NOT_COMPARABLE": "WARN",
+    }
+
+
 def test_mismatch_and_missing_outcomes_fail_closed():
     contract = load_contract()
     outcomes = set(contract["outcomes"])
