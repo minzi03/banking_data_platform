@@ -145,6 +145,7 @@ def to_reconciliation_log_rows(results: list[dict[str, Any]], cob_dt: str, toler
                 "delta": float(settled_amount - source_amount),
                 "tolerance": float(tolerance),
                 "check_status": result.get("check_status", "PASS" if result["outcome"] == "PASS" else "FAIL"),
+                "reconciliation_status": result.get("status"),
                 "details": f"outcome={result['outcome']} transaction={transaction} settlement={settlement}",
                 "cob_dt": cob_dt,
             }

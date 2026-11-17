@@ -113,13 +113,42 @@ CREATE TABLE IF NOT EXISTS opslakehouse.reconciliation_log (
     batch_value     NUMERIC,                    -- giá trị từ đường batch
     delta           NUMERIC,                    -- stream - batch
     tolerance       NUMERIC,                    -- ngưỡng cho phép (tuyệt đối)
-    check_status    VARCHAR(20)    NOT NULL,   -- PASS / FAIL / WARN
+    check_status    VARCHAR(20)    NOT NULL,   -- PASS / FAIL / WARN (legacy gate)
+    reconciliation_status VARCHAR(24) NOT NULL DEFAULT 'NOT_COMPARABLE', -- business outcome
     details         TEXT,
     cob_dt          DATE           NOT NULL,
     checked_at      TIMESTAMP      NOT NULL DEFAULT NOW(),
     --
-    CONSTRAINT chk_recon_status CHECK (check_status IN ('PASS', 'FAIL', 'WARN'))
+    CONSTRAINT chk_recon_status CHECK (check_status IN ('PASS', 'FAIL', 'WARN')),
+    CONSTRAINT chk_reconciliation_business_status CHECK (
+        reconciliation_status IN (
+            'MATCHED', 'MISMATCH', 'MISSING', 'DUPLICATE',
+            'PENDING', 'AMBIGUOUS', 'NOT_COMPARABLE'
+        )
+    )
 );
+
+-- Existing developer stacks may already have this table from an earlier init.
+-- Keep the legacy status column and readers intact while adding the business result.
+ALTER TABLE opslakehouse.reconciliation_log
+    ADD COLUMN IF NOT EXISTS reconciliation_status VARCHAR(24) NOT NULL DEFAULT 'NOT_COMPARABLE';
+
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_reconciliation_business_status'
+          AND conrelid = 'opslakehouse.reconciliation_log'::regclass
+    ) THEN
+        ALTER TABLE opslakehouse.reconciliation_log
+            ADD CONSTRAINT chk_reconciliation_business_status CHECK (
+                reconciliation_status IN (
+                    'MATCHED', 'MISMATCH', 'MISSING', 'DUPLICATE',
+                    'PENDING', 'AMBIGUOUS', 'NOT_COMPARABLE'
+                )
+            );
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_reconciliation_entity_cobdt
     ON opslakehouse.reconciliation_log (entity, cob_dt);
