@@ -1,5 +1,7 @@
 # Banking Data Platform
 
+[Tiếng Việt](README.vi.md)
+
 <p align="center">
   <strong>End-to-End Batch & Near-Real-Time Lakehouse Architecture for Banking Analytics</strong>
 </p>
