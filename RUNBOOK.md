@@ -178,6 +178,31 @@ The first is idempotent (`CREATE ... IF NOT EXISTS`). The second recreates the
 worker so it picks up `POSTGRES_USER`/`POSTGRES_PASSWORD`; without them the job
 stops with an explicit error instead of falling back to a password in the code.
 
+### 5d. Pipeline lifecycle audit
+
+The representative EOD reconciliation DAG writes lifecycle rows to
+`opslakehouse.pipeline_run_log`: `RUNNING` before reconciliation and `SUCCESS`
+after the task graph completes. This is separate from reconciliation business
+outcomes in `reconciliation_log`.
+
+Inspect recent lifecycle rows:
+
+```bash
+docker exec banking-airflow-scheduler sh -c \
+  'cd /opt/project && python scripts/pipeline_run_report.py --dag-id ops_eod_reconciliation_dag --limit 50'
+```
+
+Machine-readable output for an incident:
+
+```bash
+docker exec banking-airflow-scheduler sh -c \
+  'cd /opt/project && python scripts/pipeline_run_report.py --status FAILED --json --limit 100'
+```
+
+A `RUNNING` row is not automatically a stuck-run alert. Compare its age with
+the DAG timeout/schedule and inspect the Airflow task log before escalation. The
+report is read-only and does not mark a run failed or change a watermark.
+
 ### 5c. Reconciliation business outcomes
 
 `opslakehouse.reconciliation_log` preserves the legacy `check_status` gate
