@@ -14,14 +14,41 @@ from datetime import timedelta
 import pendulum
 from cob_dt import COB_DT
 from etl_flag import make_end_flag_task, make_start_flag_task, upstream_success_sql
+from pipeline_run_audit import PipelineRun, connect_from_env, insert_run
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
 
 DAG_ID = "ops_serving_sync_dag"
 APPLICATION_PATH = "/opt/project/code_etl/serving/sync_postgres.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
+
+
+def audit_run(status: str, **context) -> None:
+    """Persist serving-sync lifecycle without logging row payloads."""
+    task_instance = context["task_instance"]
+    start = task_instance.start_date or pendulum.now("Asia/Ho_Chi_Minh")
+    completed = pendulum.now("Asia/Ho_Chi_Minh")
+    connection = connect_from_env()
+    try:
+        insert_run(
+            connection,
+            PipelineRun(
+                dag_id=DAG_ID,
+                task_id=task_instance.task_id,
+                status=status,
+                cob_dt=pendulum.parse(COB_DT).date(),
+                execution_time_s=max((completed - start).total_seconds(), 0),
+                error_message=str(context.get("exception")) if status == "FAILED" else None,
+                started_at=start,
+                completed_at=completed,
+            ),
+        )
+    finally:
+        connection.close()
+
 
 DEFAULT_ARGS = {
     "owner": "data-engineering",
@@ -67,10 +94,31 @@ wait_serving = SqlSensor(
 )
 
 # ---------------------------------------------------------------------------
-# Flag tasks
+# Flag and audit lifecycle tasks
 # ---------------------------------------------------------------------------
 start = make_start_flag_task("start", DAG_ID, "ops", dag, cob_dt=COB_DT)
 end = make_end_flag_task("end", DAG_ID, "ops", dag, cob_dt=COB_DT)
+
+audit_started = PythonOperator(
+    task_id="audit_pipeline_running",
+    python_callable=audit_run,
+    op_kwargs={"status": "RUNNING"},
+    dag=dag,
+)
+audit_completed = PythonOperator(
+    task_id="audit_pipeline_success",
+    python_callable=audit_run,
+    op_kwargs={"status": "SUCCESS"},
+    trigger_rule="all_success",
+    dag=dag,
+)
+audit_failed = PythonOperator(
+    task_id="audit_pipeline_failed",
+    python_callable=audit_run,
+    op_kwargs={"status": "FAILED"},
+    trigger_rule="one_failed",
+    dag=dag,
+)
 
 # ---------------------------------------------------------------------------
 # Sync task
@@ -84,4 +132,5 @@ sync_serving = BashOperator(
 # ---------------------------------------------------------------------------
 # Task Flow
 # ---------------------------------------------------------------------------
-wait_serving >> start >> sync_serving >> end
+wait_serving >> audit_started >> start >> sync_serving >> end >> audit_completed
+sync_serving >> audit_failed

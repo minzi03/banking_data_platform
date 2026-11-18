@@ -433,6 +433,26 @@ def test_backfill_arg_is_only_added_to_incremental_jobs(relative):
     assert guarded, f"{relative}: BACKFILL_FROM_ARG gắn vô điều kiện"
 
 
+class TestOpsServingSyncAuditLifecycle:
+    DAG = REPO_ROOT / "airflow" / "dags" / "ops" / "ops_serving_sync_dag.py"
+
+    def test_serving_sync_dag_audits_lifecycle(self):
+        text = self.DAG.read_text(encoding="utf-8")
+        assert "pipeline_run_audit" in text
+        assert 'op_kwargs={"status": "RUNNING"}' in text
+        assert 'op_kwargs={"status": "SUCCESS"}' in text
+        assert 'op_kwargs={"status": "FAILED"}' in text
+        assert 'trigger_rule="all_success"' in text
+        assert 'trigger_rule="one_failed"' in text
+
+    def test_audit_brackets_sync_task(self):
+        flow = self.DAG.read_text(encoding="utf-8").split("# Task Flow", maxsplit=1)[1]
+        assert "audit_started" in flow
+        assert "sync_serving" in flow
+        assert "audit_completed" in flow
+        assert "audit_failed" in flow
+
+
 class TestOpsContractValidationAuditLifecycle:
     DAG = REPO_ROOT / "airflow" / "dags" / "ops" / "ops_contract_validation_dag.py"
 
