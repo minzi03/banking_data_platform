@@ -22,6 +22,7 @@ summarises, it does not gate. The caller keeps pytest's own exit code.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -30,10 +31,8 @@ from pathlib import Path
 def _force_utf8_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(AttributeError, OSError):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except (AttributeError, OSError):
-                pass
 
 
 def load_cases(path: Path) -> list[tuple[str, str, str]]:
@@ -64,8 +63,11 @@ def render(cases: list[tuple[str, str, str]], title: str) -> str:
     lines = [
         f"### {title}",
         "",
-        f"collected {len(cases)} · passed {counts['PASS']} · "
-        f"failed {counts['FAIL']} · skipped {counts['SKIP']}",
+        (
+            "collected "
+            + f"{len(cases)} · passed {counts['PASS']} · failed "
+            + f"{counts['FAIL']} · skipped {counts['SKIP']}"
+        ),
         "",
     ]
     # Fail trước: đó là thứ người đọc cần, và nó phải ở đầu chứ không nằm lẫn.
