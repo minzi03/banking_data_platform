@@ -431,3 +431,22 @@ def test_backfill_arg_is_only_added_to_incremental_jobs(relative):
         r'\.get\("incremental"\)', text
     )
     assert guarded, f"{relative}: BACKFILL_FROM_ARG gắn vô điều kiện"
+
+
+class TestOpsDataQualityAuditLifecycle:
+    DAG = REPO_ROOT / "airflow" / "dags" / "ops" / "ops_data_quality_dag.py"
+
+    def test_dq_dag_audits_running_success_and_failure(self):
+        text = self.DAG.read_text(encoding="utf-8")
+        assert "pipeline_run_audit" in text
+        assert 'op_kwargs={"status": "RUNNING"}' in text
+        assert 'op_kwargs={"status": "SUCCESS"}' in text
+        assert 'op_kwargs={"status": "FAILED"}' in text
+        assert 'trigger_rule="all_success"' in text
+        assert 'trigger_rule="one_failed"' in text
+
+    def test_audit_brackets_all_dq_checks(self):
+        text = self.DAG.read_text(encoding="utf-8")
+        flow = text.split("# Task Flow", maxsplit=1)[1]
+        assert "audit_started >> start >> [dq_silver, dq_gold, dq_bronze_cdc] >> end >> audit_completed" in flow
+        assert "[dq_silver, dq_gold, dq_bronze_cdc] >> audit_failed" in flow

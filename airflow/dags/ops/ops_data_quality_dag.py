@@ -10,16 +10,18 @@ on Airflow container.
 
 from datetime import timedelta
 
+import pendulum
+from cob_dt import COB_DT
+from etl_flag import make_end_flag_task, make_start_flag_task, upstream_success_sql
+from pipeline_run_audit import PipelineRun, connect_from_env, insert_run
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.common.sql.sensors.sql import SqlSensor
-import pendulum
 
-from etl_flag import make_start_flag_task, make_end_flag_task, upstream_success_sql
-from cob_dt import COB_DT
-
-DAG_ID              = "ops_data_quality_dag"
-APPLICATION_PATH    = "/opt/project/code_etl/shared/ops/data_quality.py"
+DAG_ID = "ops_data_quality_dag"
+APPLICATION_PATH = "/opt/project/code_etl/shared/ops/data_quality.py"
 POSTGRES_ETL_CONN_ID = "postgres-etl"
 
 DEFAULT_ARGS = {
@@ -29,6 +31,31 @@ DEFAULT_ARGS = {
     "retry_delay": timedelta(minutes=5),
     "email_on_failure": False,
 }
+
+
+def audit_run(status: str, **context) -> None:
+    """Persist DQ DAG lifecycle without storing DQ row payloads or credentials."""
+    task_instance = context["task_instance"]
+    start = task_instance.start_date or pendulum.now("Asia/Ho_Chi_Minh")
+    completed = pendulum.now("Asia/Ho_Chi_Minh")
+    connection = connect_from_env()
+    try:
+        insert_run(
+            connection,
+            PipelineRun(
+                dag_id=DAG_ID,
+                task_id=task_instance.task_id,
+                status=status,
+                cob_dt=pendulum.parse(COB_DT).date(),
+                execution_time_s=max((completed - start).total_seconds(), 0),
+                error_message=str(context.get("exception")) if status == "FAILED" else None,
+                started_at=start,
+                completed_at=completed,
+            ),
+        )
+    finally:
+        connection.close()
+
 
 dag = DAG(
     DAG_ID,
@@ -65,10 +92,31 @@ wait_gold = SqlSensor(
 )
 
 # ---------------------------------------------------------------------------
-# Flag tasks
+# Flag tasks and pipeline audit lifecycle
 # ---------------------------------------------------------------------------
 start = make_start_flag_task("start", DAG_ID, "ops", dag, cob_dt=COB_DT)
-end   = make_end_flag_task("end", DAG_ID, "ops", dag, cob_dt=COB_DT)
+end = make_end_flag_task("end", DAG_ID, "ops", dag, cob_dt=COB_DT)
+
+audit_started = PythonOperator(
+    task_id="audit_pipeline_running",
+    python_callable=audit_run,
+    op_kwargs={"status": "RUNNING"},
+    dag=dag,
+)
+audit_completed = PythonOperator(
+    task_id="audit_pipeline_success",
+    python_callable=audit_run,
+    op_kwargs={"status": "SUCCESS"},
+    trigger_rule="all_success",
+    dag=dag,
+)
+audit_failed = PythonOperator(
+    task_id="audit_pipeline_failed",
+    python_callable=audit_run,
+    op_kwargs={"status": "FAILED"},
+    trigger_rule="one_failed",
+    dag=dag,
+)
 
 # ---------------------------------------------------------------------------
 # DQ Check Tasks — BashOperator + docker exec (same as Bronze/Silver DAGs)
@@ -115,4 +163,5 @@ dq_bronze_cdc = BashOperator(
 # ---------------------------------------------------------------------------
 # Task Flow
 # ---------------------------------------------------------------------------
-[wait_silver, wait_gold] >> start >> [dq_silver, dq_gold, dq_bronze_cdc] >> end
+[wait_silver, wait_gold] >> audit_started >> start >> [dq_silver, dq_gold, dq_bronze_cdc] >> end >> audit_completed
+[dq_silver, dq_gold, dq_bronze_cdc] >> audit_failed
