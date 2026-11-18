@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,10 +39,8 @@ MISSING = object()
 def _force_utf8_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(AttributeError, OSError):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except (AttributeError, OSError):
-                pass
 
 
 def get_path(root: Any, dotted: str) -> Any:
@@ -126,9 +125,7 @@ def iter_projections(binding: dict) -> list[tuple[str, str]]:
 def _verify_one(manifest, readme, path, location, claim, note, errors, checked) -> None:
     """Kiểm một projection: claim có trong README và mang đúng giá trị đã verify."""
     if claim not in readme:
-        errors.append(
-            f"claim không có trong README [{location}]: {claim!r} (binding {path})"
-        )
+        errors.append(f"claim không có trong README [{location}]: {claim!r} (binding {path})")
         return
 
     value = get_path(manifest, path)

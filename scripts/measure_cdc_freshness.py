@@ -42,6 +42,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import random
 import statistics
@@ -54,10 +55,8 @@ from datetime import datetime, timezone
 def _force_utf8_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(AttributeError, OSError):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except (AttributeError, OSError):
-                pass
 
 
 def psql(sql: str) -> str:

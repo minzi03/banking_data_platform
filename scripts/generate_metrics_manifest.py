@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import copy
 import json
 import os
@@ -49,10 +50,8 @@ def _force_utf8_output() -> None:
     """
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(AttributeError, OSError):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except (AttributeError, OSError):
-                pass
 
 
 _force_utf8_output()
@@ -69,6 +68,7 @@ MISSING = object()
 # =============================================================================
 # Path helpers — đường dẫn dotted, hỗ trợ wildcard `*`
 # =============================================================================
+
 
 def get_path(root: Any, dotted: str) -> Any:
     node = root
@@ -101,6 +101,7 @@ def expand_wildcards(root: Any, dotted: str) -> list[str]:
 # =============================================================================
 # load_contract
 # =============================================================================
+
 
 def load_contract(path: Path = MANIFEST_PATH) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -140,9 +141,7 @@ def validate_contract(manifest: dict) -> list[str]:
                 continue
             for resolved in expanded:
                 if get_path(manifest, resolved) is MISSING:
-                    errors.append(
-                        f"invariant {inv_id}: {field} trỏ tới node không tồn tại: {resolved}"
-                    )
+                    errors.append(f"invariant {inv_id}: {field} trỏ tới node không tồn tại: {resolved}")
 
     for binding in manifest["readme_bindings"]:
         path = binding.get("manifest_path")
@@ -171,6 +170,7 @@ def validate_contract(manifest: dict) -> list[str]:
 # collect_repo_metrics — static, sinh từ repo chứ không gõ tay
 # =============================================================================
 
+
 def _load_yaml_files(pattern: str) -> list[tuple[Path, Any]]:
     out = []
     for path in sorted(REPO_ROOT.glob(pattern)):
@@ -195,7 +195,7 @@ def _bronze_ingestion_workloads(manifest: dict) -> int:
     return sum(
         1
         for path, cfg in _load_yaml_files("code_etl/bronze/*/*.yml")
-        if path.parent.name != "templates"
+        if path.parent.name != "templates" and isinstance(cfg, dict)
         and isinstance(cfg, dict)
         and all(k in cfg for k in required)
     )

@@ -16,33 +16,34 @@ Usage:
 """
 
 import argparse
-import os
+import logging
 import sys
 from datetime import datetime
-from logging import basicConfig, getLogger, INFO
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Path setup
 # ---------------------------------------------------------------------------
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "code_etl", "shared"))
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent / "code_etl" / "shared"))
 
-from spark.spark_session import get_spark_session
+from spark.spark_session import get_spark_session  # noqa: E402
 
-basicConfig(
-    level=INFO,
+logging.basicConfig(
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     stream=sys.stdout,
 )
-log = getLogger("resolve_quarantine")
+log = logging.getLogger("resolve_quarantine")
 
 
 # ---------------------------------------------------------------------------
 # Resolution Functions
 # ---------------------------------------------------------------------------
 
-def resolve_closed_accounts(spark, dry_run: bool = True) -> Dict:
+
+def resolve_closed_accounts(spark, dry_run: bool = True) -> dict[str, Any]:
     """
     Resolve closed accounts with balance.
 
@@ -61,16 +62,14 @@ def resolve_closed_accounts(spark, dry_run: bool = True) -> Dict:
         "total_accounts": 0,
         "resolved_accounts": 0,
         "total_balance": 0,
-        "details": []
+        "details": [],
     }
 
     try:
         # Get closed accounts with balance
         df = spark.table("lakehouse.quarantine.invalid_account")
         closed_df = df.filter(
-            (df["violation_type"] == "closed_with_balance") &
-            (df["status"] == "CLOSED") &
-            (df["balance"] > 0)
+            (df["violation_type"] == "closed_with_balance") & (df["status"] == "CLOSED") & (df["balance"] > 0)
         )
 
         total_accounts = closed_df.count()
@@ -125,7 +124,7 @@ def resolve_closed_accounts(spark, dry_run: bool = True) -> Dict:
         return results
 
 
-def log_resolution(spark, results: Dict, dry_run: bool = True) -> None:
+def log_resolution(spark, results: dict[str, Any], dry_run: bool = True) -> None:
     """
     Log resolution results to quarantine_log.
 
@@ -136,7 +135,6 @@ def log_resolution(spark, results: Dict, dry_run: bool = True) -> None:
     """
     try:
         from pyspark.sql import Row
-        from datetime import datetime
 
         # Create resolution record
         resolution_record = {
@@ -169,7 +167,7 @@ def log_resolution(spark, results: Dict, dry_run: bool = True) -> None:
 # Summary
 # ---------------------------------------------------------------------------
 
-def print_summary(results: Dict) -> None:
+def print_summary(results: dict[str, Any]) -> None:
     """Print resolution summary."""
     log.info("=" * 60)
     log.info("RESOLUTION SUMMARY")
