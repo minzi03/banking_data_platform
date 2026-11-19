@@ -84,6 +84,12 @@ The platform combines:
 
 PostgreSQL remains the **operational source of truth**.
 
+The operational control plane records lifecycle rows for the EOD reconciliation,
+data-quality, contract-validation, and serving-sync boundaries in
+`opslakehouse.pipeline_run_log`; read-only reports expose failed, stale-running,
+and latest-successful runs without mutating pipeline state. Reconciliation results
+preserve the legacy gate status while also recording explicit business outcomes.
+
 The batch and CDC paths produce different derived representations:
 
 ```text
