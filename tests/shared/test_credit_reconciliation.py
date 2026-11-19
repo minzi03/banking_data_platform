@@ -23,7 +23,10 @@ def outcome(rows, tolerance=Decimal("0.00")):
 
 
 def test_exact_payment_matches():
-    assert outcome([payment()])["outcome"] == "MATCHED"
+    result = outcome([payment()])
+    assert result["outcome"] == "MATCHED"
+    assert result["status"] == "MATCHED"
+    assert result["check_status"] == "PASS"
 
 
 def test_tolerance_boundary_is_inclusive():
@@ -33,6 +36,8 @@ def test_tolerance_boundary_is_inclusive():
 def test_amount_outside_tolerance_mismatches():
     result = outcome([payment(amount_paid="99.00")])
     assert result["outcome"] == "MISMATCH"
+    assert result["status"] == "MISMATCH"
+    assert result["check_status"] == "FAIL"
     assert result["delta"] == Decimal("-1.00")
 
 
@@ -63,16 +68,22 @@ def test_observations_are_aggregated_within_loan_and_cob_date():
 
 
 def test_missed_observation_is_missing_not_absence():
-    assert outcome([payment(payment_status="MISSED", amount_paid="0")])["outcome"] == "MISSING"
+    result = outcome([payment(payment_status="MISSED", amount_paid="0")])
+    assert result["outcome"] == "MISSING"
+    assert result["check_status"] == "FAIL"
     assert reconcile_payment_observations([]) == []
 
 
 def test_pending_observation_is_pending():
-    assert outcome([payment(payment_status="PENDING", amount_paid="0")])["outcome"] == "PENDING"
+    result = outcome([payment(payment_status="PENDING", amount_paid="0")])
+    assert result["outcome"] == "PENDING"
+    assert result["check_status"] == "WARN"
 
 
 def test_duplicate_payment_id_is_not_comparable():
-    assert outcome([payment(), payment(amount_paid="0")])["outcome"] == "NOT_COMPARABLE"
+    result = outcome([payment(), payment(amount_paid="0")])
+    assert result["outcome"] == "NOT_COMPARABLE"
+    assert result["check_status"] == "WARN"
 
 
 def test_results_are_deterministically_sorted_by_loan_and_date():

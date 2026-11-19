@@ -87,6 +87,7 @@ def test_expected_vs_paid_contract_matches_pure_helper_semantics():
     reconciliation = load_contract()["expected_vs_paid_reconciliation"]
     assert reconciliation["grain"] == "loan_id_x_cob_dt"
     assert reconciliation["engine"] == "code_etl/shared/ops/credit_reconciliation.py"
+    assert reconciliation["legacy_gate_statuses"] == {"MATCHED": "PASS", "MISMATCH": "FAIL", "MISSING": "FAIL", "PENDING": "WARN", "NOT_COMPARABLE": "WARN"}
     assert reconciliation["outcomes"] == [
         "MATCHED",
         "MISMATCH",

@@ -53,6 +53,12 @@ expected_vs_paid_reconciliation:
     - MISSING
     - PENDING
     - NOT_COMPARABLE
+  legacy_gate_statuses:
+    MATCHED: PASS
+    MISMATCH: FAIL
+    MISSING: FAIL
+    PENDING: WARN
+    NOT_COMPARABLE: WARN
   rules:
     matched: absolute delta within amount_tolerance
     mismatch: absolute delta exceeds amount_tolerance
