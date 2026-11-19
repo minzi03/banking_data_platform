@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
+from ops.reconciliation_contract import check_status_for
+
 OUTCOMES = frozenset({"MATCHED", "MISMATCH", "MISSING", "PENDING", "NOT_COMPARABLE"})
 
 
@@ -59,6 +61,8 @@ def reconcile_payment_observations(
                 "amount_paid": paid,
                 "delta": delta,
                 "tolerance": amount_tolerance,
+                "status": outcome,
+                "check_status": check_status_for(outcome),
                 "payment_ids": sorted(str(value) for value in payment_ids if value is not None),
             }
         )
