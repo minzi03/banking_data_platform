@@ -37,6 +37,15 @@ def test_payment_statuses_methods_and_measures_match_source_contract():
     assert payment["payment_methods"] == ["BANK_TRANSFER", "CASH", "CHEQUE", "DEBIT_CARD", "MOBILE_APP"]
 
 
+def test_credit_quality_rules_cover_relationship_and_financial_invariants():
+    rules = load_contract()["quality_rules"]["loan_payment"]
+    assert "payment_id_unique" in rules
+    assert "loan_id_not_null" in rules
+    assert "amount_fields_non_negative" in rules
+    assert "outstanding_after_non_negative" in rules
+    assert "payment_date_not_after_cob_dt_for_snapshot" in rules
+
+
 def test_contract_does_not_invent_installment_or_regulatory_semantics():
     payment = load_contract()["entities"]["loan_payment"]
     limitations = " ".join(payment["limitations"])
