@@ -36,6 +36,13 @@ def test_amount_outside_tolerance_mismatches():
     assert result["delta"] == Decimal("-1.00")
 
 
+def test_late_payment_compares_paid_amount_including_recorded_penalty():
+    row = payment(payment_status="LATE", scheduled_amount="100.00", amount_paid="102.00", penalty="2.00")
+    result = outcome([row])
+    assert result["outcome"] == "MISMATCH"
+    assert result["delta"] == Decimal("2.00")
+
+
 def test_missed_observation_is_missing_not_absence():
     assert outcome([payment(payment_status="MISSED", amount_paid="0")])["outcome"] == "MISSING"
     assert reconcile_payment_observations([]) == []
