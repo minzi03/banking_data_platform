@@ -83,6 +83,22 @@ def test_bronze_silver_mappings_preserve_the_credit_grains():
     assert "p.cob_dt = DATE '{{ cob_dt }}'" in silver_payment
 
 
+def test_expected_vs_paid_contract_matches_pure_helper_semantics():
+    reconciliation = load_contract()["expected_vs_paid_reconciliation"]
+    assert reconciliation["grain"] == "loan_id_x_cob_dt"
+    assert reconciliation["engine"] == "code_etl/shared/ops/credit_reconciliation.py"
+    assert reconciliation["outcomes"] == [
+        "MATCHED",
+        "MISMATCH",
+        "MISSING",
+        "PENDING",
+        "NOT_COMPARABLE",
+    ]
+    limitations = " ".join(reconciliation["limitations"])
+    assert "absence of any observation is not treated as a missed payment" in limitations
+    assert "not a source-owned installment schedule" in limitations
+
+
 def test_contract_does_not_invent_installment_or_regulatory_semantics():
     payment = load_contract()["entities"]["loan_payment"]
     limitations = " ".join(payment["limitations"])
