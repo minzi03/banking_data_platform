@@ -1,0 +1,51 @@
+# Credit data grain contract for the canonical core_banking source.
+# This describes current source semantics; it does not invent an installment source.
+version: "1.0"
+domain: credit_lending
+source_system: postgresql
+business_date_field: cob_dt
+entities:
+  loan:
+    source_table: core_banking.loan
+    bronze_table: lakehouse.bronze.core_loan
+    silver_table: lakehouse.silver.dim_loan
+    grain: one_current_loan_contract_per_loan_id_and_cob_dt
+    business_key: [loan_id]
+    measures:
+      - loan_amount
+      - outstanding_balance
+    dates:
+      - disbursement_date
+      - maturity_date
+      - last_updated
+    statuses: [ACTIVE, CLOSED, OVERDUE, WRITTEN_OFF]
+  loan_payment:
+    source_table: core_banking.loan_payment
+    bronze_table: lakehouse.bronze.core_loan_payment
+    silver_table: lakehouse.silver.fact_loan_payment
+    grain: one_payment_observation_per_payment_id_and_cob_dt
+    business_key: [payment_id]
+    relationship_key: [loan_id]
+    measures:
+      - scheduled_amount
+      - amount_paid
+      - principal_component
+      - interest_component
+      - penalty
+      - outstanding_after
+    dates: [payment_date, last_updated]
+    statuses: [PAID, LATE, MISSED, PENDING]
+    payment_methods: [BANK_TRANSFER, CASH, CHEQUE, DEBIT_CARD, MOBILE_APP]
+    limitations:
+      - payment_date is the available due/payment observation date; no separate installment_id is defined
+      - expected-vs-paid reconciliation is limited to scheduled_amount and amount_paid
+      - regulatory debt grouping requires source-owned criteria beyond DPD thresholds
+quality_rules:
+  loan_payment:
+    - payment_id_unique
+    - loan_id_not_null
+    - amount_fields_non_negative
+    - outstanding_after_non_negative
+    - payment_status_allowed
+    - payment_method_allowed_or_null
+    - payment_date_not_after_cob_dt_for_snapshot
