@@ -6,6 +6,7 @@
 - Added lifecycle audit for EOD reconciliation, data-quality, contract-validation, and serving-sync DAG boundaries.
 - Added read-only reports for reconciliation exceptions and pipeline lifecycle failures, stale runs, and latest successful runs.
 - Full governance, operations, DAG regression suite remains green; runtime lifecycle evidence is bounded to configured representative DAGs.
+- Added a source-defined credit grain contract for loan contracts and payment observations, with explicit DPD/schedule limitations and quality invariants.
 
 ## Unreleased — audit remediation 2026-09-30
 
