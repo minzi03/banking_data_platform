@@ -40,6 +40,29 @@ entities:
       - payment_date is the available due/payment observation date; no separate installment_id is defined
       - expected-vs-paid reconciliation is limited to scheduled_amount and amount_paid
       - regulatory debt grouping requires source-owned criteria beyond DPD thresholds
+expected_vs_paid_reconciliation:
+  grain: loan_id_x_cob_dt
+  engine: code_etl/shared/ops/credit_reconciliation.py
+  inputs:
+    - scheduled_amount
+    - amount_paid
+    - payment_status
+  outcomes:
+    - MATCHED
+    - MISMATCH
+    - MISSING
+    - PENDING
+    - NOT_COMPARABLE
+  rules:
+    matched: absolute delta within amount_tolerance
+    mismatch: absolute delta exceeds amount_tolerance
+    missing: an explicit MISSED observation is present
+    pending: an explicit PENDING observation is present
+    not_comparable: duplicate payment_id within the same loan_id and cob_dt
+  limitations:
+    - absence of any observation is not treated as a missed payment
+    - the comparison uses payment observations, not a source-owned installment schedule
+    - no fee or penalty allocation is inferred
 quality_rules:
   loan_payment:
     - payment_id_unique
