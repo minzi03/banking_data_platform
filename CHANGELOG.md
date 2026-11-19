@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — operational control plane 2026-11-17
+
+- Added shared reconciliation business outcomes while retaining legacy gate statuses.
+- Added lifecycle audit for EOD reconciliation, data-quality, contract-validation, and serving-sync DAG boundaries.
+- Added read-only reports for reconciliation exceptions and pipeline lifecycle failures, stale runs, and latest successful runs.
+- Full governance, operations, DAG regression suite remains green; runtime lifecycle evidence is bounded to configured representative DAGs.
+
 ## Unreleased — audit remediation 2026-09-30
 
 A full audit against the original assignment (Customer 360 + cross-sell lakehouse:
