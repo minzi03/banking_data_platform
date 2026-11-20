@@ -213,7 +213,9 @@ def render() -> str:
 
     w("## 5. Ma trận này KHÔNG bảo đảm gì")
     w("")
-    w("1. **Xác thực bằng mật khẩu, qua cert tự ký** ([ADR-0016](../02-architecture/adr/0016-trino-password-authentication.md)).")
+    w(
+        "1. **Xác thực bằng mật khẩu, qua cert tự ký** ([ADR-0016](../02-architecture/adr/0016-trino-password-authentication.md))."
+    )
     w("   Mỗi user một mật khẩu; HTTP trả 403, mạo danh bị chặn — đã đo trên stack. Nhưng cert")
     w("   tự ký, không có PKI; mật khẩu nằm trong file trên máy dev, không trong secret manager.")
     w("2. **Spark không đi qua Trino.** Job Spark đọc/ghi Iceberg trực tiếp qua REST catalog và")

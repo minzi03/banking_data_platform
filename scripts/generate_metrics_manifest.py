@@ -195,7 +195,8 @@ def _bronze_ingestion_workloads(manifest: dict) -> int:
     return sum(
         1
         for path, cfg in _load_yaml_files("code_etl/bronze/*/*.yml")
-        if path.parent.name != "templates" and isinstance(cfg, dict)
+        if path.parent.name != "templates"
+        and isinstance(cfg, dict)
         and isinstance(cfg, dict)
         and all(k in cfg for k in required)
     )
@@ -224,9 +225,8 @@ def _gold_ddl_tables(_manifest: dict) -> int:
 def _gold_ddl_objects(_manifest: dict) -> int:
     """CREATE TABLE + CREATE VIEW — object phục vụ, không chỉ bảng."""
     ddl = (REPO_ROOT / "docker/init_iceberg/03_ddl_gold.sql").read_text(encoding="utf-8")
-    return (
-        len(re.findall(r"CREATE TABLE IF NOT EXISTS", ddl, re.IGNORECASE))
-        + len(re.findall(r"CREATE (?:OR REPLACE )?VIEW", ddl, re.IGNORECASE))
+    return len(re.findall(r"CREATE TABLE IF NOT EXISTS", ddl, re.IGNORECASE)) + len(
+        re.findall(r"CREATE (?:OR REPLACE )?VIEW", ddl, re.IGNORECASE)
     )
 
 
@@ -289,8 +289,7 @@ def _integration_tests(_manifest: dict) -> int:
     README: một headline metric phải đo được, không phải gõ tay.
     """
     return sum(
-        len(re.findall(r"^\s*def test_", (REPO_ROOT / rel).read_text(encoding="utf-8"),
-                       re.MULTILINE))
+        len(re.findall(r"^\s*def test_", (REPO_ROOT / rel).read_text(encoding="utf-8"), re.MULTILINE))
         for rel in INTEGRATION_TEST_MODULES
     )
 
@@ -300,7 +299,11 @@ def _pytest_collected_nodes(_manifest: dict) -> int | None:
     try:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q", "tests/"],
-            cwd=REPO_ROOT, capture_output=True, text=True, timeout=300, check=False,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
         )
         match = re.search(r"(\d+)\s+tests? collected", result.stdout)
         return int(match.group(1)) if match else None
@@ -309,13 +312,9 @@ def _pytest_collected_nodes(_manifest: dict) -> int | None:
 
 
 def _compose_services(manifest: dict) -> tuple[int, int, int]:
-    compose = yaml.safe_load(
-        (REPO_ROOT / "docker/docker-compose.yml").read_text(encoding="utf-8")
-    )
+    compose = yaml.safe_load((REPO_ROOT / "docker/docker-compose.yml").read_text(encoding="utf-8"))
     services = list(compose.get("services", {}))
-    one_shot_declared = set(
-        manifest["metrics"]["platform"]["docker_services"]["one_shot_services"]
-    )
+    one_shot_declared = set(manifest["metrics"]["platform"]["docker_services"]["one_shot_services"])
     one_shot = [s for s in services if s in one_shot_declared]
     return len(services), len(services) - len(one_shot), len(one_shot)
 
@@ -346,19 +345,20 @@ def collect_repo_metrics(manifest: dict) -> dict[str, Any]:
         "platform.dq_check_types.value": _dq_check_types,
     }
     values = {path: fn(manifest) for path, fn in simple.items()}
-    values.update({
-        "silver.dimensions.total.value": _silver_dims(None),
-        "silver.dimensions.scd_type_1.value": _silver_dims("scd_type1"),
-        "silver.dimensions.scd_type_2.value": _silver_dims("scd_type2"),
-        "silver.facts.total.value": len(_load_yaml_files("code_etl/silver/facts/*.yml")),
-        "silver.current_state_tables.total.value":
-            len(_load_yaml_files("code_etl/cdc/consolidation/config/*.yml")),
-        "platform.data_contracts.value": len(list(REPO_ROOT.glob("governance/datasets/*.yaml"))),
-        "platform.dbt_models.value": len(list(REPO_ROOT.glob("dbt/models/serving/*.sql"))),
-        "platform.docker_services.compose_defined.value": compose_defined,
-        "platform.docker_services.long_running.value": long_running,
-        "platform.docker_services.one_shot.value": one_shot,
-    })
+    values.update(
+        {
+            "silver.dimensions.total.value": _silver_dims(None),
+            "silver.dimensions.scd_type_1.value": _silver_dims("scd_type1"),
+            "silver.dimensions.scd_type_2.value": _silver_dims("scd_type2"),
+            "silver.facts.total.value": len(_load_yaml_files("code_etl/silver/facts/*.yml")),
+            "silver.current_state_tables.total.value": len(_load_yaml_files("code_etl/cdc/consolidation/config/*.yml")),
+            "platform.data_contracts.value": len(list(REPO_ROOT.glob("governance/datasets/*.yaml"))),
+            "platform.dbt_models.value": len(list(REPO_ROOT.glob("dbt/models/serving/*.sql"))),
+            "platform.docker_services.compose_defined.value": compose_defined,
+            "platform.docker_services.long_running.value": long_running,
+            "platform.docker_services.one_shot.value": one_shot,
+        }
+    )
     return values
 
 
@@ -372,11 +372,16 @@ def collect_build_metadata() -> dict:
     trách nhiệm promote canonical. Cờ được phép quyết định CÓ CHẠY hay không;
     nó không được phép quyết định SỰ THẬT là gì.
     """
+
     def git(*args: str) -> str | None:
         try:
             return subprocess.run(
-                ["git", *args], cwd=REPO_ROOT, capture_output=True,
-                text=True, timeout=30, check=True,
+                ["git", *args],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True,
             ).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return None
@@ -394,6 +399,7 @@ def collect_build_metadata() -> dict:
 # =============================================================================
 # verification scope
 # =============================================================================
+
 
 def scope_skips(manifest: dict) -> list[str]:
     """
@@ -417,6 +423,7 @@ def _in_scope(name: str, skips: list[str]) -> bool:
 # =============================================================================
 # render_query_bundle
 # =============================================================================
+
 
 class Query:
     __slots__ = ("id", "phase", "sql")
@@ -467,9 +474,7 @@ def render_query_bundle(manifest: dict, cob_dt: str, sql_path: Path = SQL_PATH) 
     business_tz = env["business_timezone"]
 
     def _render(sql: str) -> str:
-        return (sql.replace(":catalog", catalog)
-                   .replace(":business_tz", business_tz)
-                   .replace(":cob_dt", cob_dt))
+        return sql.replace(":catalog", catalog).replace(":business_tz", business_tz).replace(":cob_dt", cob_dt)
 
     queries: list[Query] = []
     for qid, body in zip(blocks[::2], blocks[1::2], strict=True):
@@ -479,11 +484,13 @@ def render_query_bundle(manifest: dict, cob_dt: str, sql_path: Path = SQL_PATH) 
         if qid.endswith(".TEMPLATE"):
             prefix = qid[: -len(".TEMPLATE")]
             for table in get_path(manifest, f"metrics.{prefix}") or {}:
-                queries.append(Query(
-                    f"{prefix}.{table}",
-                    _render(sql.replace("{table}", table)),
-                    _phase_of(prefix),
-                ))
+                queries.append(
+                    Query(
+                        f"{prefix}.{table}",
+                        _render(sql.replace("{table}", table)),
+                        _phase_of(prefix),
+                    )
+                )
         else:
             queries.append(Query(qid, _render(sql), _phase_of(qid)))
 
@@ -495,26 +502,29 @@ def render_query_bundle(manifest: dict, cob_dt: str, sql_path: Path = SQL_PATH) 
 # collect_trino_metrics
 # =============================================================================
 
+
 class MetricQueryError(RuntimeError):
     """Lỗi query kèm đủ ngữ cảnh để sửa ngay, không phải stack trace chung chung."""
 
     def __init__(self, query: Query, cob_dt: str, cause: str):
         super().__init__(
-            "\n".join([
-                "",
-                "Metric query failed",
-                "",
-                f"  id:      {query.id}",
-                f"  phase:   {query.phase}",
-                f"  cob_dt:  {cob_dt}",
-                "",
-                "  Trino error:",
-                *(f"    {line}" for line in str(cause).splitlines()),
-                "",
-                "  Rendered SQL:",
-                *(f"    {line}" for line in query.sql.splitlines()),
-                "",
-            ])
+            "\n".join(
+                [
+                    "",
+                    "Metric query failed",
+                    "",
+                    f"  id:      {query.id}",
+                    f"  phase:   {query.phase}",
+                    f"  cob_dt:  {cob_dt}",
+                    "",
+                    "  Trino error:",
+                    *(f"    {line}" for line in str(cause).splitlines()),
+                    "",
+                    "  Rendered SQL:",
+                    *(f"    {line}" for line in query.sql.splitlines()),
+                    "",
+                ]
+            )
         )
         self.query_id = query.id
 
@@ -569,7 +579,8 @@ class TrinoClient:
 
     def query(self, sql: str) -> list[dict]:
         request = urllib.request.Request(
-            self.url, data=sql.encode("utf-8"),
+            self.url,
+            data=sql.encode("utf-8"),
             headers={"Content-Type": "text/plain", **self.headers},
             method="POST",
         )
@@ -632,6 +643,7 @@ def collect_trino_metrics(
 # collect_manual_metrics
 # =============================================================================
 
+
 def collect_manual_metrics(manifest: dict) -> dict[str, Any]:
     """
     Metric manual được GIỮ NGUYÊN từ contract. Generator không tính lại và
@@ -666,9 +678,7 @@ OPERATORS: dict[str, Callable[[Any, Any], bool]] = {
 }
 
 
-def evaluate_invariants(
-    manifest: dict, skips: list[str] | None = None
-) -> tuple[list[str], list[str], list[str]]:
+def evaluate_invariants(manifest: dict, skips: list[str] | None = None) -> tuple[list[str], list[str], list[str]]:
     """
     Trả về (errors, warnings, skipped).
 
@@ -704,9 +714,7 @@ def evaluate_invariants(
                 bucket.append(f"{inv_id}: {metric_path} chưa có giá trị (actual={actual!r})")
                 continue
             if not OPERATORS[inv["operator"]](actual, expected):
-                bucket.append(
-                    f"{inv_id}: {metric_path}={actual!r} {inv['operator']} {label} → FAIL"
-                )
+                bucket.append(f"{inv_id}: {metric_path}={actual!r} {inv['operator']} {label} → FAIL")
 
     return errors, warnings, skipped
 
@@ -716,10 +724,7 @@ def _mirror_wildcard(pattern: str, resolved: str, compare_pattern: str) -> str:
     if "*" not in pattern:
         return compare_pattern
     idx = pattern.split(".").index("*")
-    return ".".join(
-        part if i != idx else resolved.split(".")[idx]
-        for i, part in enumerate(compare_pattern.split("."))
-    )
+    return ".".join(part if i != idx else resolved.split(".")[idx] for i, part in enumerate(compare_pattern.split(".")))
 
 
 def _static_drift(manifest: dict) -> list[str]:
@@ -737,15 +742,12 @@ def _static_drift(manifest: dict) -> list[str]:
 # Assembly + output
 # =============================================================================
 
-def apply_results(
-    manifest: dict, static: dict, runtime: dict, manual: dict, build: dict, cob_dt: str
-) -> dict:
+
+def apply_results(manifest: dict, static: dict, runtime: dict, manual: dict, build: dict, cob_dt: str) -> dict:
     out = copy.deepcopy(manifest)
 
     out["manifest"]["build"].update(build)
-    out["manifest"]["runtime"]["generated_at_utc"] = (
-        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    )
+    out["manifest"]["runtime"]["generated_at_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     out["manifest"]["runtime"]["requested_cob_dt"] = cob_dt
     out["manifest"]["snapshot"]["requested_cob_dt"] = cob_dt
 
@@ -792,13 +794,9 @@ def apply_results(
 def write_run_artifact(manifest: dict) -> Path:
     """LUÔN ghi, kể cả khi verification fail — giữ forensic evidence."""
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = (manifest["manifest"]["runtime"]["generated_at_utc"] or "unknown").replace(
-        ":", ""
-    ).replace("-", "")
+    stamp = (manifest["manifest"]["runtime"]["generated_at_utc"] or "unknown").replace(":", "").replace("-", "")
     path = GENERATED_DIR / f"metrics-run-{stamp}.yaml"
-    path.write_text(
-        yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
-    )
+    path.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return path
 
 
@@ -827,10 +825,8 @@ def promote_canonical_if_verified(manifest: dict, errors: list[str]) -> bool:
         )
         return False
     tmp = MANIFEST_PATH.with_suffix(".yaml.tmp")
-    tmp.write_text(
-        yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
-    )
-    tmp.replace(MANIFEST_PATH)   # atomic
+    tmp.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    tmp.replace(MANIFEST_PATH)  # atomic
     return True
 
 
@@ -857,20 +853,23 @@ def promotion_refusal_message(manifest: dict, errors: list[str]) -> str:
 # CLI
 # =============================================================================
 
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate/verify metrics manifest")
     parser.add_argument("--cob-dt", help="Snapshot cần đo (YYYY-MM-DD)")
-    parser.add_argument("--validate-contract", action="store_true",
-                        help="Chỉ kiểm tra contract tự nhất quán rồi thoát")
-    parser.add_argument("--render-sql", action="store_true",
-                        help="In query đã render (gồm template đã nở) rồi thoát — không cần Trino")
-    parser.add_argument("--scope", choices=["batch", "cdc", "full"],
-                        help="Ghi đè verification_scope trong contract")
-    parser.add_argument("--continue-on-error", action="store_true",
-                        help="Chạy hết mọi query rồi báo cáo TẤT CẢ lỗi một lượt "
-                             "(dùng cho lần runtime-validate đầu tiên)")
-    parser.add_argument("--collect-only", action="store_true",
-                        help="Thu evidence + ghi run artifact, KHÔNG promote canonical")
+    parser.add_argument("--validate-contract", action="store_true", help="Chỉ kiểm tra contract tự nhất quán rồi thoát")
+    parser.add_argument(
+        "--render-sql", action="store_true", help="In query đã render (gồm template đã nở) rồi thoát — không cần Trino"
+    )
+    parser.add_argument("--scope", choices=["batch", "cdc", "full"], help="Ghi đè verification_scope trong contract")
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Chạy hết mọi query rồi báo cáo TẤT CẢ lỗi một lượt (dùng cho lần runtime-validate đầu tiên)",
+    )
+    parser.add_argument(
+        "--collect-only", action="store_true", help="Thu evidence + ghi run artifact, KHÔNG promote canonical"
+    )
     parser.add_argument("--output", type=Path, help="Ghi kết quả ra file này thay vì canonical")
     parser.add_argument("--trino-host", default="localhost")
     parser.add_argument("--trino-port", type=int, default=None, help="mặc định 8453 (HTTPS trên host) khi có mật khẩu")
@@ -924,9 +923,7 @@ def main(argv: list[str] | None = None) -> int:
     # nhầm "không có số" với "đã kiểm và đạt".
     if not _in_scope("cdc.", skips):
         result["metrics"]["cdc"]["collection_status"] = "not_collected"
-        result["metrics"]["cdc"]["collection_reason"] = (
-            f"verification_scope={scope_name}"
-        )
+        result["metrics"]["cdc"]["collection_reason"] = f"verification_scope={scope_name}"
     else:
         result["metrics"]["cdc"]["collection_status"] = "collected"
 
@@ -964,9 +961,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  ERROR {error}", file=sys.stderr)
 
     if args.output:
-        args.output.write_text(
-            yaml.safe_dump(result, sort_keys=False, allow_unicode=True), encoding="utf-8"
-        )
+        args.output.write_text(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), encoding="utf-8")
         return 1 if errors else 0
 
     if args.collect_only:
