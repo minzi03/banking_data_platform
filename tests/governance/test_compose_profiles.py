@@ -98,6 +98,23 @@ def test_trino_has_authenticated_readiness_configuration():
     assert "password-authenticator.properties" in " ".join(trino.get("volumes", []))
 
 
+def test_optional_service_names_and_profiles_match_the_readme_matrix():
+    expected = {
+        "trino": {"serving", "analytics", "apps", "observability", "all"},
+        "kafka": {"streaming", "all"},
+        "debezium": {"streaming", "all"},
+        "airflow-scheduler": {"orchestration", "all"},
+        "prometheus": {"observability", "all"},
+        "openmetadata": {"governance", "all"},
+        "streamlit": {"apps", "all"},
+        "superset": {"apps", "bi", "all"},
+    }
+    services = _load_compose().get("services", {})
+    for name, profiles in expected.items():
+        assert name in services
+        assert set(services[name].get("profiles", [])) == profiles
+
+
 def test_profile_services_have_health_or_explicit_one_shot_semantics():
     one_shot = {"mc", "iceberg-init", "airflow-init", "om-migrate", "superset-init"}
     missing = []
