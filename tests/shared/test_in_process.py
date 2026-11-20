@@ -34,7 +34,11 @@ _spec.loader.exec_module(in_process)
 
 def _load_bootstrap(layer: str):
     """Nạp initial_load.py của một tầng với `utils` stub CHỈ trong lúc exec (như test_initial_load.py)."""
-    stubs = {"utils": MagicMock(), "utils.logger": MagicMock()}
+    stubs = {
+        "utils": MagicMock(__path__=[]),
+        "utils.logger": MagicMock(),
+        "utils.business_window": MagicMock(BOOTSTRAP_FROM="2026-01-01"),
+    }
     saved = {name: sys.modules.get(name) for name in stubs}
     sys.modules.update(stubs)
     try:
