@@ -89,6 +89,18 @@ def test_images_are_version_pinned_and_do_not_use_latest():
     assert not floating, "Unpinned Compose images:\n  " + "\n  ".join(floating)
 
 
+def test_profile_services_have_health_or_explicit_one_shot_semantics():
+    one_shot = {"mc", "iceberg-init", "airflow-init", "om-migrate", "superset-init"}
+    missing = []
+    for compose_file in COMPOSE_FILES:
+        for name, spec in _load_compose_file(compose_file).get("services", {}).items():
+            if name in one_shot or "healthcheck" in spec or "build" in spec:
+                continue
+            if spec.get("profiles"):
+                missing.append(f"{compose_file.name}:{name}")
+    assert not missing, "Profile services without readiness/explicit one-shot contract: " + ", ".join(missing)
+
+
 def test_base_services_have_no_profile():
     """Các dịch vụ nền tảng Lakehouse luôn khởi động mặc định (không profile)."""
     services = _load_compose().get("services", {})
