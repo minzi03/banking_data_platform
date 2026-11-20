@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+import pytest
+
 from code_etl.shared.ops.credit_reconciliation import reconcile_payment_observations
 
 
@@ -84,6 +86,30 @@ def test_duplicate_payment_id_is_not_comparable():
     result = outcome([payment(), payment(amount_paid="0")])
     assert result["outcome"] == "NOT_COMPARABLE"
     assert result["check_status"] == "WARN"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"loan_id": None},
+        {"cob_dt": None},
+        {"payment_id": None},
+        {"payment_status": "UNKNOWN"},
+        {"payment_status": None},
+        {"scheduled_amount": None},
+        {"amount_paid": "not-money"},
+        {"amount_paid": "NaN"},
+        {"scheduled_amount": "-1.00"},
+    ],
+)
+def test_invalid_observations_fail_closed(overrides):
+    with pytest.raises(ValueError):
+        outcome([payment(**overrides)])
+
+
+def test_negative_tolerance_is_rejected():
+    with pytest.raises(ValueError, match="amount_tolerance"):
+        reconcile_payment_observations([payment()], amount_tolerance=Decimal("-0.01"))
 
 
 def test_results_are_deterministically_sorted_by_loan_and_date():
