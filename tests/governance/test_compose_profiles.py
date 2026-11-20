@@ -89,6 +89,15 @@ def test_images_are_version_pinned_and_do_not_use_latest():
     assert not floating, "Unpinned Compose images:\n  " + "\n  ".join(floating)
 
 
+def test_trino_has_authenticated_readiness_configuration():
+    trino = _load_compose_file(COMPOSE_FILE)["services"]["trino"]
+    assert "healthcheck" in trino
+    healthcheck = " ".join(trino["healthcheck"]["test"])
+    assert "/v1/info" in healthcheck
+    assert "8443" in str(trino.get("ports", []))
+    assert "password-authenticator.properties" in " ".join(trino.get("volumes", []))
+
+
 def test_profile_services_have_health_or_explicit_one_shot_semantics():
     one_shot = {"mc", "iceberg-init", "airflow-init", "om-migrate", "superset-init"}
     missing = []
