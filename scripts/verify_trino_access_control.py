@@ -72,17 +72,51 @@ class Trino:
         # không bao giờ dừng lại hỏi, và Trino từ chối ở bước xác thực.
         pw = password if password is not None else self.passwords.get(user) or secrets.token_urlsafe(16)
         return subprocess.run(
-            ["docker", "exec", "-e", "TRINO_PASSWORD", self.container, "trino", "--user", user, *extra,
-             "--output-format", "CSV_UNQUOTED", "--execute", sql],
-            capture_output=True, text=True, encoding="utf-8", env={**os.environ, "TRINO_PASSWORD": pw}, check=False,
+            [
+                "docker",
+                "exec",
+                "-e",
+                "TRINO_PASSWORD",
+                self.container,
+                "trino",
+                "--user",
+                user,
+                *extra,
+                "--output-format",
+                "CSV_UNQUOTED",
+                "--execute",
+                sql,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**os.environ, "TRINO_PASSWORD": pw},
+            check=False,
         )
 
     def http_status(self) -> str:
         """Mã HTTP khi một client gửi truy vấn qua cổng HTTP, khai là admin."""
         return subprocess.run(
-            ["docker", "exec", self.container, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-             "-H", "X-Trino-User: admin", "--data", "SELECT 1", "http://localhost:8080/v1/statement"],
-            capture_output=True, text=True, encoding="utf-8", check=False,
+            [
+                "docker",
+                "exec",
+                self.container,
+                "curl",
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-H",
+                "X-Trino-User: admin",
+                "--data",
+                "SELECT 1",
+                "http://localhost:8080/v1/statement",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
         ).stdout.strip()
 
 
@@ -158,8 +192,11 @@ def verify(trino: Trino) -> Checker:
         exercised.add((schema, table))
         for user_regex, columns in by_user.items():
             user = user_regex.split("|")[0]
-            c.allowed(user, f"SELECT {', '.join(columns)} FROM iceberg.{schema}.{table} LIMIT 1",
-                      f"đọc {schema}.{table} với {len(columns)} cột bị che")
+            c.allowed(
+                user,
+                f"SELECT {', '.join(columns)} FROM iceberg.{schema}.{table} LIMIT 1",
+                f"đọc {schema}.{table} với {len(columns)} cột bị che",
+            )
     missing = REQUIRED_MASKED_TABLES - exercised
     c.check(not missing, "các bảng PII bắt buộc đều được kiểm", f"chưa tồn tại: {sorted(missing)}")
 
@@ -171,8 +208,11 @@ def verify(trino: Trino) -> Checker:
     if masked is not None and raw is not None:
         masked_value, raw_value = masked.strip(), raw.strip()
         c.check(masked_value.startswith("***********"), "analytics thấy cccd đã che", f"nhận: {masked_value[:4]}…")
-        c.check(raw_value.isdigit() and not raw_value.startswith("*"), "admin thấy cccd nguyên bản",
-                "giá trị admin không phải chuỗi số")
+        c.check(
+            raw_value.isdigit() and not raw_value.startswith("*"),
+            "admin thấy cccd nguyên bản",
+            "giá trị admin không phải chuỗi số",
+        )
         c.check(masked_value[-4:] == raw_value[-4:], "mask giữ 4 số cuối như khai trong rbac.py")
 
     print("=== Giá trị: dữ liệu tuân thủ AML bị che với observer, nguyên bản với admin ===")
@@ -186,13 +226,17 @@ def verify(trino: Trino) -> Checker:
         if by_observer is not None and by_admin is not None:
             observer_count, admin_count = by_observer.strip(), by_admin.strip()
             c.check(observer_count == "0", f"observer không thấy {table}.{column}", f"nhận: {observer_count}")
-            c.check(admin_count.isdigit() and int(admin_count) > 0, f"admin thấy {table}.{column}",
-                    f"nhận: {admin_count}")
+            c.check(
+                admin_count.isdigit() and int(admin_count) > 0, f"admin thấy {table}.{column}", f"nhận: {admin_count}"
+            )
 
     print("=== Quyền ghi ===")
     c.denied("analytics_report", "CREATE TABLE iceberg.sandbox.acl_probe AS SELECT 1 AS x", "role read-only tạo bảng")
     c.denied("dbt", "CREATE TABLE iceberg.gold.acl_probe AS SELECT 1 AS x", "dbt tạo bảng ngoài serving")
-    if c.allowed("dbt", "CREATE TABLE iceberg.serving.acl_probe AS SELECT 1 AS x", "tạo bảng trong serving") is not None:
+    if (
+        c.allowed("dbt", "CREATE TABLE iceberg.serving.acl_probe AS SELECT 1 AS x", "tạo bảng trong serving")
+        is not None
+    ):
         c.allowed("dbt", "DROP TABLE iceberg.serving.acl_probe", "xoá bảng trong serving")
 
     print("=== Metadata mà client cần ===")
