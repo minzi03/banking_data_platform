@@ -191,9 +191,7 @@ def build_rules() -> dict:
                     "schema": re.escape(schema),
                     "table": re.escape(table),
                     "privileges": _privileges(profile._level_for(schema)),
-                    "columns": [
-                        {"name": col, "mask": expr.replace("%s", col)} for col, expr in sorted(cols.items())
-                    ],
+                    "columns": [{"name": col, "mask": expr.replace("%s", col)} for col, expr in sorted(cols.items())],
                 }
             )
         for schema, level in sorted(profile.table_levels.items(), key=lambda kv: (kv[0] == "*", kv[0])):

@@ -31,9 +31,7 @@ tmp = Path(tempfile.mkdtemp())
 def stream_from(payloads, name):
     src = tmp / name
     src.mkdir()
-    (src / "b.json").write_text(
-        "\n".join(json.dumps({"value": json.dumps(p)}) for p in payloads), encoding="utf-8"
-    )
+    (src / "b.json").write_text("\n".join(json.dumps({"value": json.dumps(p)}) for p in payloads), encoding="utf-8")
     return spark.readStream.schema("value STRING").json(str(src))
 
 

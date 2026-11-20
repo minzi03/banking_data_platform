@@ -61,9 +61,11 @@ def _force_utf8_output() -> None:
 
 def psql(sql: str) -> str:
     result = subprocess.run(  # noqa: S603
-        ["docker", "exec", "banking-postgres", "psql", "-U", "banking_admin",
-         "-d", "banking_db", "-tAc", sql],
-        capture_output=True, text=True, timeout=60, check=True,
+        ["docker", "exec", "banking-postgres", "psql", "-U", "banking_admin", "-d", "banking_db", "-tAc", sql],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
         env={"MSYS_NO_PATHCONV": "1", "PATH": __import__("os").environ["PATH"]},
     )
     return result.stdout.strip()
@@ -72,7 +74,10 @@ def psql(sql: str) -> str:
 def trino(sql: str) -> str:
     result = subprocess.run(  # noqa: S603
         ["docker", "exec", "banking-trino", "trino", "--execute", sql],
-        capture_output=True, text=True, timeout=120, check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
         env={"MSYS_NO_PATHCONV": "1", "PATH": __import__("os").environ["PATH"]},
     )
     return result.stdout.strip().replace('"', "")
@@ -83,18 +88,14 @@ def run_trial(index: int, customer_id: int, timeout_s: int, poll_s: int) -> dict
     marker = f"cdc.freshness.{int(time.time())}.{index}@bank.vn"
 
     psql(
-        f"UPDATE core_banking.customer SET email = '{marker}', last_updated = NOW() "
-        f"WHERE customer_id = {customer_id};"
+        f"UPDATE core_banking.customer SET email = '{marker}', last_updated = NOW() WHERE customer_id = {customer_id};"
     )
     t0 = time.monotonic()
     committed_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     deadline = t0 + timeout_s
     while time.monotonic() < deadline:
-        observed = trino(
-            "SELECT email FROM iceberg.silver.dim_customer_current "
-            f"WHERE customer_id = {customer_id}"
-        )
+        observed = trino(f"SELECT email FROM iceberg.silver.dim_customer_current WHERE customer_id = {customer_id}")
         if marker in observed:
             elapsed = round(time.monotonic() - t0, 1)
             print(f"  trial {index}: customer={customer_id}  {elapsed}s")
@@ -123,24 +124,35 @@ def main(argv: list[str] | None = None) -> int:
     _force_utf8_output()
     parser = argparse.ArgumentParser(description="Measure CDC freshness")
     parser.add_argument("--trials", type=int, default=5)
-    parser.add_argument("--timeout", type=int, default=1200,
-                        help="Max wait per trial (s). Must exceed consolidation cadence.")
+    parser.add_argument(
+        "--timeout", type=int, default=1200, help="Max wait per trial (s). Must exceed consolidation cadence."
+    )
     parser.add_argument("--poll", type=int, default=5)
-    parser.add_argument("--first-customer-id", type=int, default=2001,
-                        help="Each trial uses a different customer to avoid interference")
-    parser.add_argument("--cadence-seconds", type=int, default=600,
-                        help="Deployed consolidation cadence. Recorded in the output; "
-                             "the result is only comparable across runs at the same cadence.")
-    parser.add_argument("--no-jitter", action="store_true",
-                        help="Run trials back to back. Measures the WORST case, not the "
-                             "median — see the module docstring before using this.")
+    parser.add_argument(
+        "--first-customer-id", type=int, default=2001, help="Each trial uses a different customer to avoid interference"
+    )
+    parser.add_argument(
+        "--cadence-seconds",
+        type=int,
+        default=600,
+        help="Deployed consolidation cadence. Recorded in the output; "
+        "the result is only comparable across runs at the same cadence.",
+    )
+    parser.add_argument(
+        "--no-jitter",
+        action="store_true",
+        help="Run trials back to back. Measures the WORST case, not the "
+        "median — see the module docstring before using this.",
+    )
     parser.add_argument("--seed", type=int, default=None, help="Seed the jitter for reproducibility")
     args = parser.parse_args(argv)
 
     rng = random.Random(args.seed)
     print(f"CDC freshness — {args.trials} trials, timeout {args.timeout}s each")
-    print(f"consolidation cadence {args.cadence_seconds}s, "
-          f"phase sampling: {'back-to-back (worst case)' if args.no_jitter else 'randomised'}")
+    print(
+        f"consolidation cadence {args.cadence_seconds}s, "
+        f"phase sampling: {'back-to-back (worst case)' if args.no_jitter else 'randomised'}"
+    )
     print("t0 = PostgreSQL COMMIT, t1 = observable in silver.dim_customer_current via Trino\n")
 
     results = []
@@ -151,9 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             wait = rng.uniform(0, args.cadence_seconds)
             print(f"  (phase jitter {wait:.0f}s)")
             time.sleep(wait)
-        results.append(
-            run_trial(i + 1, args.first_customer_id + i, args.timeout, args.poll)
-        )
+        results.append(run_trial(i + 1, args.first_customer_id + i, args.timeout, args.poll))
 
     observed = [r["freshness_seconds"] for r in results if r["observed"]]
     summary = {

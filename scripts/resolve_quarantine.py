@@ -147,7 +147,7 @@ def log_resolution(spark, results: dict[str, Any], dry_run: bool = True) -> None
             "detected_at": datetime.now(),
             "resolved_at": datetime.now(),
             "resolution_status": "RESOLVED",
-            "resolved_by": "system"
+            "resolved_by": "system",
         }
 
         if dry_run:
@@ -166,6 +166,7 @@ def log_resolution(spark, results: dict[str, Any], dry_run: bool = True) -> None
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
 
 def print_summary(results: dict[str, Any]) -> None:
     """Print resolution summary."""
@@ -188,25 +189,19 @@ def print_summary(results: dict[str, Any]) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Resolve Quarantine Violations")
     parser.add_argument("--cob_dt", required=True, help="Business date (YYYY-MM-DD)")
-    parser.add_argument(
-        "--dry_run",
-        action="store_true",
-        help="Only log actions without executing"
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Execute resolution"
-    )
+    parser.add_argument("--dry_run", action="store_true", help="Only log actions without executing")
+    parser.add_argument("--execute", action="store_true", help="Execute resolution")
     return parser.parse_args()
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     args = parse_args()
