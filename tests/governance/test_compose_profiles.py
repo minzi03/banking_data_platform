@@ -37,6 +37,11 @@ COMPOSE_TEST_ENV = {
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_FILE = REPO_ROOT / "docker" / "docker-compose.yml"
+COMPOSE_FILES = (
+    COMPOSE_FILE,
+    REPO_ROOT / "docker" / "docker-compose.ci.yml",
+    REPO_ROOT / "docker" / "docker-compose.e2e-merchant.yml",
+)
 
 BASE_SERVICES = {
     "postgres",
@@ -61,6 +66,27 @@ DOMAIN_PROFILES = {
 
 def _load_compose() -> dict:
     return yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
+
+
+def _load_compose_file(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_images_are_version_pinned_and_do_not_use_latest():
+    """Every Compose file must use an explicit image version or digest."""
+    floating = []
+    for compose_file in COMPOSE_FILES:
+        services = _load_compose_file(compose_file).get("services", {})
+        for service, spec in services.items():
+            image = spec.get("image")
+            if not image:
+                continue
+            tag_or_digest = image.rsplit(":", maxsplit=1)[-1]
+            if tag_or_digest == "latest" or image.endswith(":latest"):
+                floating.append(f"{compose_file.name} {service}: {image}")
+            elif ":" not in image and "@sha256:" not in image:
+                floating.append(f"{compose_file.name} {service}: image has no explicit tag or digest ({image})")
+    assert not floating, "Unpinned Compose images:\n  " + "\n  ".join(floating)
 
 
 def test_base_services_have_no_profile():
