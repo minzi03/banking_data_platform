@@ -178,6 +178,35 @@ The first is idempotent (`CREATE ... IF NOT EXISTS`). The second recreates the
 worker so it picks up `POSTGRES_USER`/`POSTGRES_PASSWORD`; without them the job
 stops with an explicit error instead of falling back to a password in the code.
 
+### 5e. Credit expected-vs-paid comparison helper
+
+`credit_data_grain_contract.yml` defines the current source grain and limitations.
+The pure helper can be used in scripts/tests for an explicit set of payment
+observations; it does not read the database or assert that an absent row means a
+missed installment.
+
+```python
+from decimal import Decimal
+from code_etl.shared.ops.credit_reconciliation import reconcile_payment_observations
+
+results = reconcile_payment_observations(
+    observations,
+    amount_tolerance=Decimal("0.01"),
+)
+```
+
+Outcomes are `MATCHED`, `MISMATCH`, `MISSING`, `PENDING`, or `NOT_COMPARABLE`.
+The legacy gate mapping is `MATCHED → PASS`, `MISMATCH/MISSING → FAIL`, and
+`PENDING/NOT_COMPARABLE → WARN`. Input rows must provide `loan_id`, `cob_dt`,
+`payment_id`, a valid source payment status, and finite non-negative scheduled
+and paid amounts.
+
+**Scope limitation:** comparison is at `loan_id × cob_dt` over available payment
+observations. There is no source-owned installment identifier or independent due
+schedule, so an absent row is not classified as missed. Late-payment penalty and
+fee allocation are not inferred. This is a pure helper, not yet an EOD DAG gate
+or runtime reconciliation product.
+
 ### 5d. Pipeline lifecycle audit
 
 The representative EOD reconciliation DAG writes lifecycle rows to

@@ -109,6 +109,7 @@ The platform is modeled on **retail banking** workloads — the same shape as a 
 | Who is the customer, and what is their current profile? | `mart_customer_360`, SCD2 dimensions |
 | Which segments should we target for campaigns? | RFM, churn-risk, cross-sell, campaign-target marts |
 | Is the loan book healthy? | Loan portfolio risk, delinquency, roll-rate, vintage marts |
+| Do payment observations match scheduled amounts? | Pure expected-vs-paid helper with explicit tolerance and source-grain limits |
 | Are credit metrics source-defined? | Loan/payment grain contract, DPD limitations, and explicit control totals |
 | Is there suspicious activity? | AML monitoring + fraud-risk transaction marts |
 | How fresh is the near-real-time view? | CDC consolidation → Silver Current + freshness exporter |
