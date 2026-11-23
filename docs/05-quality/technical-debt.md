@@ -1985,9 +1985,9 @@ affected tests                                     224 passed, 6 skipped
 tests/governance                                   1469 passed, 1 skipped
 ```
 
-CI installs Ruff without a version pin. Pinning 0.17.1 is a reproducibility improvement
-that can be handled separately; the current branch passes the exact lint and format
-gates under that version.
+CI, the local dev extra, and pre-commit now pin Ruff 0.17.1. A governance test keeps
+those three entry points aligned so formatter upgrades are deliberate; the current tree
+passes the exact lint and format gates under that version.
 
 ### Acceptance
 
@@ -1995,5 +1995,5 @@ gates under that version.
 [x] all CI-scanned files pass `ruff check`
 [x] all CI-scanned files pass `ruff format --check` under Ruff 0.17.1
 [x] affected tests and full governance suite pass
-[ ] pin Ruff in CI to make future formatter upgrades deliberate
+[x] pin Ruff in CI, local dev, and pre-commit to make future formatter upgrades deliberate
 ```
