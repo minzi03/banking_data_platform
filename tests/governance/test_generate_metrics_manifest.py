@@ -301,7 +301,7 @@ def _verified_manifest(contract: dict) -> dict:
     m["metrics"]["serving"]["trino"]["visible_gold_objects"]["value"] = 14
     m["metrics"]["serving"]["trino"]["mart_customer_360_current_visible"]["value"] = 0
     # Theo `declared` thay vì số cứng: số model serving đổi thì fixture không phải sửa.
-    m["metrics"]["serving"]["objects_present"]["value"] = m["metrics"]["serving"]["objects_present"]["declared"]
+    m["metrics"]["serving"]["objects_present"]["value"] = m["metrics"]["platform"]["dbt_models"]["value"]
     m["metrics"]["serving"]["current_snapshot_alignment"]["value"] = 0
     # TD-14: mọi bảng Bronze batch ở đúng cob_dt.
     m["metrics"]["bronze"]["tables_at_cob_dt"].update(
@@ -369,6 +369,13 @@ class TestInvariantEvaluation:
     def test_incomplete_serving_layer_blocks(self, contract):
         m = _verified_manifest(contract)
         m["metrics"]["serving"]["objects_present"]["value"] = 7
+        errors, _, _ = gen.evaluate_invariants(m)
+        assert any("serving_objects_complete" in e for e in errors)
+
+    def test_serving_completeness_compares_runtime_presence_to_static_model_inventory(self, contract):
+        m = _verified_manifest(contract)
+        m["metrics"]["platform"]["dbt_models"]["value"] = 23
+        m["metrics"]["serving"]["objects_present"]["value"] = 19
         errors, _, _ = gen.evaluate_invariants(m)
         assert any("serving_objects_complete" in e for e in errors)
 

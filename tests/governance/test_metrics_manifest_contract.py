@@ -296,13 +296,16 @@ class TestCrossReferences:
                 f"{inv_id} phải là blocking — nó bảo vệ bug P0 đã từng xảy ra"
             )
 
-    def test_serving_contract_is_blocking(self, manifest):
+    def test_serving_contract_is_blocking_and_uses_static_inventory(self, manifest):
         """
-        Sau migration huong C, blocking check la hop dong PHUC VU
-        (dung snapshot, du object), khong phai "bang co cu khong".
+        Serving completeness compares runtime table presence to the current static
+        dbt inventory. Runtime count remains independently measured from Trino.
         """
         assert manifest["invariants"]["serving_snapshot_alignment"]["severity"] == "error"
-        assert manifest["invariants"]["serving_objects_complete"]["severity"] == "error"
+        invariant = manifest["invariants"]["serving_objects_complete"]
+        assert invariant["severity"] == "error"
+        assert invariant["metric"] == "metrics.serving.objects_present.value"
+        assert invariant["compare_to"] == "metrics.platform.dbt_models.value"
 
 
 # ---------------------------------------------------------------------------

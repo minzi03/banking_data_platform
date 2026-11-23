@@ -89,6 +89,15 @@ class TestDriftIsCaughtInEveryProjection:
             "executive summary đang nêu số mà không có projection nào — văn xuôi sẽ trôi khỏi bảng mà CI không thấy"
         )
 
+    def test_serving_inventory_claim_tracks_static_inventory_not_runtime_observation(self, manifest, readme):
+        checked_paths = {
+            binding["manifest_path"]
+            for binding in manifest["readme_bindings"]
+            if any("Current-serving model inventory" in claim for _, claim in verifier.iter_projections(binding))
+        }
+        assert checked_paths == {"metrics.platform.dbt_models.value"}
+        assert manifest["metrics"]["platform"]["dbt_models"]["value"] == 23
+
     def test_changing_a_metric_reddens_both_table_and_summary(self, manifest, readme):
         drifted = yaml.safe_load(yaml.safe_dump(manifest))
         drifted["metrics"]["gold"]["tables"]["value"] = 11

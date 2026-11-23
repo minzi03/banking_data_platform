@@ -43,13 +43,15 @@
 
 ## Executive summary
 
+> Evidence note: current static and runtime counts must not be conflated. The current dbt serving inventory is 23 SQL models; runtime count 19 is only the last verified observation for commit/date recorded in the evidence manifest. The diagnostic run observing 23 on 2026-11-22 failed other full-scope invariants and is not promoted as verified runtime evidence.
+
 An end-to-end, production-like banking lakehouse built to show how batch, CDC, data quality, governance, analytical serving and CI/CD fit together as **one platform** rather than a collection of isolated pipelines.
 
 Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and published for analytical access through Trino and dbt.
 
 The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Spark owns history: **18 historical Gold models**, partitioned by close-of-business date. dbt, executed through Trino, owns current-serving publication: **19 dbt-managed current-serving tables** built from one explicit snapshot, so consumers never have to choose a historical partition.
+Spark owns history: **18 historical Gold models**, partitioned by close-of-business date. The dbt inventory declares **23 current-serving models** in `dbt/models/serving/`. The last verified runtime observation found 19 serving tables on 2026-09-30; a 2026-11-22 diagnostic observed 23 but the full manifest failed other snapshot invariants, so current publication completeness remains unverified.
 
 Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
@@ -275,7 +277,8 @@ counts are ambiguous without them.
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
 | Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
 | Historical Gold tables     |             18 | Spark-managed Gold history, partitioned by `cob_dt`                             |
-| Current-serving tables     |             19 | dbt-managed Iceberg tables in `serving`, queryable through Trino                |
+| Current-serving model inventory | 23 | Declared SQL files in `dbt/models/serving`; runtime table count is tracked separately |
+| Runtime serving tables (2026-09-30 run) | 19 | Historical observation for the manifest's recorded commit/date; not evidence for current HEAD |
 | Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
@@ -283,8 +286,8 @@ counts are ambiguous without them.
 | Data-quality check types   |              9 | Supported DQ rule categories                                                    |
 | Airflow DAG files          |             21 | Files defining at least one DAG (22 DAG objects — one file defines two)         |
 | Airflow DAGs loaded        |             22 | `airflow dags list` — zero import errors                                        |
-| dbt models                 |             20 | `dbt build --target docker`: 19 serving + 1 MetricFlow time spine (2026-10-16) |
-| dbt data tests             |            137 | Same `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
+| dbt models                 |             20 | Last successful `dbt build` observation (2026-10-16): 19 serving models + 1 MetricFlow time spine; static serving inventory is now 23 SQL models |
+| dbt data tests             |            137 | Same 2026-10-16 successful `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
 | Automated tests            |          1,142 | Python `def test_*` functions                                                   |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             30 | 26 long-running + 4 one-shot initialization/migration jobs                      |
@@ -1107,7 +1110,7 @@ Unknown __op = x
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
 | Historical Gold tables |    18 | Spark-managed marts, partitioned by `cob_dt`       |
-| Current-serving tables |    19 | dbt-managed, in `serving` schema, served via Trino |
+| Current-serving model inventory | 23 | SQL models declared under `dbt/models/serving`; runtime table presence is tracked separately |
 
 ---
 
