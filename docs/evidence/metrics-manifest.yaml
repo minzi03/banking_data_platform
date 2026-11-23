@@ -362,11 +362,13 @@ metrics:
         '
     objects_present:
       value: 19
-      declared: 19
+      declared: null
       metric_type: runtime
       provenance: query:serving.objects_present
-      definition: Số bảng `*_current` trong schema `serving` — 19 model dbt current-serving
-        (không tính time spine của MetricFlow).
+      definition: Runtime observation from the canonical 2026-09-30 full-scope run at
+        cob_dt 2026-09-29 and its recorded commit. It is historical evidence only, not
+        a measurement for current HEAD. The separate declared inventory of 23 SQL models
+        is compared against freshly collected runtime presence in each new manifest run.
     current_snapshot_alignment:
       value: 0
       declared: null
@@ -606,12 +608,12 @@ metrics:
       provenance: collector:dq_check_types
       definition: Số key trong CHECK_DISPATCH của code_etl/shared/ops/data_quality.py.
     dbt_models:
-      value: 19
-      declared: 19
+      value: 23
+      declared: 23
       metric_type: static
       provenance: collector:dbt_models
-      definition: 'Số model trong dbt/models/serving/*.sql — materialized: table trong
-        schema serving (dbt_project.yml). Không tính dbt/models/semantic/.'
+      definition: 'Count of SQL models in dbt/models/serving/*.sql (23 declared serving
+        models). The MetricFlow time spine is outside this directory and is not included.'
     business_vs_utc_date_rows:
       total_rows: 1200000
       divergent_date_rows: 70350
@@ -753,7 +755,7 @@ invariants:
       '
   serving_objects_complete:
     metric: metrics.serving.objects_present.value
-    compare_to: metrics.serving.objects_present.declared
+    compare_to: metrics.platform.dbt_models.value
     operator: eq
     severity: error
     rationale: Thiếu serving object nghĩa là consumer path bị hở.
@@ -843,12 +845,17 @@ readme_bindings:
     claim: '| Historical Gold tables     |             18 |'
   - location: executive_summary
     claim: 18 historical Gold models
-- manifest_path: metrics.serving.objects_present.value
+- manifest_path: metrics.platform.dbt_models.value
   readme_claims:
   - location: metrics_table
-    claim: '| Current-serving tables     |             19 |'
+    claim: '| Current-serving model inventory | 23 |'
   - location: executive_summary
-    claim: 19 dbt-managed current-serving tables
+    claim: 23 current-serving models
+- manifest_path: metrics.serving.objects_present.value
+  status: last_verified_2026_09_30
+  readme_claims:
+  - location: metrics_table
+    claim: '| Runtime serving tables (2026-09-30 run) | 19 |'
 - manifest_path: metrics.transaction_scale.curated_financial_transactions.value
   readme_claims:
   - location: metrics_table
