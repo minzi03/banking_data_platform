@@ -1457,10 +1457,11 @@ multi-arch indexes; only the cached `linux/amd64` manifest could be pushed.
 - **Single architecture.** The cached images are `linux/amd64` only; the
   multi-arch index from quay.io was not preserved. Apple-silicon hosts run them
   under emulation.
-- **Same failure mode elsewhere.** Every other image is pulled from a third-party
-  registry by tag. A test that lists compose images without a digest, or a
-  scheduled pull check, would turn the next disappearance into a named failure
-  instead of a red gate on an unrelated PR.
+- **Same failure mode elsewhere.** Most Compose images are pinned by explicit
+  version tag, not digest, so a registry can retarget or remove them. The current
+  inventory is `docs/05-quality/image-reference-inventory.md`; static tests require
+  every tag-pinned image to be recorded and keep both MinIO mirrors on the verified
+  digest. A scheduled registry pull/availability check remains future work.
 
 ### Acceptance
 
