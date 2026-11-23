@@ -315,6 +315,9 @@ services:
     environment:
       SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY}
       SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
+      # Driver and executors share the measured Spark image; pin both to its Python 3.10 interpreter.
+      PYSPARK_PYTHON: python3
+      PYSPARK_DRIVER_PYTHON: python3
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
       # Credential MinIO cho S3FileIO / S3A (spark-defaults.conf không còn chứa key).
