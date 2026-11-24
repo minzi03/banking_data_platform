@@ -12,9 +12,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from datetime import datetime
-from pathlib import Path
 import requests
-import json
 
 
 DEBEZIUM_URL = "http://debezium:8083"

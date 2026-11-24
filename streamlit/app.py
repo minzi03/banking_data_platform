@@ -8,8 +8,6 @@ Multi-page, filters, interactive charts, export, drill-down
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import os
 
 from trino.dbapi import connect
@@ -27,7 +25,6 @@ def trino_auth_kwargs(user: str) -> dict:
         "auth": BasicAuthentication(user, password),
         "verify": os.environ.get("TRINO_CA_CERT") or True,
     }
-from datetime import datetime, timedelta
 import io
 
 # =============================================================================

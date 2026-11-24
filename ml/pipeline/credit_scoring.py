@@ -18,7 +18,6 @@ Usage:
 import os
 import logging
 import argparse
-from datetime import datetime
 
 import mlflow
 import mlflow.sklearn

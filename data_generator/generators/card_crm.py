@@ -6,8 +6,6 @@ Generates realistic data for: card, card_txn, crm_interaction
 
 import random
 from datetime import datetime, timedelta
-from typing import Any
-
 from .amounts import amount_sampler
 from .timeline import business_to_utc, shift
 

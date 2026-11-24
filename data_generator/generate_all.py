@@ -30,7 +30,6 @@ from generators.core_banking import (
     generate_accounts, generate_deposits, generate_loans,
     generate_txn_account, generate_employees,
     generate_loan_payments, generate_standing_orders,
-    REGION_CITIES,
 )
 from generators.card_crm import generate_cards, generate_card_txn, generate_crm_interactions
 from generators.digital_banking import (
