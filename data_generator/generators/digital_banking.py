@@ -274,8 +274,6 @@ def generate_support_tickets(count: int, config: dict, customer_ids: list[int]) 
         issue = random.choice(issue_types)
         priority = random.choices(priorities, weights=p_weights)[0]
         status = random.choices(statuses, weights=s_weights)[0]
-        subject = random.choice(ISSUE_SUBJECTS.get(issue, ["General inquiry"]))
-
         date_opened = _random_datetime(shift("2024-08-01"), shift("2026-08-01"))
         date_resolved = None
         resolution_hrs = None

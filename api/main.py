@@ -13,7 +13,7 @@ Endpoints:
 
 import os
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query

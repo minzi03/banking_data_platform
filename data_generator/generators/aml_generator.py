@@ -6,7 +6,7 @@ Generates realistic AML rules, alerts, and customer risk profiles.
 
 import json
 import random
-import string
+import random
 from datetime import datetime, timedelta
 from typing import List, Tuple
 

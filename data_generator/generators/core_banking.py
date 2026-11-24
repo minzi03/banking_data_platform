@@ -6,9 +6,7 @@ deposit, loan, txn_account, employee
 """
 
 import random
-import string
 from datetime import datetime, timedelta
-from typing import Any
 
 from .amounts import amount_sampler
 from .timeline import business_to_utc, shift, shift_dt

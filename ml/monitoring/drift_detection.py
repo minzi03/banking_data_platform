@@ -18,7 +18,7 @@ import os
 import logging
 import argparse
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict
 
 import mlflow
 import numpy as np
