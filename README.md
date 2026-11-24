@@ -49,9 +49,9 @@ An end-to-end, production-like banking lakehouse built to show how batch, CDC, d
 
 Operational banking data is ingested from PostgreSQL through both a batch and a CDC path, processed with Apache Spark, stored in Apache Iceberg, orchestrated by Airflow, and published for analytical access through Trino and dbt.
 
-The verified dataset holds **2.3 million distinct financial transactions per verified snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
+The verified dataset holds **23,000 distinct financial transactions in the 2026-10-16 runtime snapshot** across the account, card and online domains — a figure that was itself corrected after the original count summed the same logical transactions across several physical snapshots.
 
-Spark owns history: **18 historical Gold models**, partitioned by close-of-business date. The dbt inventory declares **23 current-serving models** in `dbt/models/serving/`. The last verified runtime observation found 19 serving tables on 2026-09-30; a 2026-11-22 diagnostic observed 23 but the full manifest failed other snapshot invariants, so current publication completeness remains unverified.
+Spark owns history: **19 historical Gold models**, partitioned by close-of-business date. The dbt inventory declares **23 current-serving models** in `dbt/models/serving/`. The last verified runtime observation found 19 serving tables on 2026-09-30; a 2026-11-22 diagnostic observed 23 but the full manifest failed other snapshot invariants, so current publication completeness remains unverified.
 
 Correctness is verified from platform state rather than inferred from successful job logs. Snapshot alignment, join grain, CDC current state, business-date semantics, and published metrics are each guarded by executable checks.
 
@@ -269,17 +269,17 @@ counts are ambiguous without them.
 
 | Metric                     | Verified value | Definition                                                                     |
 | -------------------------- | -------------: | ------------------------------------------------------------------------------ |
-| Source workloads           |             22 | Executable Bronze ingestion configurations; templates and registries excluded   |
-| Bronze batch tables        |             22 | One per ingestion workload                                                      |
-| Bronze CDC tables          |              6 | Append-only change-history tables                                               |
-| Silver SCD Type 2 dims     |              5 | `dim_customer`, `dim_account`, `dim_product`, `dim_branch`, `dim_merchant`      |
+| Source workloads           |             23 | Executable Bronze ingestion configurations; templates and registries excluded   |
+| Bronze batch tables        |             23 | One per ingestion workload                                                      |
+| Bronze CDC tables          |              8 | Append-only change-history tables                                               |
+| Silver SCD Type 2 dims     |              6 | `dim_customer`, `dim_account`, `dim_product`, `dim_branch`, `dim_merchant`, plus the sixth configured model |
 | Silver SCD Type 1 dims     |              6 | Card, employee, device, location, deposit, loan                                 |
 | Silver fact tables         |              6 | Transactional, interaction and loan-payment facts                               |
-| Silver CDC current-state   |              2 | `dim_customer_current`, `dim_account_current`                                   |
-| Historical Gold tables     |             18 | Spark-managed Gold history, partitioned by `cob_dt`                             |
+| Silver CDC current-state   |              4 | Current-state CDC tables from the consolidation inventory                       |
+| Historical Gold tables     |             19 | Spark-managed Gold history, partitioned by `cob_dt`                             |
 | Current-serving model inventory | 23 | Declared SQL files in `dbt/models/serving`; runtime table count is tracked separately |
-| Runtime serving tables (2026-09-30 run) | 19 | Historical observation for the manifest's recorded commit/date; not evidence for current HEAD |
-| Curated transactions       |      2,300,000 | Distinct domain-qualified transactions in one verified Silver snapshot          |
+| Runtime serving tables (2026-11-23 run, cob_dt 2026-10-16) | 23 | Runtime observation from the full-scope manifest run on its recorded commit |
+| Curated transactions       |         23,000 | Distinct domain-qualified transactions in the 2026-10-16 runtime snapshot        |
 | Debezium connectors        |              3 | Runtime connector definitions                                                   |
 | Kafka CDC topics           |             12 | One per captured source table (6 + 3 + 3)                                       |
 | Data contracts             |             34 | Governance contract YAMLs                                                       |
@@ -288,7 +288,7 @@ counts are ambiguous without them.
 | Airflow DAGs loaded        |             22 | `airflow dags list` — zero import errors                                        |
 | dbt models                 |             20 | Last successful `dbt build` observation (2026-10-16): 19 serving models + 1 MetricFlow time spine; static serving inventory is now 23 SQL models |
 | dbt data tests             |            137 | Same 2026-10-16 successful `dbt build`: PASS=154 (17 models + 137 tests), ERROR=0 |
-| Automated tests            |          1,142 | Python `def test_*` functions                                                   |
+| Automated tests            |          1,518 | Last static scan on manifest commit: Python `def test_*` functions              |
 | Trino integration tests    |             34 | `def test_*` in the two modules the PR-blocking gate executes                    |
 | Docker Compose services    |             30 | 26 long-running + 4 one-shot initialization/migration jobs                      |
 | CDC current-state rows     | 10,000 / 30,000 | Customer / account rows after consolidation                                    |
@@ -297,7 +297,7 @@ counts are ambiguous without them.
 > manifest's `git_commit` names the exact commit). Compared with the previous promotion
 > (2026-09-29): Silver SCD2 dimensions **2 → 4** (product and branch now keep history),
 > SCD1 **8 → 6**, Airflow DAG files / DAGs **20 / 21 → 18 / 19** (two dead DAGs removed),
-> `def test_*` functions **972 → 1,142**. The dbt rows come from
+> `def test_*` functions **972 → 1,142**. The current static scan reports 1,518; the historical comparison and current inventory are separate observations. The dbt rows come from
 > `dbt build --vars '{"cob_dt": …}'` and are not bound to the manifest. See
 > [CHANGELOG](CHANGELOG.md#unreleased--audit-remediation-2026-09-30).
 
@@ -314,7 +314,7 @@ online     500,000
 total    2,300,000  distinct curated transaction records
 ```
 
-**Automated tests** counts source-level test functions. The pytest node count
+**Automated tests** counts source-level `def test_*` functions. The manifest's static scan found 1,518 functions on its recorded commit; this count can change with later code commits. The pytest node count
 after parametrization is larger and is tracked separately in the evidence
 manifest, so the two never have to be reconciled by hand.
 
@@ -1093,23 +1093,23 @@ Unknown __op = x
 
 | Type  | Count | Description                 |
 | ----- | ----: | --------------------------- |
-| Batch |    16 | Source-aligned batch tables |
-| CDC   |     6 | Append-only change history  |
+| Batch |    23 | Declared source-aligned batch ingestion tables |
+| CDC   |     8 | Declared append-only change-history tables      |
 
 ## Silver
 
 | Type              | Count | Description                                       |
 | ----------------- | ----: | ------------------------------------------------- |
-| SCD Type 2        |     2 | `dim_customer`, `dim_account`                     |
-| SCD Type 1        |     8 | Branch, product, card, employee, device, location, deposit, loan |
+| SCD Type 2        |     6 | Declared Silver dimension configurations          |
+| SCD Type 1        |     6 | Card, employee, device, location, deposit, loan  |
 | Facts             |     6 | Transactional, interaction and loan-payment facts |
-| CDC Current-State |     2 | `dim_customer_current`, `dim_account_current`     |
+| CDC Current-State |     4 | Declared CDC consolidation configurations         |
 
 ## Gold
 
 | Type                   | Count | Description                                        |
 | ---------------------- | ----: | -------------------------------------------------- |
-| Historical Gold tables |    18 | Spark-managed marts, partitioned by `cob_dt`       |
+| Historical Gold tables |    19 | Declared Spark-managed marts, partitioned by `cob_dt` |
 | Current-serving model inventory | 23 | SQL models declared under `dbt/models/serving`; runtime table presence is tracked separately |
 
 ---
@@ -1690,7 +1690,7 @@ Workflow categories include:
 Verified baseline:
 
 ```text
-1,142 automated tests
+1,518 automated tests
 ```
 
 covering areas such as:
