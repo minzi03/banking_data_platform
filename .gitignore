@@ -7,9 +7,9 @@
 *.env.local
 *.env.production
 docker/secrets/
+docker/conf/*.der
 *.pem
-# Note: docker/conf/*.der are tracked — they're OpenMetadata JWT signing keys
-# auto-generated per stack, NOT reusable secrets.
+# Local OpenMetadata JWT key material must never be tracked.
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
