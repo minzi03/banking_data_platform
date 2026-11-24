@@ -139,6 +139,8 @@ def test_check_fails_when_a_hash_no_longer_matches(sandbox):
 
 def test_secrets_land_only_in_gitignored_paths():
     for rel in (
+        "docker/secrets/openmetadata/private_key.der",
+        "docker/secrets/openmetadata/public_key.der",
         "docker/secrets/trino/passwords.env",
         "docker/secrets/trino/env/dbt.env",
         "docker/secrets/trino/password.db",

@@ -327,20 +327,20 @@ Guard: `tests/governance/test_postgres_init_roles.py`, 3 of 4 tests fail on the 
 files. These scripts run only on a fresh data directory, so **an existing stack
 keeps the old `LOGIN` roles and passwords until they are rotated.**
 
-**Risk assessment (after investigation):**
+**Risk assessment (post-rotation):**
 
 ```text
-All secrets are local docker stack credentials only:
-  - private_key.pem / .der — OpenMetadata JWT signing key (auto-generated)
-  - public_key.der         — OpenMetadata JWT verification key
-  - secrets/*.txt          — Same values as docker/.env
-  - Debezium password      — Same as docker/.env POSTGRES_PASSWORD
-
-These credentials cannot access anything beyond the local docker stack.
-Repository is PUBLIC — but exposure scope is limited to local dev infra.
+The formerly tracked OpenMetadata RSA private key was valid and matched its
+tracked public key. It was used only for the local OpenMetadata JWT profile,
+but the repository is public; treat the old private key as exposed and do not
+reuse it outside local development. A fresh per-workstation pair is generated
+under gitignored docker/secrets/openmetadata/ and bind-mounted read-only into
+the OpenMetadata migration and server containers. The old pair is removed from
+the current tree; this does NOT erase historical Git objects.
+Other local stack credentials remain subject to their own rotation controls.
 ```
 
-### Action taken (2026-09-14)
+### Action taken (2026-09-14 and 2026-11-24)
 
 ```text
 [x] identify whether private_key.pem was ever used and what it protected
@@ -348,10 +348,11 @@ Repository is PUBLIC — but exposure scope is limited to local dev infra.
       RSA_PRIVATE_KEY_FILE_PATH. Auto-generated for local stack.
 [x] rotate/revoke the key if it was ever usable
     → No: OpenMetadata JWT keys are per-stack, not reused elsewhere.
-[x] remove secret material from the current tree
-    → git rm --cached: 7 files removed from HEAD (kept on disk)
+[x] rotate OpenMetadata JWT keypair for current tree (2026-11-24)
+    → fresh RSA pair generated under gitignored docker/secrets/openmetadata/;
+      docker-compose mounts it read-only into both OpenMetadata containers.
 [x] prevent recommit via ignore rules
-    → .gitignore updated: docker/secrets/, *.pem, *.der
+    → .gitignore excludes docker/secrets/ and docker/conf/*.der
 [x] decide explicitly whether a Git history rewrite is required
     → No: credentials are local docker stack only, never reused externally.
       History rewrite risks repo integrity for low security gain.
@@ -359,12 +360,7 @@ Repository is PUBLIC — but exposure scope is limited to local dev infra.
 
 ### What remains in git history
 
-The PEM key and plaintext passwords are still in Git history. Anyone who
-clones the repository receives every committed version. This is accepted
-because:
-1. All credentials are local docker stack only
-2. They cannot access any external service
-3. Git history rewrite risks repository integrity and PR/branch references
+The former DER OpenMetadata pair and plaintext local passwords remain in Git history; rotating the current working-tree pair does not purge historical Git objects. History rewrite was not authorized in this audit phase, so assess historical exposure separately with the repository owner before deciding whether to coordinate a rewrite. Do not claim the old key remains safe merely because it was intended for local development.
 4. ~~The docker stack itself generates new credentials on `docker compose up`~~ —
    **wrong, corrected 2026-09-27.** Postgres and MinIO take their credentials from
    `docker/.env`, and `docker/.env.example` ships concrete values. A stack built from

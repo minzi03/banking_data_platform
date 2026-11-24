@@ -712,9 +712,11 @@ services:
       ELASTICSEARCH_SCHEME: http
       SEARCH_TYPE: elasticsearch
       AUTHENTICATION_PROVIDER: basic
-      RSA_PUBLIC_KEY_FILE_PATH: ./conf/public_key.der
-      RSA_PRIVATE_KEY_FILE_PATH: ./conf/private_key.der
+      RSA_PUBLIC_KEY_FILE_PATH: /run/secrets/openmetadata/public_key.der
+      RSA_PRIVATE_KEY_FILE_PATH: /run/secrets/openmetadata/private_key.der
       JWT_ISSUER: open-metadata.org
+    volumes:
+      - ./secrets/openmetadata:/run/secrets/openmetadata:ro
     depends_on:
       om-mysql:
         condition: service_healthy
@@ -747,9 +749,11 @@ services:
       SEARCH_TYPE: elasticsearch
       AUTHENTICATION_PROVIDER: basic
       AUTHENTICATION_ENABLE_SELF_SIGNUP: "true"
-      RSA_PUBLIC_KEY_FILE_PATH: ./conf/public_key.der
-      RSA_PRIVATE_KEY_FILE_PATH: ./conf/private_key.der
+      RSA_PUBLIC_KEY_FILE_PATH: /run/secrets/openmetadata/public_key.der
+      RSA_PRIVATE_KEY_FILE_PATH: /run/secrets/openmetadata/private_key.der
       JWT_ISSUER: open-metadata.org
+    volumes:
+      - ./secrets/openmetadata:/run/secrets/openmetadata:ro
     ports:
       - "8585:8585"
     mem_limit: 1500m

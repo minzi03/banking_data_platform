@@ -119,6 +119,17 @@ def test_all_compose_images_have_digest_pins_or_documented_transitional_tags():
         )
 
 
+def test_openmetadata_key_paths_are_mounted_read_only_for_migrate_and_server():
+    services = _load_compose().get("services", {})
+    expected = "./secrets/openmetadata:/run/secrets/openmetadata:ro"
+    for service_name in ("om-migrate", "openmetadata"):
+        service = services[service_name]
+        environment = service.get("environment", {})
+        assert environment["RSA_PRIVATE_KEY_FILE_PATH"] == "/run/secrets/openmetadata/private_key.der"
+        assert environment["RSA_PUBLIC_KEY_FILE_PATH"] == "/run/secrets/openmetadata/public_key.der"
+        assert expected in service.get("volumes", [])
+
+
 def test_trino_has_authenticated_readiness_configuration():
     trino = _load_compose_file(COMPOSE_FILE)["services"]["trino"]
     assert "healthcheck" in trino
