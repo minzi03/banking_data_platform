@@ -22,12 +22,9 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-# pyspark is not installed in the unit-test environment. quarantine.py needs it
-# twice: at import time (it pulls in spark_session) and at call time
-# (write_to_quarantine imports Row lazily). Both resolve through sys.modules, so
-# the stub stays installed for the whole module. It is torn down in
-# _restore_pyspark below, because leaving it in place would break any test that
-# runs after this module and expects the real package.
+# quarantine.py imports Spark helpers at module load. Stub only for that import,
+# then restore sys.modules immediately so later Spark integration tests see the
+# real package rather than a process-global MagicMock.
 class _DictRow(dict):
     """Stand-in for pyspark.sql.Row — keeps `row["col"]` assertions readable."""
 
@@ -41,30 +38,32 @@ _STUBBED = {
     "spark": MagicMock(),
     "spark.spark_session": MagicMock(),
 }
+_STUBBED["pyspark.sql"].Row = _DictRow
 _SAVED = {name: sys.modules.get(name) for name in _STUBBED}
-sys.modules.update(_STUBBED)
-sys.modules["pyspark.sql"].Row = _DictRow
 
-_spec = importlib.util.spec_from_file_location(
+_REAL_PYSPARK = sys.modules.get("pyspark")
+_SPEC = importlib.util.spec_from_file_location(
     "quarantine_mod", str(PROJECT_ROOT / "code_etl" / "shared" / "ops" / "quarantine.py")
 )
-_quarantine = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_quarantine)
+_quarantine = importlib.util.module_from_spec(_SPEC)
+try:
+    sys.modules.update(_STUBBED)
+    _SPEC.loader.exec_module(_quarantine)
+finally:
+    for _name, _previous in _SAVED.items():
+        if _previous is None:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _previous
 
 quarantine = _quarantine
 
 
-def _restore_pyspark():
-    for name, previous in _SAVED.items():
-        if previous is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = previous
-
-
-import atexit  # noqa: E402
-
-atexit.register(_restore_pyspark)
+def test_module_import_restores_real_pyspark_module():
+    """Import-time dependency stubs must not leak into later Spark tests."""
+    assert sys.modules.get("pyspark") is not _STUBBED["pyspark"]
+    if _REAL_PYSPARK is not None:
+        assert sys.modules.get("pyspark") is _REAL_PYSPARK
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +169,22 @@ class TestCheckViolation:
 
 
 class TestWriteToQuarantine:
+    @pytest.fixture(autouse=True)
+    def _row_factory(self):
+        """Stub lazy Row only for these tests, using the real module when installed."""
+        real_sql = importlib.util.find_spec("pyspark.sql")
+        if real_sql is not None:
+            from pyspark.sql import Row
+
+            yield Row
+            return
+
+        row_type = _DictRow
+        sql_stub = MagicMock()
+        sql_stub.Row = row_type
+        with patch.dict(sys.modules, {"pyspark": MagicMock(), "pyspark.sql": sql_stub}):
+            yield row_type
+
     def _spark_with_columns(self, columns):
         spark = MagicMock()
         target = MagicMock()
@@ -177,17 +192,17 @@ class TestWriteToQuarantine:
         spark.table.return_value = target
         return spark
 
-    def test_empty_records_does_not_touch_spark(self):
+    def test_empty_records_does_not_touch_spark(self, _row_factory):
         spark = MagicMock()
         assert quarantine.write_to_quarantine(spark, [], "t", "v", "s") == 0
         spark.table.assert_not_called()
 
-    def test_returns_number_of_source_records(self):
+    def test_returns_number_of_source_records(self, _row_factory):
         spark = self._spark_with_columns(["txn_id", "violation_type", "source_table", "detected_at"])
         records = [{"txn_id": 1}, {"txn_id": 2}, {"txn_id": 3}]
         assert quarantine.write_to_quarantine(spark, records, "t", "v", "s") == 3
 
-    def test_appends_to_the_target_table(self):
+    def test_appends_to_the_target_table(self, _row_factory):
         spark = self._spark_with_columns(["txn_id", "violation_type", "source_table", "detected_at"])
         quarantine.write_to_quarantine(spark, [{"txn_id": 1}], "lakehouse.ops.quarantine", "v", "s")
 
@@ -196,7 +211,7 @@ class TestWriteToQuarantine:
         writer.format.return_value.mode.assert_called_once_with("append")
         writer.format.return_value.mode.return_value.saveAsTable.assert_called_once_with("lakehouse.ops.quarantine")
 
-    def test_injects_violation_type_and_source_table(self):
+    def test_injects_violation_type_and_source_table(self, _row_factory):
         spark = self._spark_with_columns(["txn_id", "violation_type", "source_table"])
         quarantine.write_to_quarantine(spark, [{"txn_id": 7}], "t", "negative_amount", "lakehouse.silver.f")
 
@@ -205,7 +220,7 @@ class TestWriteToQuarantine:
         assert row["violation_type"] == "negative_amount"
         assert row["source_table"] == "lakehouse.silver.f"
 
-    def test_fills_metadata_columns_the_source_lacks(self):
+    def test_fills_metadata_columns_the_source_lacks(self, _row_factory):
         spark = self._spark_with_columns(["txn_id", "detected_at", "violation_detail"])
         quarantine.write_to_quarantine(spark, [{"txn_id": 7}], "t", "v", "src.table")
 
@@ -213,7 +228,7 @@ class TestWriteToQuarantine:
         assert row["detected_at"] is not None
         assert "src.table" in row["violation_detail"]
 
-    def test_unknown_target_columns_become_none(self):
+    def test_unknown_target_columns_become_none(self, _row_factory):
         """Columns in the target but not in the source record are nulled."""
         spark = self._spark_with_columns(["txn_id", "extra_col", "violation_type"])
         quarantine.write_to_quarantine(spark, [{"txn_id": 7}], "t", "v", "s")
@@ -221,7 +236,7 @@ class TestWriteToQuarantine:
         row = spark.createDataFrame.call_args[0][0][0]
         assert row["extra_col"] is None
 
-    def test_drops_source_keys_absent_from_the_target(self):
+    def test_drops_source_keys_absent_from_the_target(self, _row_factory):
         """
         The row is built by iterating target columns, so a source key the target
         does not declare must not appear — otherwise createDataFrame raises on
@@ -233,7 +248,7 @@ class TestWriteToQuarantine:
         row = spark.createDataFrame.call_args[0][0][0]
         assert "secret" not in row.asDict()
 
-    def test_missing_target_table_is_created_from_the_source(self):
+    def test_missing_target_table_is_created_from_the_source(self, _row_factory):
         """Không DDL nào tạo lakehouse.quarantine.* — chạy trên stack 2026-09-30,
         mọi lần ghi TABLE_OR_VIEW_NOT_FOUND, 9.266 vi phạm mà 0 dòng được lưu."""
         spark = self._spark_with_columns(["txn_id", "violation_type"])
@@ -256,27 +271,27 @@ class TestWriteToQuarantine:
             "FROM lakehouse.silver.f WHERE 1 = 0"
         ]
 
-    def test_existing_target_table_is_not_recreated(self):
+    def test_existing_target_table_is_not_recreated(self, _row_factory):
         spark = self._spark_with_columns(["txn_id", "violation_type"])
         quarantine.write_to_quarantine(spark, [{"txn_id": 1}], "t", "v", "s")
         assert not [c for c in spark.sql.call_args_list if str(c.args[0]).startswith("CREATE")]
 
-    def test_rows_are_built_with_the_target_schema(self):
+    def test_rows_are_built_with_the_target_schema(self, _row_factory):
         """Suy kiểu từ Row hỏng khi một cột toàn NULL (missing_manager)."""
         spark = self._spark_with_columns(["manager_name", "violation_type"])
         quarantine.write_to_quarantine(spark, [{"manager_name": None}], "t", "v", "s")
         assert spark.createDataFrame.call_args.kwargs["schema"] is spark.table.return_value.schema
 
-    def test_row_fields_follow_target_column_order(self):
+    def test_row_fields_follow_target_column_order(self, _row_factory):
         """createDataFrame(schema=...) ghép theo vị trí; thứ tự của set làm lệch cột
         (stack 2026-09-30: `LongType() can not accept object 2026-09-22`)."""
         columns = ["account_id", "cob_dt", "branch_code", "violation_type", "detected_at"]
         spark = self._spark_with_columns(columns)
         quarantine.write_to_quarantine(spark, [{"cob_dt": "d", "account_id": 1, "branch_code": "B"}], "t", "v", "s")
         row = spark.createDataFrame.call_args[0][0][0]
-        assert list(row.keys()) == columns
+        assert list(row.asDict().keys()) == columns
 
-    def test_write_failure_returns_zero(self):
+    def test_write_failure_returns_zero(self, _row_factory):
         """
         The failure path returns 0 rather than raising. That makes a broken
         write indistinguishable from an empty result at the call site, so it is
