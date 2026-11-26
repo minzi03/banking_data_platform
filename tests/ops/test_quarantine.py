@@ -172,14 +172,14 @@ class TestWriteToQuarantine:
     @pytest.fixture(autouse=True)
     def _row_factory(self):
         """Stub lazy Row only for these tests, using the real module when installed."""
-        real_sql = importlib.util.find_spec("pyspark.sql")
-        if real_sql is not None:
+        try:
             from pyspark.sql import Row
-
+        except ImportError:
+            row_type = _DictRow
+        else:
             yield Row
             return
 
-        row_type = _DictRow
         sql_stub = MagicMock()
         sql_stub.Row = row_type
         with patch.dict(sys.modules, {"pyspark": MagicMock(), "pyspark.sql": sql_stub}):
